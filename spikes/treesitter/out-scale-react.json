@@ -1,0 +1,72 @@
+[
+ {
+  "workers": 1,
+  "files": 4590,
+  "MB": 25.2,
+  "startupMs": 315,
+  "workMs": 10903,
+  "totalMs": 11218,
+  "cpuParseMs": 6088,
+  "cpuQueryMs": 1654,
+  "cpuReadMs": 2888,
+  "slowestWorkerBusyMs": 10630,
+  "peakRssMB": 228,
+  "speedup": 1
+ },
+ {
+  "workers": 2,
+  "files": 4590,
+  "MB": 25.2,
+  "startupMs": 271,
+  "workMs": 5418,
+  "totalMs": 5688,
+  "cpuParseMs": 6273,
+  "cpuQueryMs": 1721,
+  "cpuReadMs": 2556,
+  "slowestWorkerBusyMs": 5275,
+  "peakRssMB": 309,
+  "speedup": 2.01
+ },
+ {
+  "workers": 4,
+  "files": 4590,
+  "MB": 25.2,
+  "startupMs": 328,
+  "workMs": 3004,
+  "totalMs": 3332,
+  "cpuParseMs": 7077,
+  "cpuQueryMs": 1948,
+  "cpuReadMs": 2650,
+  "slowestWorkerBusyMs": 2924,
+  "peakRssMB": 373,
+  "speedup": 3.63
+ },
+ {
+  "workers": 8,
+  "files": 4590,
+  "MB": 25.2,
+  "startupMs": 495,
+  "workMs": 1912,
+  "totalMs": 2406,
+  "cpuParseMs": 9224,
+  "cpuQueryMs": 2557,
+  "cpuReadMs": 3075,
+  "slowestWorkerBusyMs": 1861,
+  "peakRssMB": 601,
+  "speedup": 5.7
+ },
+ {
+  "workers": 14,
+  "files": 4590,
+  "MB": 25.2,
+  "startupMs": 686,
+  "workMs": 1588,
+  "totalMs": 2275,
+  "cpuParseMs": 11812,
+  "cpuQueryMs": 3347,
+  "cpuReadMs": 5899,
+  "slowestWorkerBusyMs": 1555,
+  "peakRssMB": 827,
+  "speedup": 6.87
+ }
+]

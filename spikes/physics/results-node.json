@@ -1,0 +1,383 @@
+[
+ {
+  "report": {
+   "files": 1000,
+   "cities": 12,
+   "districts": 96,
+   "fileEdges": 2157,
+   "maxFilesPerDistrict": 36,
+   "minFilesPerDistrict": 1,
+   "genMs": 2.304099999999991,
+   "buildMs": 7.011499999999998,
+   "settle": {
+    "city": {
+     "ms": 10.00800000000001,
+     "ticks": 151,
+     "sims": 1,
+     "maxSimMs": 9.991899999999987
+    },
+    "district": {
+     "ms": 16.048000000000002,
+     "ticks": 1812,
+     "sims": 12,
+     "maxSimMs": 1.9271000000000242
+    },
+    "file": {
+     "ms": 132.9446,
+     "ticks": 14496,
+     "sims": 96,
+     "maxSimMs": 6.631499999999988
+    },
+    "totalMs": 159.00060000000002
+   },
+   "quality": {
+    "fileOverlapNodePct": 0,
+    "fileOverlapPairs": 0,
+    "fileMeanOverlapDepthPct": 0,
+    "fileOutsideDistrictPct": 0,
+    "fileMeanResidualSpeed": 0.0040726521749971075,
+    "fileMeanResidualSpeedPerRadius": 0.0030461545585292534,
+    "districtOverlapPairs": 0,
+    "districtOutsideCity": 0,
+    "cityOverlapPairs": 0
+   },
+   "qualityMs": 3.226699999999994,
+   "checksum": "8d19e726",
+   "timerTickEvents": 0
+  },
+  "add": {
+   "mode": "plan",
+   "district": 24,
+   "city": 3,
+   "existingFiles": 26,
+   "added": 200,
+   "districtR": [
+    39.70418349792035,
+    102.53662964670815
+   ],
+   "cityR": [
+    123.23995533164687,
+    185.93208911281704
+   ],
+   "addMs": 1.8449999999999704,
+   "restMs": 92.02569999999997,
+   "ticks": {
+    "city": 124,
+    "district": 124,
+    "file": 124
+   },
+   "fileDisp": {
+    "mean": 33.383168709725894,
+    "max": 65.78104125213964,
+    "n": 26,
+    "meanPctOfR": 84.07972603560644,
+    "maxPctOfR": 165.67785925023537
+   },
+   "ownDistrictMove": 41.0683242691543,
+   "siblingDistrictDisp": {
+    "mean": 82.86374025654337,
+    "max": 104.06862089467309,
+    "n": 7
+   },
+   "cityDisp": {
+    "mean": 37.35209902386841,
+    "max": 72.38296906207488,
+    "n": 12
+   }
+  },
+  "add2": {
+   "mode": "stable",
+   "district": 24,
+   "city": 3,
+   "existingFiles": 26,
+   "added": 200,
+   "districtR": [
+    39.70418349792035,
+    102.53662964670815
+   ],
+   "cityR": [
+    123.23995533164687,
+    185.93208911281704
+   ],
+   "addMs": 0.4977000000000089,
+   "restMs": 66.49289999999996,
+   "ticks": {
+    "city": 124,
+    "district": 124,
+    "file": 124
+   },
+   "fileDisp": {
+    "mean": 23.361652475689333,
+    "max": 47.64691580299542,
+    "n": 26,
+    "meanPctOfR": 58.83927187902753,
+    "maxPctOfR": 120.00477432180695
+   },
+   "ownDistrictMove": 41.0683242691543,
+   "siblingDistrictDisp": {
+    "mean": 82.86374025654337,
+    "max": 104.06862089467309,
+    "n": 7
+   },
+   "cityDisp": {
+    "mean": 37.35209902386841,
+    "max": 72.38296906207488,
+    "n": 12
+   }
+  }
+ },
+ {
+  "report": {
+   "files": 10000,
+   "cities": 12,
+   "districts": 96,
+   "fileEdges": 23889,
+   "maxFilesPerDistrict": 436,
+   "minFilesPerDistrict": 11,
+   "genMs": 5.221000000000004,
+   "buildMs": 22.82269999999994,
+   "settle": {
+    "city": {
+     "ms": 12.643800000000056,
+     "ticks": 151,
+     "sims": 1,
+     "maxSimMs": 12.640300000000025
+    },
+    "district": {
+     "ms": 10.287499999999909,
+     "ticks": 1812,
+     "sims": 12,
+     "maxSimMs": 1.167599999999993
+    },
+    "file": {
+     "ms": 3098.6451,
+     "ticks": 14496,
+     "sims": 96,
+     "maxSimMs": 187.80729999999994
+    },
+    "totalMs": 3121.5764
+   },
+   "quality": {
+    "fileOverlapNodePct": 17.14,
+    "fileOverlapPairs": 1194,
+    "fileMeanOverlapDepthPct": 16.49947265684167,
+    "fileOutsideDistrictPct": 0,
+    "fileMeanResidualSpeed": 0.03640503324341033,
+    "fileMeanResidualSpeedPerRadius": 0.02653586422605062,
+    "districtOverlapPairs": 0,
+    "districtOutsideCity": 0,
+    "cityOverlapPairs": 0
+   },
+   "qualityMs": 38.47960000000012,
+   "checksum": "c1918f9f",
+   "timerTickEvents": 0
+  },
+  "add": {
+   "mode": "plan",
+   "district": 24,
+   "city": 3,
+   "existingFiles": 240,
+   "added": 200,
+   "districtR": [
+    112.8186514566755,
+    146.79910896877308
+   ],
+   "cityR": [
+    287.84956079791175,
+    318.3029393312082
+   ],
+   "addMs": 1.0832000000000335,
+   "restMs": 153.23530000000028,
+   "ticks": {
+    "city": 124,
+    "district": 124,
+    "file": 124
+   },
+   "fileDisp": {
+    "mean": 23.24008666764885,
+    "max": 65.40049397805556,
+    "n": 240,
+    "meanPctOfR": 20.59950758813447,
+    "maxPctOfR": 57.969576070646966
+   },
+   "ownDistrictMove": 19.79227736372969,
+   "siblingDistrictDisp": {
+    "mean": 56.874711738939304,
+    "max": 64.25006201791132,
+    "n": 7
+   },
+   "cityDisp": {
+    "mean": 39.836817072894476,
+    "max": 61.68787119113017,
+    "n": 12
+   }
+  },
+  "add2": {
+   "mode": "stable",
+   "district": 24,
+   "city": 3,
+   "existingFiles": 240,
+   "added": 200,
+   "districtR": [
+    112.8186514566755,
+    146.79910896877308
+   ],
+   "cityR": [
+    287.84956079791175,
+    318.3029393312082
+   ],
+   "addMs": 0.626100000000406,
+   "restMs": 132.10369999999966,
+   "ticks": {
+    "city": 124,
+    "district": 124,
+    "file": 124
+   },
+   "fileDisp": {
+    "mean": 22.507777431137445,
+    "max": 60.246282274911124,
+    "n": 240,
+    "meanPctOfR": 19.950404601122944,
+    "maxPctOfR": 53.40099486834129
+   },
+   "ownDistrictMove": 19.79227736372969,
+   "siblingDistrictDisp": {
+    "mean": 56.874711738939304,
+    "max": 64.25006201791132,
+    "n": 7
+   },
+   "cityDisp": {
+    "mean": 39.836817072894476,
+    "max": 61.68787119113017,
+    "n": 12
+   }
+  }
+ },
+ {
+  "report": {
+   "files": 100000,
+   "cities": 12,
+   "districts": 96,
+   "fileEdges": 239927,
+   "maxFilesPerDistrict": 4627,
+   "minFilesPerDistrict": 88,
+   "genMs": 27.60739999999987,
+   "buildMs": 180.2498000000005,
+   "settle": {
+    "city": {
+     "ms": 3.787500000000364,
+     "ticks": 151,
+     "sims": 1,
+     "maxSimMs": 3.783499999999549
+    },
+    "district": {
+     "ms": 15.969900000000052,
+     "ticks": 1812,
+     "sims": 12,
+     "maxSimMs": 7.6246000000001
+    },
+    "file": {
+     "ms": 66877.1385,
+     "ticks": 14496,
+     "sims": 96,
+     "maxSimMs": 4428.822
+    },
+    "totalMs": 66896.8959
+   },
+   "quality": {
+    "fileOverlapNodePct": 79.811,
+    "fileOverlapPairs": 146885,
+    "fileMeanOverlapDepthPct": 24.59053348201259,
+    "fileOutsideDistrictPct": 0,
+    "fileMeanResidualSpeed": 0.4755714660181651,
+    "fileMeanResidualSpeedPerRadius": 0.344637419976676,
+    "districtOverlapPairs": 0,
+    "districtOutsideCity": 0,
+    "cityOverlapPairs": 0
+   },
+   "qualityMs": 334.31789999999455,
+   "checksum": "832cf289",
+   "timerTickEvents": 0
+  },
+  "add": {
+   "mode": "plan",
+   "district": 24,
+   "city": 3,
+   "existingFiles": 2182,
+   "added": 200,
+   "districtR": [
+    337.8443139898659,
+    350.5360981115129
+   ],
+   "cityR": [
+    875.5009107216446,
+    885.5958438595287
+   ],
+   "addMs": 4.123300000006566,
+   "restMs": 1327.468399999998,
+   "ticks": {
+    "city": 124,
+    "district": 124,
+    "file": 124
+   },
+   "fileDisp": {
+    "mean": 48.89434107952735,
+    "max": 209.07798637926666,
+    "n": 2182,
+    "meanPctOfR": 14.47244753125962,
+    "maxPctOfR": 61.88589765211743
+   },
+   "ownDistrictMove": 71.44967053522171,
+   "siblingDistrictDisp": {
+    "mean": 81.68332842183874,
+    "max": 88.83191990685039,
+    "n": 7
+   },
+   "cityDisp": {
+    "mean": 185.73776786527685,
+    "max": 533.7308721248012,
+    "n": 12
+   }
+  },
+  "add2": {
+   "mode": "stable",
+   "district": 24,
+   "city": 3,
+   "existingFiles": 2182,
+   "added": 200,
+   "districtR": [
+    337.8443139898659,
+    350.5360981115129
+   ],
+   "cityR": [
+    875.5009107216446,
+    885.5958438595287
+   ],
+   "addMs": 3.5222000000067055,
+   "restMs": 1178.0050999999803,
+   "ticks": {
+    "city": 124,
+    "district": 124,
+    "file": 124
+   },
+   "fileDisp": {
+    "mean": 49.773043688665254,
+    "max": 291.95978718851717,
+    "n": 2182,
+    "meanPctOfR": 14.732538517773683,
+    "maxPctOfR": 86.4184404172849
+   },
+   "ownDistrictMove": 71.44967053522171,
+   "siblingDistrictDisp": {
+    "mean": 81.68332842183874,
+    "max": 88.83191990685039,
+    "n": 7
+   },
+   "cityDisp": {
+    "mean": 185.73776786527685,
+    "max": 533.7308721248012,
+    "n": 12
+   }
+  }
+ }
+]

@@ -1,0 +1,25 @@
+{
+  "repo": "C:/Users/Gary/git/flutter",
+  "gitLogMs": 5668,
+  "gitCommits": 92682,
+  "quotedPaths": 0,
+  "refPaths": 32656,
+  "minePaths": 32656,
+  "onlyRef": 0,
+  "onlyMine": 0,
+  "onlyRefEx": [],
+  "onlyMineEx": [],
+  "badCount": 0,
+  "badLast": 0,
+  "badFirst": 0,
+  "badAuthors": 0,
+  "examples": []
+}
+
+| file | walker commits | git (ref cmd) commits | plain `git log -- f` | `--first-parent -- f` | walker last | ref last | plain last | walker == ref |
+|---|---|---|---|---|---|---|---|---|
+| `dev/integration_tests/channels/macos/Runner.xcodeproj/project.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist` | 1 | 1 | 1 | 1 | 2022-09-08 | 2022-09-08 | 2022-09-08 | yes |
+| `engine/src/flutter/impeller/compiler/includer.cc` | 3 | 3 | 2 | 1 | 2024-12-17 | 2024-12-17 | 2022-09-19 | yes |
+| `engine/src/flutter/shell/platform/fuchsia/dart_pkg/zircon/BUILD.gn` | 1 | 1 | 1 | 1 | 2026-02-25 | 2026-02-25 | 2026-02-25 | yes |
+| `packages/flutter/examples/api/lib/widgets/shared_app_data/shared_app_data.0.dart` | 1 | 1 | 1 | 1 | 2026-08-07 | 2026-08-07 | 2026-08-07 | yes |
+| `packages/flutter_tools/ide_templates/intellij/dev/devicelab/devicelab.iml.copy.tmpl` | 3 | 3 | 3 | 3 | 2022-09-09 | 2022-09-09 | 2022-09-09 | yes |

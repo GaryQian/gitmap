@@ -1,0 +1,154 @@
+{
+ "tag": "flutter-dart",
+ "repo": "C:/Users/Gary/git/flutter",
+ "node": "v24.13.0",
+ "capMs": 10000,
+ "runQuery": true,
+ "deleteTrees": true,
+ "wallMs": 45684,
+ "readMs": 4842,
+ "decodeMs": 76,
+ "rssStartMB": 88,
+ "peakRssMB": 320,
+ "rssTrace": [
+  [
+   0,
+   101
+  ],
+  [
+   500,
+   190
+  ],
+  [
+   1000,
+   200
+  ],
+  [
+   1500,
+   231
+  ],
+  [
+   2000,
+   269
+  ],
+  [
+   2500,
+   272
+  ],
+  [
+   3000,
+   281
+  ],
+  [
+   3500,
+   291
+  ],
+  [
+   4000,
+   297
+  ],
+  [
+   4500,
+   312
+  ],
+  [
+   5000,
+   317
+  ],
+  [
+   5500,
+   290
+  ],
+  [
+   6000,
+   293
+  ],
+  [
+   6500,
+   294
+  ]
+ ],
+ "all": {
+  "files": 6637,
+  "MB": 91,
+  "parseMs": 31548,
+  "queryMs": 7658,
+  "queryOverParsePct": 24.3,
+  "parseMBps": 2.88,
+  "totalMBps": 2.32,
+  "filesPerSec": 169,
+  "meanMsPerFile": 5.91,
+  "p50Ms": 1.53,
+  "p95Ms": 25.37,
+  "p99Ms": 67.11,
+  "maxMs": 419.9,
+  "over2s": 0,
+  "cancelled": 0,
+  "withSyntaxErrors": 1031,
+  "defs": 107804,
+  "refs": 792699
+ },
+ "byLang": {
+  "dart": {
+   "files": 6637,
+   "MB": 91,
+   "parseMs": 31548,
+   "queryMs": 7658,
+   "queryOverParsePct": 24.3,
+   "parseMBps": 2.88,
+   "totalMBps": 2.32,
+   "filesPerSec": 169,
+   "meanMsPerFile": 5.91,
+   "p50Ms": 1.53,
+   "p95Ms": 25.37,
+   "p99Ms": 67.11,
+   "maxMs": 419.9,
+   "over2s": 0,
+   "cancelled": 0,
+   "withSyntaxErrors": 1031,
+   "defs": 107804,
+   "refs": 792699
+  }
+ },
+ "warmup": {
+  "first200MBps": 2.6,
+  "restMBps": 2.31
+ },
+ "worst": [
+  {
+   "rel": "packages/flutter/lib/src/material/icons.dart",
+   "KB": 1818,
+   "parseMs": 327,
+   "queryMs": 93,
+   "cancelled": false
+  },
+  {
+   "rel": "packages/flutter/test/material/text_field_test.dart",
+   "KB": 716,
+   "parseMs": 310,
+   "queryMs": 78,
+   "cancelled": false
+  },
+  {
+   "rel": "engine/src/flutter/lib/web_ui/lib/src/engine/font_fallback_data.dart",
+   "KB": 2208,
+   "parseMs": 271,
+   "queryMs": 59,
+   "cancelled": false
+  },
+  {
+   "rel": "packages/flutter/test/widgets/editable_text_test.dart",
+   "KB": 676,
+   "parseMs": 259,
+   "queryMs": 63,
+   "cancelled": false
+  },
+  {
+   "rel": "packages/flutter/test/material/input_decorator_test.dart",
+   "KB": 599,
+   "parseMs": 251,
+   "queryMs": 71,
+   "cancelled": false
+  }
+ ]
+}

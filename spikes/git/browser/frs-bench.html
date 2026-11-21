@@ -1,0 +1,38 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>FileReaderSync cost</title>
+<pre id="out">running...</pre>
+<input type="file" id="f">
+<script>
+// Measures per-call cost of FileReaderSync.readAsArrayBuffer(blob.slice(...)) in a worker.
+// Default: in-memory Blob (lower bound; no disk). Pick a file to measure a disk-backed File.
+const src = `
+onmessage = (e) => {
+  const blob = e.data.blob;
+  const fr = new FileReaderSync();
+  const res = {};
+  for (const len of [256, 4096, 65536, 1048576]) {
+    const n = len >= 1048576 ? 200 : 5000;
+    // warmup
+    for (let i = 0; i < 50; i++) fr.readAsArrayBuffer(blob.slice(0, len));
+    let seed = 12345;
+    const t = performance.now();
+    let sum = 0;
+    for (let i = 0; i < n; i++) {
+      seed = (seed * 1103515245 + 12345) >>> 0;
+      const off = seed % Math.max(1, blob.size - len);
+      sum += fr.readAsArrayBuffer(blob.slice(off, off + len)).byteLength;
+    }
+    const ms = performance.now() - t;
+    res[len] = { calls: n, usPerCall: +(ms * 1000 / n).toFixed(1), MBps: +(sum / 1048576 / (ms / 1000)).toFixed(0) };
+  }
+  postMessage({ size: blob.size, kind: e.data.kind, res });
+};`;
+const w = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
+const out = document.getElementById('out');
+w.onmessage = (e) => { out.textContent += '\n' + JSON.stringify(e.data); window.__results = (window.__results || []).concat([e.data]); };
+const mem = new Uint8Array(256 * 1048576);
+for (let i = 0; i < mem.length; i += 4096) mem[i] = i & 255;
+w.postMessage({ blob: new Blob([mem]), kind: 'memory-blob' });
+document.getElementById('f').onchange = (ev) => w.postMessage({ blob: ev.target.files[0], kind: 'disk-file' });
+</script>

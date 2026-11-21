@@ -1,0 +1,95 @@
+{
+  "label": "react",
+  "repo": "C:/Users/Gary/git/react",
+  "stoppedBy": "done",
+  "objects": 267470,
+  "packs": 2,
+  "openMs": 35.7,
+  "idxLoadMs": 35.5,
+  "headTreeMs": 45.6,
+  "runMs": 3512.1,
+  "commits": 21800,
+  "commitsPerSec": 6207,
+  "commitReadMs": 620.8,
+  "diffMs": 2570,
+  "treesRead": 286485,
+  "treesPerCommit": 13.14,
+  "treeMB": 464.6,
+  "filesTouched": 170600,
+  "paths": 26713,
+  "headFiles": 7282,
+  "headCoverage": 1,
+  "authors": 2118,
+  "authorFileEntries": 84614,
+  "coChangePairs": 314405,
+  "coChangeSkippedCommits": 358,
+  "objectReads": 308285,
+  "cacheHits": 264923,
+  "cacheMisses": 155813,
+  "cacheHitRate": 0.6297,
+  "cacheMBAtEnd": 64,
+  "ioCalls": 916,
+  "ioMB": 57.2,
+  "ioMs": 77.5,
+  "inflateCalls": 155813,
+  "inflateMs": 690.7,
+  "inflateMBOut": 29.5,
+  "deltaCalls": 112451,
+  "deltaMs": 287.9,
+  "lookupMs": 192.7,
+  "avgChain": 1.42,
+  "maxChain": 50,
+  "byType": {
+    "commit": 21800,
+    "tree": 286485,
+    "blob": 0,
+    "tag": 0
+  },
+  "peakRssMB": 467,
+  "peakHeapMB": 135,
+  "checkpoints": [
+    {
+      "commits": 100,
+      "ms": 108,
+      "coverage": 0.0666,
+      "rssMB": 109
+    },
+    {
+      "commits": 500,
+      "ms": 261,
+      "coverage": 0.2779,
+      "rssMB": 135
+    },
+    {
+      "commits": 1000,
+      "ms": 394,
+      "coverage": 0.4146,
+      "rssMB": 171
+    },
+    {
+      "commits": 2000,
+      "ms": 646,
+      "coverage": 0.5486,
+      "rssMB": 223
+    },
+    {
+      "commits": 5000,
+      "ms": 1544,
+      "coverage": 1,
+      "rssMB": 300
+    },
+    {
+      "commits": 10000,
+      "ms": 2400,
+      "coverage": 1,
+      "rssMB": 330
+    },
+    {
+      "commits": 20000,
+      "ms": 3374,
+      "coverage": 1,
+      "rssMB": 432
+    }
+  ],
+  "options": "--dump git/out/react.files.json"
+}

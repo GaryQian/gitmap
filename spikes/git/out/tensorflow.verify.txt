@@ -1,0 +1,23 @@
+{
+  "repo": "C:/Users/Gary/git/tensorflow",
+  "gitLogMs": 40801,
+  "gitCommits": 204106,
+  "quotedPaths": 4,
+  "refPaths": 86553,
+  "minePaths": 86553,
+  "onlyRef": 0,
+  "onlyMine": 0,
+  "onlyRefEx": [],
+  "onlyMineEx": [],
+  "badCount": 0,
+  "badLast": 0,
+  "badFirst": 0,
+  "badAuthors": 0,
+  "examples": []
+}
+
+| file | walker commits | git (ref cmd) commits | plain `git log -- f` | `--first-parent -- f` | walker last | ref last | plain last | walker == ref |
+|---|---|---|---|---|---|---|---|---|
+| `tensorflow/core/api_def/java_api/api_def_GetSessionHandle.pbtxt` | 30 | 30 | 2 | 1 | 2020-12-29 | 2020-12-29 | 2018-11-29 | yes |
+| `tensorflow/lite/g3doc/api_docs/java/org/tensorflow/lite/gpu/GpuDelegateFactory.html` | 9 | 9 | 1 | 1 | 2025-03-17 | 2025-03-17 | 2024-09-06 | yes |
+| `third_party/xla/xla/hlo/analysis/symbolic_map_serialization.cc` | 40 | 40 | 14 | 14 | 2026-10-03 | 2026-10-03 | 2026-07-27 | yes |

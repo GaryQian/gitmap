@@ -1,0 +1,102 @@
+{
+  "label": "flutter-noprof",
+  "repo": "C:/Users/Gary/git/flutter",
+  "stoppedBy": "done",
+  "objects": 1171826,
+  "packs": 1,
+  "openMs": 152.9,
+  "idxLoadMs": 152.6,
+  "headTreeMs": 67.8,
+  "runMs": 19575.6,
+  "commits": 92682,
+  "commitsPerSec": 4735,
+  "commitReadMs": 3534.8,
+  "diffMs": 15088.9,
+  "treesRead": 1379611,
+  "treesPerCommit": 14.89,
+  "treeMB": 1097.2,
+  "filesTouched": 479145,
+  "paths": 32656,
+  "headFiles": 16356,
+  "headCoverage": 1,
+  "authors": 2509,
+  "authorFileEntries": 176955,
+  "coChangePairs": 843922,
+  "coChangeSkippedCommits": 1129,
+  "objectReads": 1472293,
+  "cacheHits": 1209499,
+  "cacheMisses": 736025,
+  "cacheHitRate": 0.6217,
+  "cacheMBAtEnd": 64,
+  "ioCalls": 6355,
+  "ioMB": 397.2,
+  "ioMs": 448.9,
+  "inflateCalls": 0,
+  "inflateMs": 0,
+  "inflateMBOut": 0,
+  "deltaCalls": 0,
+  "deltaMs": 0,
+  "lookupMs": 0,
+  "avgChain": 1.24,
+  "maxChain": 49,
+  "byType": {
+    "commit": 92682,
+    "tree": 1379611,
+    "blob": 0,
+    "tag": 0
+  },
+  "peakRssMB": 597,
+  "peakHeapMB": 192,
+  "peakArrayBuffersMB": 207,
+  "checkpoints": [
+    {
+      "commits": 100,
+      "ms": 99,
+      "coverage": 0.0257,
+      "rssMB": 164
+    },
+    {
+      "commits": 500,
+      "ms": 178,
+      "coverage": 0.0833,
+      "rssMB": 188
+    },
+    {
+      "commits": 1000,
+      "ms": 280,
+      "coverage": 0.1522,
+      "rssMB": 209
+    },
+    {
+      "commits": 2000,
+      "ms": 434,
+      "coverage": 0.333,
+      "rssMB": 250
+    },
+    {
+      "commits": 5000,
+      "ms": 843,
+      "coverage": 0.4706,
+      "rssMB": 319
+    },
+    {
+      "commits": 10000,
+      "ms": 1966,
+      "coverage": 0.668,
+      "rssMB": 373
+    },
+    {
+      "commits": 20000,
+      "ms": 3671,
+      "coverage": 0.8781,
+      "rssMB": 488
+    },
+    {
+      "commits": 50000,
+      "ms": 9186,
+      "coverage": 0.9326,
+      "rssMB": 519
+    }
+  ],
+  "options": "--label flutter-noprof --no-profile"
+}

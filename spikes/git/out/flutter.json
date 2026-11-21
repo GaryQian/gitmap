@@ -1,0 +1,102 @@
+{
+  "label": "flutter",
+  "repo": "C:/Users/Gary/git/flutter",
+  "stoppedBy": "done",
+  "objects": 1171826,
+  "packs": 1,
+  "openMs": 165.2,
+  "idxLoadMs": 164.9,
+  "headTreeMs": 81.5,
+  "runMs": 21581,
+  "commits": 92682,
+  "commitsPerSec": 4295,
+  "commitReadMs": 3923.1,
+  "diffMs": 16565.6,
+  "treesRead": 1379611,
+  "treesPerCommit": 14.89,
+  "treeMB": 1097.2,
+  "filesTouched": 479145,
+  "paths": 32656,
+  "headFiles": 16356,
+  "headCoverage": 1,
+  "authors": 2509,
+  "authorFileEntries": 176955,
+  "coChangePairs": 843922,
+  "coChangeSkippedCommits": 1129,
+  "objectReads": 1472293,
+  "cacheHits": 1209499,
+  "cacheMisses": 736025,
+  "cacheHitRate": 0.6217,
+  "cacheMBAtEnd": 64,
+  "ioCalls": 6355,
+  "ioMB": 397.2,
+  "ioMs": 510.6,
+  "inflateCalls": 736025,
+  "inflateMs": 2971.5,
+  "inflateMBOut": 130.9,
+  "deltaCalls": 473231,
+  "deltaMs": 1142.5,
+  "lookupMs": 940.7,
+  "avgChain": 1.24,
+  "maxChain": 49,
+  "byType": {
+    "commit": 92682,
+    "tree": 1379611,
+    "blob": 0,
+    "tag": 0
+  },
+  "peakRssMB": 609,
+  "peakHeapMB": 191,
+  "peakArrayBuffersMB": 209,
+  "checkpoints": [
+    {
+      "commits": 100,
+      "ms": 123,
+      "coverage": 0.0257,
+      "rssMB": 182
+    },
+    {
+      "commits": 500,
+      "ms": 197,
+      "coverage": 0.0833,
+      "rssMB": 206
+    },
+    {
+      "commits": 1000,
+      "ms": 303,
+      "coverage": 0.1522,
+      "rssMB": 224
+    },
+    {
+      "commits": 2000,
+      "ms": 483,
+      "coverage": 0.333,
+      "rssMB": 265
+    },
+    {
+      "commits": 5000,
+      "ms": 949,
+      "coverage": 0.4706,
+      "rssMB": 339
+    },
+    {
+      "commits": 10000,
+      "ms": 2196,
+      "coverage": 0.668,
+      "rssMB": 389
+    },
+    {
+      "commits": 20000,
+      "ms": 4105,
+      "coverage": 0.8781,
+      "rssMB": 501
+    },
+    {
+      "commits": 50000,
+      "ms": 10146,
+      "coverage": 0.9326,
+      "rssMB": 542
+    }
+  ],
+  "options": "--dump git/out/flutter.files.json --time-limit-s 600"
+}

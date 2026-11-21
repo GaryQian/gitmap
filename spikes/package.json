@@ -1,0 +1,28 @@
+{
+  "name": "gitmap-spikes",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "scan": "tsx scan/bench.ts",
+    "treesitter": "tsx treesitter/bench.ts",
+    "git": "tsx git/bench.ts",
+    "dev": "vite"
+  },
+  "devDependencies": {
+    "@types/d3-force": "^3.0.10",
+    "@types/node": "^26.6.6",
+    "@types/three": "^0.187.0",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8"
+  },
+  "dependencies": {
+    "@repomix/tree-sitter-wasms": "^0.1.17",
+    "d3-force": "^3.0.1",
+    "fflate": "^0.8.3",
+    "three": "^0.187.0",
+    "tree-sitter-wasms": "^0.1.13",
+    "web-tree-sitter": "^0.27.2",
+    "web-tree-sitter-legacy": "npm:web-tree-sitter@^0.22.6"
+  }
+}

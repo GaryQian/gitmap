@@ -1,0 +1,15 @@
+{
+  "hash": "f6727d4a",
+  "configHash": "07321952",
+  "lockfileHash": "60c9299f",
+  "browserHash": "07f09f22",
+  "optimized": {
+    "d3-force": {
+      "src": "../../../node_modules/d3-force/dist/d3-force.mjs",
+      "file": "d3-force.js",
+      "fileHash": "f994210b",
+      "needsInterop": false
+    }
+  },
+  "chunks": {}
+}
