@@ -493,6 +493,7 @@ Each tier is a set of independent `forceSimulation` instances in the physics wor
 - **Rubber-band links.** `forceLink.distance = rA + rB + gap · f(1/weight)`, strength below 1 so links have give. d3's default strength is `1 / min(degree(source), degree(target))` and its bias makes the higher-degree node move less; we keep that and scale it by a config factor.
 - **Mass.** `forceCollide` resolves overlap in proportion to radius², so big cities and big files shove small ones aside.
 - **No `forceCenter` at the city tier.** It translates every node's position directly each tick, which would make the world slide when one city is dragged. Weak `forceX`/`forceY` gravity is used instead.
+- **File tier, the intended look.** Larger spheres tend toward the middle of a district, but not strictly: files that are strongly connected should sit near each other even when that pulls a large file off-centre or a small one inward. Concentric rings sorted by size, as the render spike's placeholder layout shows, are the wrong result.
 - **File tier, size vs connectivity.** `forceRadial` targets a radius by size rank (largest spheres at the district centre; size already includes importance, so important files gravitate inward); `forceLink` pulls connected files together. One knob, `physics.file.sizeVsConnectivity` (default 0.5), sets `radial.strength = 2w·base` and scales link strength by `2(1−w)`. d3 already normalises link strength by degree, so equal coefficients give the two inputs equal pull per node. "50/50" is defined operationally this way.
 - **Voronoi districts.** `d3-delaunay` computes the Voronoi diagram of district centres clipped to the city outline. Each cell is that district's territory and the containment region for its files. Collide radii ∝ √(district area) keep cell areas roughly proportional to content.
 - **Space propagates upward.** When a district's content grows, its collide radius grows (eased) → siblings are pushed → the city's radius grows → neighbouring cities are pushed. This is how others "move aside to make room" during a user-triggered update.
@@ -567,7 +568,7 @@ Other per-instance state (hover, selected ×1.3 with pulsing, dimmed, growing-in
 - **Level of detail:**
   - Far: one ribbon per city pair. Width shows total traffic; pulses run both ways in proportion to each direction's share.
   - Mid: district↔district ribbons for cities in view, same convention.
-  - Near: file↔file edges for districts in view, strongest first, under `render.edgeBudget`.
+  - Near: a small ambient set of file↔file edges for districts in view, strongest first, capped at `render.ambientEdges` (default 1,500). Drawing tens of thousands at once buried the stars in the render spike; most connections should be seen by hovering or selecting.
   - Always: every edge of hovered and selected spheres, in a small "focus" buffer at full strength.
 
 ### 8.4 Pills, beams, particles
@@ -589,18 +590,24 @@ Everything here is a function of time evaluated in shaders. None of it costs per
 
 **The sphere as a small star**
 
+A sphere is drawn as a self-lit ball of gas. The first version read as a glossy marble because it borrowed everything from lit objects: a light direction, a shaded rim, a highlight and a crisp silhouette. None of those are used now. The reference is `spikes/render/main.ts`, accepted as the starting point on 2026-11-21.
+
 | Layer | What it looks like | Driven by |
 |---|---|---|
-| **Body** | Saturated file-type colour across most of the disc. This is the dominant read at any distance. | language |
-| **Core** | A white-hot centre blending outward into the type colour, as if lit from inside. Covers roughly the inner third of the radius. Slow shimmer (two noise octaves, a few percent of brightness) so no two stars pulse in step. | always on; each sphere has its own phase |
-| **Rim** | Slightly deeper tone of the type colour at the edge, with a thin warm highlight on the upper side, so the body still reads as a sphere and not a flat disc. | fixed light direction |
-| **Corona** | A soft tinted halo beyond the silhouette, with faint radial streaks that rotate slowly. | importance (from the 70th percentile), selection, hover |
-| **Ground light** | A pool of the type colour on the plane beneath, blended into the territory texture. Low-importance spheres leave only a neutral contact shadow. | importance |
+| **Body** | The file-type colour, brightest in the middle and deepening toward the edge. No light direction and no highlight. | language |
+| **Core** | Not a drawn shape. Brightness rises smoothly toward the centre and goes through an exposure curve, so the centre burns out toward white the way a bright light does in a photograph. Wider and hotter with importance; a slow flicker with its own phase per sphere. | always on; importance |
+| **Surface** | Slow, faint turbulence in brightness, shown only when the sphere is large on screen. | zoom |
+| **Edge** | No silhouette. The opaque disc is cut slightly inside its radius and the glow begins there at the edge's own brightness, so the edge dissolves into light. | always on |
+| **Glow** | A smooth tail of the type colour falling away from the edge. Thin on every star, wide on important ones. | importance (from the 70th percentile), selection, hover |
+| **Spikes** | Thin, faint four-point diffraction spikes at a fixed tilt, on the top 2–3% only. | importance |
+| **Ground light** | Every star lights a small pool on the plane beneath it; important ones light a wide one. | importance |
 
-- The body and core are part of the sphere impostor's fragment shader. The corona is the same quad, enlarged for instances that need it, so there is still one draw call.
-- Under an overlay the body takes the overlay colour, the core stays neutral white, and corona and ground light fade out.
+- **Rejected in the design pass as cartoon-like:** a starburst drawn in the centre, striped rays, expanding rings, and a rim brighter than the body.
+- Three instanced draws: opaque bodies with depth; glows with no depth write, additive in dark mode; flat ground-light quads. Bodies sort by centre depth, so no per-pixel depth is written.
+- Light mode runs the same shaders with normal blending. It renders correctly but has not had its own tuning pass; dark mode is the tuned default.
+- Under an overlay the body takes the overlay colour, the core stays neutral white, and glow and ground light fade out.
 - A dimmed sphere (filtered out by the legend) loses its core light and drops to a pale grey body.
-- Selected spheres scale ×1.3 and their core, corona and scale breathe together on a ~1.5 s cycle.
+- Selected spheres scale ×1.3 and their core, glow and scale breathe together on a ~1.5 s cycle.
 
 **Ambient particles**
 
@@ -619,13 +626,15 @@ Everything here is a function of time evaluated in shaders. None of it costs per
 
 **Edge pulses**
 
-- A pulse is a packet of light with a bright head and a fading tail that travels along the arc **from the file that depends to the file it depends on** (caller → callee, importer → imported).
+- A pulse reads as an electrical discharge: a white-hot bead at the head with a short, fast-fading tail in the connection's colour, flickering rapidly as it travels. It runs along the arc **from the file that depends to the file it depends on** (caller → callee, importer → imported).
+- A pulse fires, crosses, and then the line rests before firing again, so the scene crackles irregularly instead of scrolling like a conveyor.
+- The line is drawn as a thin trace inside a strip three times its width; the spare width carries the glow around a passing pulse. In dark mode both trace and pulse are additive light.
 - Pulses move at a constant speed in world units, so longer connections take visibly longer and direction is unambiguous even on a still frame.
-- More heavily used connections carry more frequent and brighter pulses. The line beneath stays a faint constant trace.
+- More heavily used connections rest for less time between pulses and carry brighter ones. The trace beneath is constant and clearly visible, not faint.
 - Colour runs from the source file's type colour at the start of the arc to the target's at the end.
 - Hovered and selected connections get a small flash on the target sphere's core as each pulse arrives. Background edges skip the flash.
 - Ribbons between cities and districts carry pulses in both directions at once, in proportion to each direction's traffic.
-- A pulse's position is `fract(time · speed / length − phase)` per edge instance: one time uniform drives every edge.
+- A pulse's position is a function of time, the edge's length and a per-edge phase: one time uniform drives every edge, with no per-edge CPU work. The reference is the edge shader in `spikes/render/main.ts`.
 
 ---
 
@@ -839,10 +848,10 @@ One file, typed and validated at build, imported by client and server. Secrets a
                   "glowFromPct": 0.7, "selectedScale": 1.3, "languageColors": { "ts": "#3178c6" }, "grid": {}, "background": {},
                   "star":      { "coreRadius": 0.33, "shimmer": 0.04, "coronaScale": 1.8, "breatheMs": 1500 },
                   "particles": { "ambient": 4000, "voidDustShare": 0.2, "selectBurst": 40, "openBurst": 150 },
-                  "edgePulse": { "speed": 60, "tail": 0.15, "maxRatePerSec": 2 } },
+                  "edgePulse": { "speed": 120, "tailLength": 30, "restSeconds": [0.5, 2.4], "flickerHz": 10, "traceOpacity": 0.16 } },
   "legend":     { "minLinesDefault": 0 },
   "demo":       { "repos": [ { "name": "demo-small", "path": "/demo/demo-small/" }, { "name": "demo-medium", "path": "/demo/demo-medium/" } ] },
-  "render":     { "edgeBudget": 150000, "maxPills": 150, "patchBudgetMs": 4, "adaptiveDpr": true },
+  "render":     { "ambientEdges": 1500, "edgeBudget": 50000, "maxPills": 150, "patchBudgetMs": 4, "adaptiveDpr": true },
   "interaction":{ "jiggleMax": 0.35, "jiggleSettleMs": 800, "hoverDelayMs": 80 },
   "camera":     { "minDistance": 10, "maxDistance": 5000, "flyMs": 900 },
   "overlays":   { "enabled": ["recency", "ownership", "reach", "knowledgeRisk", "tests"],

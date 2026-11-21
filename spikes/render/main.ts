@@ -6,18 +6,24 @@ import * as THREE from 'three';
 const qs = new URLSearchParams(location.search);
 const num = (k: string, d: number) => (qs.has(k) ? Number(qs.get(k)) : d);
 const N = num('n', 10000);
-const EDGE_BUDGET = num('edges', 50000);
+const EDGE_BUDGET = num('edges', 1500); // ambient connections only; hovered and selected files draw their own
 const PARTICLES = num('particles', 4000);
 const TERR = num('terr', 1) === 1;
 const TERR_HOT = num('terrHot', 0) === 1;
-const FRAGDEPTH = num('fd', 1) === 1;
+const FRAGDEPTH = num('fd', 0) === 1; // unused by the star look: discs sort by their centre depth
 const ORBIT = num('orbit', 1) === 1;
 const DIST = num('dist', 1);
 const SEG = num('seg', 16);
 const DPR = num('dpr', Math.min(devicePixelRatio, 2));
 const FINISH = num('finish', 0) === 1;
-const SPLIT = num('split', 0) === 1; // 1 = body pass (depth write) + separate corona pass (no depth write)
 const SEED = num('seed', 1);
+const DARK = (qs.get('mode') ?? 'dark') !== 'light'; // dark is the default appearance
+const CORONA = num('corona', 1) === 1;
+const POOLS = num('pools', 1) === 1;
+const WISPS = num('wisps', 1) === 1;
+const CAMH = num('camh', 0.55);   // camera height as a fraction of its distance
+const LOOKX = num('lx', 0), LOOKZ = num('lz', 0); // look-at offset, as a fraction of the map extent
+const ANGLE = num('angle', 0.6);  // fixed orbit angle when orbit=0
 
 // ---------- seeded RNG ----------
 function mulberry32(a: number) {
@@ -149,6 +155,8 @@ renderer.setPixelRatio(DPR);
 renderer.setSize(innerWidth, innerHeight);
 renderer.setClearColor(0x000000, 0);
 document.body.appendChild(renderer.domElement);
+document.body.style.background = DARK ? '#1C1C1C' : '#F6F8FC';
+{ const h = document.getElementById('hud'); if (h && DARK) { h.style.background = 'rgba(28,28,28,.7)'; h.style.color = '#EDEFF2'; h.style.borderColor = '#444'; } }
 const gl = renderer.getContext() as WebGL2RenderingContext;
 const dbg = gl.getExtension('WEBGL_debug_renderer_info');
 const GPU = dbg ? `${gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL)} | ${gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)}` : String(gl.getParameter(gl.RENDERER));
@@ -166,87 +174,110 @@ vec3 centerOf(int i, out float r) { vec4 L = texelFetch(uLocal, tc(i), 0); vec4 
 float hash11(float p) { p = fract(p * .1031); p *= p + 33.33; p *= p + p; return fract(p); }
 `;
 
-// ---- spheres ----
+// ---- spheres: star look ----
+// Each file is a small self-lit star. There is no light direction, no specular highlight and no
+// shaded rim: brightness falls from a white-hot core through the file-type colour to a bright limb.
+// Two draws over the same instances: bodies (depth write), then coronas (no depth write).
 const quad = new THREE.InstancedBufferGeometry();
 quad.setAttribute('position', new THREE.BufferAttribute(new Float32Array([-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 1, 0]), 3));
 quad.setIndex([0, 1, 2, 0, 2, 3]);
 quad.instanceCount = N;
+const uDark = { value: DARK ? 1 : 0 };
+const STAR_VARY = /* glsl */ `varying vec2 vUv; varying vec3 vCol; varying float vGlow; varying float vSuper; varying float vScale; varying float vPhase; varying vec3 vCV; varying float vR;`;
+const STAR_VERT = GLSL_COMMON + STAR_VARY + /* glsl */ `
+  void main() {
+    int i = gl_InstanceID; float r; vec3 c = centerOf(i, r);
+    vec4 C = texelFetch(uColor, tc(i), 0);
+    vGlow = smoothstep(0.70, 1.0, C.w);       // importance glow, from the 70th percentile
+    vSuper = smoothstep(0.975, 1.0, C.w);     // the top few percent flare like a supernova
+    #ifdef CORONA
+      vScale = 1.35 + 1.7 * vGlow + 2.4 * vSuper;
+    #else
+      vScale = 1.0;
+    #endif
+    vUv = position.xy * vScale; vCol = C.rgb; vPhase = hash11(float(i)) * 6.2831; vR = r;
+    vec4 mv = viewMatrix * vec4(c, 1.0); vCV = mv.xyz;
+    mv.xy += position.xy * r * vScale;
+    #ifdef CORONA
+      mv.z += r * 0.02; // sit just in front of its own disc; nearer stars still occlude it
+    #endif
+    gl_Position = projectionMatrix * mv;
+  }`;
+const GLSL_NOISE = /* glsl */ `
+  float h21(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+  float vnoise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(h21(i), h21(i + vec2(1.0, 0.0)), f.x), mix(h21(i + vec2(0.0, 1.0)), h21(i + vec2(1.0, 1.0)), f.x), f.y); }`;
 const sphereMat = new THREE.ShaderMaterial({
-  uniforms: { ...common },
+  uniforms: { ...common, uDark },
   defines: FRAGDEPTH ? { FRAGDEPTH: 1 } : {},
-  vertexShader: GLSL_COMMON + /* glsl */ `
-    varying vec2 vUv; varying vec3 vCol; varying float vGlow; varying float vScale; varying float vPhase; varying vec3 vCV; varying float vR;
-    void main() {
-      int i = gl_InstanceID; float r; vec3 c = centerOf(i, r);
-      vec4 C = texelFetch(uColor, tc(i), 0);
-      vGlow = smoothstep(0.70, 1.0, C.w);
-      vScale = vGlow > 0.0 ? 1.0 + 1.3 * (0.4 + 0.6 * vGlow) : 1.0;
-      #ifdef BODY_ONLY
-        vScale = 1.0;
-      #endif
-      vUv = position.xy * vScale; vCol = C.rgb; vPhase = hash11(float(i)) * 6.2831; vR = r;
-      vec4 mv = viewMatrix * vec4(c, 1.0); vCV = mv.xyz;
-      mv.xy += position.xy * r * vScale;
-      gl_Position = projectionMatrix * mv;
-      #ifdef CORONA_ONLY
-        if (vGlow <= 0.0) gl_Position = vec4(2.0, 2.0, 2.0, 1.0); // degenerate: skip raster
-      #endif
-    }`,
+  vertexShader: STAR_VERT,
   fragmentShader: /* glsl */ `
-    uniform mat4 projectionMatrix; uniform float uTime; varying vec2 vUv; varying vec3 vCol; varying float vGlow; varying float vScale; varying float vPhase; varying vec3 vCV; varying float vR;
+    uniform mat4 projectionMatrix; uniform float uTime; uniform float uDark; ` + STAR_VARY + GLSL_NOISE + /* glsl */ `
     void main() {
-      float d2 = dot(vUv, vUv); float d = sqrt(d2);
-      float aa = fwidth(d) * 1.2;
-      vec3 col; float a;
-      vec3 L = normalize(vec3(-0.35, 0.75, 0.55));
-      #ifdef CORONA_ONLY
-        if (d < 1.0) discard;
-      #endif
-      if (d < 1.0) {
-        vec3 n = vec3(vUv, sqrt(max(0.0, 1.0 - d2)));
-        float diff = max(dot(n, L), 0.0);
-        float sh = 1.0 + 0.05 * (sin(uTime * 1.1 + vPhase) * 0.65 + sin(uTime * 2.7 + vPhase * 1.9) * 0.35);
-        vec3 body = vCol * (0.78 + 0.32 * diff);
-        float rim = smoothstep(0.72, 1.0, d);
-        body = mix(body, vCol * 0.55, rim * 0.75);
-        float warm = pow(max(dot(reflect(-L, n), vec3(0, 0, 1)), 0.0), 18.0) * smoothstep(0.6, 0.95, d);
-        body += vec3(1.0, 0.85, 0.6) * warm * 0.35;
-        float core = (1.0 - smoothstep(0.0, 0.5, d)) * sh;
-        col = mix(body, vec3(1.0, 0.99, 0.94), clamp(core * 0.95, 0.0, 1.0));
-        a = 1.0 - smoothstep(1.0 - aa, 1.0, d);
-        // blend the AA edge into the corona instead of to transparent for glowing instances
-        #ifndef BODY_ONLY
-        if (vGlow > 0.0) { float halo = 0.55 * vGlow; col = mix(vCol, col, a); a = mix(halo, 1.0, a); }
-        #endif
-        #if defined(FRAGDEPTH) && !defined(CORONA_ONLY)
-          vec3 p = vCV + vec3(0.0, 0.0, n.z * vR);
-          vec4 cp = projectionMatrix * vec4(p, 1.0);
-          gl_FragDepth = (cp.z / cp.w) * 0.5 + 0.5;
-        #endif
-      } else {
-        if (vGlow <= 0.0 || d > vScale) discard;
-        float t = (d - 1.0) / (vScale - 1.0);
-        float halo = pow(1.0 - t, 2.2);
-        float ang = atan(vUv.y, vUv.x);
-        float streak = 0.8 + 0.2 * sin(ang * 9.0 + uTime * 0.25 + vPhase) * sin(ang * 5.0 - uTime * 0.17);
-        a = halo * streak * 0.55 * vGlow;
-        if (a < 0.008) discard;
-        col = vCol;
-        #if defined(FRAGDEPTH) && !defined(CORONA_ONLY)
-          gl_FragDepth = gl_FragCoord.z;
-        #endif
-      }
-      gl_FragColor = vec4(col, a);
+      float d2 = dot(vUv, vUv); if (d2 > 1.0) discard;
+      float d = sqrt(d2);
+      float px = 1.0 / max(fwidth(d), 1e-4);                 // radius in pixels
+      float detail = smoothstep(5.0, 16.0, px);              // surface detail only when large on screen
+      float ang = atan(vUv.y, vUv.x); float t = uTime;
+      float flick = 1.0 + 0.07 * (sin(t * 1.1 + vPhase) * 0.65 + sin(t * 2.7 + vPhase * 1.9) * 0.35);
+
+      // plasma: slow turbulent brightness across the surface
+      float n = 0.5;
+      if (detail > 0.0) { vec2 q = vUv * 2.6 + vec2(vPhase, vPhase * 1.7);
+        n = vnoise(q + t * 0.12) * 0.6 + vnoise(q * 2.3 - t * 0.19) * 0.4; }
+
+      // The disc is opaque and cut slightly inside its nominal radius; the corona pass blooms over the
+      // cut, so there is never a crisp silhouette (a crisp edge is what makes a ball read as a marble).
+      if (d > 0.93) discard;
+
+      // Emission, then exposure. Brightness is highest at the centre and falls smoothly to the limb.
+      // Passing it through an exposure curve lets the centre burn out toward white the way a bright
+      // light source does on a sensor. Nothing is drawn: no core shape, no rays, no highlight.
+      vec3 hue = vCol / max(max(vCol.r, vCol.g), max(vCol.b, 1e-3));
+      hue = pow(hue, vec3(1.6));                               // keep the file-type colour saturated
+      float limbDark = mix(1.0, 0.62, d2);
+      float core = exp(-d2 * mix(13.0, 8.0, vGlow)) * mix(2.4, 5.0, vGlow) * flick;
+      float I = (1.30 + core) * limbDark * (1.0 + detail * 0.28 * (n - 0.5));
+      vec3 col = 1.0 - exp(-hue * I);
+      vec3 hot = uDark > 0.5 ? vec3(1.0, 0.97, 0.90) : vec3(1.0, 0.95, 0.82);
+      col = mix(col, hot, 1.0 - exp(-core * 0.30));
+      gl_FragColor = vec4(col, 1.0);
     }`,
-  transparent: true, depthWrite: true, depthTest: true,
+  transparent: false, depthWrite: true, depthTest: true,
 });
 const spheres = new THREE.Mesh(quad, sphereMat); spheres.frustumCulled = false; spheres.renderOrder = 1; scene.add(spheres);
-if (SPLIT) {
-  sphereMat.defines = { ...sphereMat.defines, BODY_ONLY: 1 };
-  const coronaMat = sphereMat.clone();
-  coronaMat.defines = { CORONA_ONLY: 1 }; coronaMat.depthWrite = false; coronaMat.uniforms = sphereMat.uniforms;
-  const corona = new THREE.Mesh(quad, coronaMat); corona.frustumCulled = false; corona.renderOrder = 1.5; scene.add(corona);
-}
+
+const coronaMat = new THREE.ShaderMaterial({
+  uniforms: sphereMat.uniforms,
+  defines: { CORONA: 1 },
+  vertexShader: STAR_VERT,
+  fragmentShader: /* glsl */ `
+    uniform float uTime; uniform float uDark; ` + STAR_VARY + /* glsl */ `
+    void main() {
+      float d = length(vUv);
+      if (d < 0.915 || d > vScale) discard;
+      float t = uTime;
+      // Glow: starts at the disc's cut edge at about the limb's own brightness, so the edge has no
+      // outline, then falls away in a long soft tail. Smooth everywhere: no drawn rays, no rings.
+      float s = mix(8.0, 2.2, vGlow);
+      float g = 1.0 / (1.0 + pow(max(d - 0.93, 0.0) * s, 2.0));
+      float a = g * (0.50 + 0.25 * vGlow) * (1.0 + 0.05 * sin(t * 0.9 + vPhase));
+      if (vSuper > 0.0) {
+        // thin, faint diffraction spikes on the very brightest only, as a telescope would show them
+        float cs = cos(0.35), sn = sin(0.35); vec2 u = vec2(cs * vUv.x - sn * vUv.y, sn * vUv.x + cs * vUv.y);
+        float sx = exp(-abs(u.y) * 26.0) / (1.0 + u.x * u.x * 0.9);
+        float sy = exp(-abs(u.x) * 26.0) / (1.0 + u.y * u.y * 0.9);
+        a += (sx + sy) * 0.45 * vSuper;
+      }
+      a *= 1.0 - smoothstep(vScale * 0.75, vScale, d);
+      if (a < 0.004) discard;
+      vec3 col = vCol;
+      gl_FragColor = vec4(col, clamp(a, 0.0, 1.0) * (uDark > 0.5 ? 1.0 : 0.6));
+    }`,
+  transparent: true, depthWrite: false, depthTest: true,
+  blending: DARK ? THREE.AdditiveBlending : THREE.NormalBlending,
+});
+if (CORONA) { const corona = new THREE.Mesh(quad, coronaMat); corona.frustumCulled = false; corona.renderOrder = 1.5; scene.add(corona); }
 
 // ---- edges ----
 const edgeGeo = new THREE.InstancedBufferGeometry();
@@ -264,7 +295,7 @@ const edgeGeo = new THREE.InstancedBufferGeometry();
 }
 const pixelWorld = { value: 0 };
 const edgeMat = new THREE.ShaderMaterial({
-  uniforms: { ...common, uPix: pixelWorld },
+  uniforms: { ...common, uPix: pixelWorld, uDark: { value: DARK ? 1 : 0 } },
   vertexShader: GLSL_COMMON + /* glsl */ `
     uniform float uPix; attribute float aSrc; attribute float aDst; attribute float aW; attribute float aPh;
     varying float vT; varying float vSide; varying float vLen; varying float vW; varying float vPh; varying vec3 vCa; varying vec3 vCb;
@@ -276,28 +307,48 @@ const edgeMat = new THREE.ShaderMaterial({
       vec3 tg = (b - a) + vec3(0.0, 3.14159265 * cos(3.14159265 * t) * lift, 0.0);
       vec3 toCam = cameraPosition - p;
       vec3 side = normalize(cross(tg, toCam));
-      float px = uPix * length(toCam); float w = clamp(0.15 + 0.5 * aW, px * 0.9, px * 3.0);
+      // The strip is three times the line's width: the fragment shader draws a thin trace down the
+      // middle and uses the extra room for the glow around a passing pulse.
+      float px = uPix * length(toCam); float w = clamp(0.15 + 0.5 * aW, px * 0.9, px * 3.0) * 3.0;
       p += side * position.y * w;
       vT = t; vSide = position.y; vLen = len; vW = aW; vPh = aPh;
       vCa = texelFetch(uColor, tc(int(aSrc)), 0).rgb; vCb = texelFetch(uColor, tc(int(aDst)), 0).rgb;
       gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
     }`,
   fragmentShader: /* glsl */ `
-    uniform float uTime; varying float vT; varying float vSide; varying float vLen; varying float vW; varying float vPh; varying vec3 vCa; varying vec3 vCb;
+    uniform float uTime; uniform float uDark; varying float vT; varying float vSide; varying float vLen; varying float vW; varying float vPh; varying vec3 vCa; varying vec3 vCb;
     void main() {
       vec3 col = mix(vCa, vCb, vT);
-      float across = 1.0 - vSide * vSide;
-      float base = (0.05 + 0.10 * vW);
-      // pulse: constant world speed; heavier edges get more pulses
-      float k = 1.0 + floor(vW * 3.0);
-      float head = fract(uTime * 35.0 / vLen * 1.0 / k * k - vPh) ; // position of head along t in [0,1]
-      float x = fract((head - vT) * k);           // distance behind head, repeating k times
-      float tail = 0.08 * k * (60.0 / max(vLen, 20.0)) + 0.02;
-      float pulse = x < tail ? pow(1.0 - x / tail, 2.0) : 0.0;
-      float a = across * (base + pulse * (0.35 + 0.5 * vW));
-      gl_FragColor = vec4(mix(col * 0.8, col, pulse), a);
+      float s2 = vSide * vSide;
+      float line = exp(-s2 * 22.0);                 // the thin, always-visible trace
+      float glow = exp(-s2 * 3.5);                  // the wider light around a pulse
+      float w01 = clamp(vW, 0.0, 1.0);
+      float trace = (0.16 + 0.20 * w01) * line;
+
+      // An electrical pulse: it fires, crosses the connection at a fixed world speed, then the line
+      // rests. Heavier connections rest for less time, so they fire more often.
+      float travel = vLen / 120.0;
+      float rest = mix(2.4, 0.5, w01) * (0.6 + 0.8 * fract(sin(vPh * 91.7) * 43758.5));
+      float period = travel + rest;
+      float head = fract(uTime / period + vPh) * period / travel;   // 0..1 while crossing, above 1 at rest
+      float x = head - vT;                                          // how far this point is behind the head
+      float tailLen = clamp(30.0 / vLen, 0.04, 0.40);               // about 30 world units of tail
+      float tail = (x > 0.0 && x < tailLen) ? pow(1.0 - x / tailLen, 3.0) : 0.0;
+      float bead = exp(-pow(x / (tailLen * 0.10), 2.0)) * step(head, 1.0 + tailLen);  // the bright head
+      float crackle = 0.72 + 0.28 * sin(uTime * 60.0 + vPh * 300.0 + vT * 45.0);      // fast flicker
+      float p = (tail * 0.9 + bead * 1.4) * crackle * (0.65 + 0.55 * w01);
+
+      if (uDark > 0.5) {
+        // emitted light: white-hot at the head, cooling to the connection's colour along the tail
+        vec3 pc = mix(col * 1.35, vec3(1.0, 0.98, 0.92), clamp(bead + tail * tail * 0.5, 0.0, 1.0));
+        gl_FragColor = vec4(col * trace + pc * p * (glow * 0.85 + line * 0.6), 1.0);
+      } else {
+        float a = clamp(trace + p * (glow * 0.7 + line * 0.5), 0.0, 1.0);
+        gl_FragColor = vec4(mix(col * 0.85, col * 0.6, clamp(p, 0.0, 1.0)), a);
+      }
     }`,
   transparent: true, depthWrite: false, depthTest: true,
+  blending: DARK ? THREE.AdditiveBlending : THREE.NormalBlending,
 });
 const edges = new THREE.Mesh(edgeGeo, edgeMat); edges.frustumCulled = false; edges.renderOrder = 2; scene.add(edges);
 
@@ -340,7 +391,7 @@ if (PARTICLES > 0) {
     fragmentShader: /* glsl */ `
       varying float vA; varying vec3 vCol;
       void main() { vec2 q = gl_PointCoord * 2.0 - 1.0; float d = dot(q, q); if (d > 1.0) discard; gl_FragColor = vec4(vCol, vA * (1.0 - d)); }`,
-    transparent: true, depthWrite: false,
+    transparent: true, depthWrite: false, blending: DARK ? THREE.AdditiveBlending : THREE.NormalBlending,
   });
   particles = new THREE.Points(g, m); particles.frustumCulled = false; particles.renderOrder = 3; scene.add(particles);
 }
@@ -378,33 +429,100 @@ if (TERR) {
   const fp = new THREE.Mesh(fq, fm); fp.frustumCulled = false; terrScene.add(fp);
 }
 
+// ---- background: dust wisps ----
+const bgGeo = new THREE.BufferGeometry();
+bgGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([-1, -1, 0, 3, -1, 0, -1, 3, 0]), 3));
+const bgMat = new THREE.ShaderMaterial({
+  uniforms: { uTime: time, uDark, uRes: { value: new THREE.Vector2(1, 1) }, uPar: { value: new THREE.Vector2() } },
+  vertexShader: /* glsl */ `void main() { gl_Position = vec4(position.xy, 0.0, 1.0); }`,
+  fragmentShader: /* glsl */ `
+    uniform float uTime; uniform float uDark; uniform vec2 uRes; uniform vec2 uPar;` + GLSL_NOISE + /* glsl */ `
+    float fbm(vec2 p) { float a = 0.5, s = 0.0; for (int i = 0; i < 5; i++) { s += a * vnoise(p); p = p * 2.03 + 17.1; a *= 0.5; } return s; }
+    void main() {
+      vec2 uv = gl_FragCoord.xy / uRes.y;
+      vec2 p = uv * 1.6 + uPar + vec2(uTime * 0.004, 0.0);
+      vec2 w = vec2(fbm(p + 3.1), fbm(p + vec2(7.7, 1.3)));
+      float cool = smoothstep(0.35, 0.80, fbm(p + 1.8 * w));
+      float warm = smoothstep(0.50, 0.85, fbm(p * 0.7 + 2.2 * w.yx + 11.0));
+      vec3 voidC = uDark > 0.5 ? vec3(0.110) : vec3(0.965, 0.973, 0.988);
+      vec3 coolC = uDark > 0.5 ? vec3(0.294, 0.318, 0.345) : vec3(0.827, 0.855, 0.890);
+      vec3 warmC = uDark > 0.5 ? vec3(0.420, 0.353, 0.298) : vec3(0.953, 0.863, 0.776);
+      vec3 col = mix(voidC, coolC, cool * 0.38);
+      col = mix(col, warmC, warm * 0.22);
+      if (uDark > 0.5) { vec2 g = floor(gl_FragCoord.xy / 3.0); col += vec3(0.75) * step(0.9985, h21(g)) * (0.4 + 0.6 * h21(g + 5.0)); }
+      vec2 c = gl_FragCoord.xy / uRes - 0.5;
+      col *= 1.0 - dot(c, c) * (uDark > 0.5 ? 0.40 : 0.12);
+      gl_FragColor = vec4(col, 1.0);
+    }`,
+  depthTest: false, depthWrite: false,
+});
+if (WISPS) { const bg = new THREE.Mesh(bgGeo, bgMat); bg.frustumCulled = false; bg.renderOrder = -10; scene.add(bg); }
+
+// ---- ground light: each star lights the plane beneath it ----
+if (POOLS) {
+  const pq = quad.clone(); pq.instanceCount = N;
+  const pm = new THREE.ShaderMaterial({
+    uniforms: { ...common, uDark },
+    vertexShader: GLSL_COMMON + /* glsl */ `
+      varying vec2 vQ; varying vec3 vCol; varying float vGlow;
+      void main() {
+        int i = gl_InstanceID; float r; vec3 c = centerOf(i, r);
+        vec4 C = texelFetch(uColor, tc(i), 0);
+        vGlow = smoothstep(0.70, 1.0, C.w); float sup = smoothstep(0.975, 1.0, C.w);
+        float R = r * (2.0 + 3.0 * vGlow + 3.0 * sup);
+        vQ = position.xy; vCol = C.rgb;
+        gl_Position = projectionMatrix * viewMatrix * vec4(c.x + position.x * R, 0.05, c.z + position.y * R, 1.0);
+      }`,
+    fragmentShader: /* glsl */ `
+      uniform float uDark; varying vec2 vQ; varying vec3 vCol; varying float vGlow;
+      void main() {
+        float d2 = dot(vQ, vQ); if (d2 > 1.0) discard;
+        float w = exp(-d2 * 4.0) * (1.0 - d2);
+        if (uDark > 0.5) gl_FragColor = vec4(vCol, w * (0.16 + 0.55 * vGlow));
+        else gl_FragColor = vec4(mix(vec3(0.25, 0.27, 0.32), vCol, 0.35 + 0.65 * vGlow), w * (0.22 + 0.35 * vGlow));
+      }`,
+    transparent: true, depthWrite: false, depthTest: true,
+    blending: DARK ? THREE.AdditiveBlending : THREE.NormalBlending,
+  });
+  const pools = new THREE.Mesh(pq, pm); pools.frustumCulled = false; pools.renderOrder = 0; scene.add(pools);
+}
+
 // ---- ground ----
 const groundMat = new THREE.ShaderMaterial({
-  uniforms: { uTerr: { value: terrRT.texture }, uTB: { value: terrBounds }, uUseTerr: { value: TERR ? 1 : 0 }, uCenter: { value: new THREE.Vector2(cx, cz) }, uExt: { value: extent } },
+  uniforms: { uTerr: { value: terrRT.texture }, uTB: { value: terrBounds }, uUseTerr: { value: TERR ? 1 : 0 }, uCenter: { value: new THREE.Vector2(cx, cz) }, uExt: { value: extent }, uDark },
   vertexShader: /* glsl */ `varying vec3 vW; void main() { vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
   fragmentShader: /* glsl */ `
-    uniform sampler2D uTerr; uniform vec4 uTB; uniform int uUseTerr; uniform vec2 uCenter; uniform float uExt; varying vec3 vW;
+    uniform sampler2D uTerr; uniform vec4 uTB; uniform int uUseTerr; uniform vec2 uCenter; uniform float uExt; uniform float uDark; varying vec3 vW;
     float grid(vec2 p, float s) { vec2 g = abs(fract(p / s - 0.5) - 0.5) / fwidth(p / s); return 1.0 - min(min(g.x, g.y), 1.0); }
     void main() {
-      vec3 col = vec3(1.0);
       float distC = length(vW.xz - uCenter) / uExt;
       float fade = 1.0 - smoothstep(0.55, 1.1, distC);
       float camFade = 1.0 - smoothstep(0.0, uExt * 1.8, distance(cameraPosition, vW));
       float g = grid(vW.xz, 20.0) * 0.5 + grid(vW.xz, 100.0) * 0.5;
-      col -= vec3(0.06) * g * camFade;
+      float fill = 0.0, line = 0.0; vec3 tint = vec3(1.0);
       if (uUseTerr == 1) {
         vec2 uv = (vW.xz - uTB.xy) / uTB.zw; uv.y = 1.0 - uv.y;
         vec4 t = texture2D(uTerr, uv);
-        float dens = t.a; vec3 tint = t.rgb / max(dens, 1e-4);
-        float fill = smoothstep(0.05, 0.6, dens);
-        col = mix(col, mix(vec3(1.0), tint, 0.35), fill * 0.6);
-        float edge = abs(dens - 0.12); float line = 1.0 - smoothstep(0.0, fwidth(dens) * 1.5, edge);
-        col = mix(col, tint * 0.75, line * 0.5);
-        col *= 1.0 - 0.06 * smoothstep(0.8, 3.0, dens);
+        float dens = t.a; tint = t.rgb / max(dens, 1e-4);
+        fill = smoothstep(0.05, 0.6, dens);
+        line = 1.0 - smoothstep(0.0, fwidth(dens) * 1.5, abs(dens - 0.12));
       }
-      gl_FragColor = vec4(col, fade);
+      if (uDark > 0.5) {
+        // territories are pools of light with luminous contours; the grid is faint starlight
+        vec3 add = vec3(0.80, 0.84, 0.90) * g * 0.040 * camFade;
+        add += tint * fill * 0.060 + tint * line * 0.28;
+        gl_FragColor = vec4(add * fade, 1.0);
+      } else {
+        // tinted fills and contour lines over the pale void; the grid is faint ink
+        float a1 = 0.06 * g * camFade, a2 = fill * 0.20, a3 = line * 0.5;
+        vec3 c = vec3(0.12, 0.13, 0.15) * a1; float al = a1;
+        c = c * (1.0 - a2) + tint * a2; al = al * (1.0 - a2) + a2;
+        c = c * (1.0 - a3) + tint * 0.75 * a3; al = al * (1.0 - a3) + a3;
+        gl_FragColor = vec4(c / max(al, 1e-4), al * fade);
+      }
     }`,
   transparent: true, depthWrite: false,
+  blending: DARK ? THREE.AdditiveBlending : THREE.NormalBlending,
 });
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(extent * 3, extent * 3).rotateX(-Math.PI / 2), groundMat);
 ground.position.set(cx, 0, cz); ground.renderOrder = -1; scene.add(ground);
@@ -420,10 +538,12 @@ let frameCount = 0, lastHud = performance.now(), hudFrames = 0, lastT = performa
 const recent: number[] = [];
 
 function placeCamera(t: number) {
-  const th = ORBIT ? t * 0.25 : 0.6;
+  const th = ORBIT ? t * 0.25 : ANGLE;
   const d = extent * 0.85 * DIST;
-  camera.position.set(cx + Math.cos(th) * d, d * 0.55, cz + Math.sin(th) * d);
-  camera.lookAt(cx, 0, cz);
+  const lx = cx + LOOKX * extent, lz = cz + LOOKZ * extent;
+  camera.position.set(lx + Math.cos(th) * d, d * CAMH, lz + Math.sin(th) * d);
+  camera.lookAt(lx, 0, lz);
+  bgMat.uniforms.uPar.value.set(th * 0.05, camera.position.y / extent * 0.05);
 }
 function resize() {
   renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
@@ -431,6 +551,7 @@ function resize() {
   pixelWorld.value = (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))) / h;
   projScale.value = h / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
   info.canvas = `${renderer.domElement.width}x${renderer.domElement.height}`;
+  bgMat.uniforms.uRes.value.set(renderer.domElement.width, renderer.domElement.height);
 }
 addEventListener('resize', resize); resize();
 
@@ -498,4 +619,4 @@ const stats = (a: number[]) => { if (!a.length) return null; const s = a.slice()
   renderer.setPixelRatio(DPR); resize();
   (window as any).__last = r; console.log('[render-spike] benchSync', JSON.stringify(r)); return r;
 };
-(window as any).__snap = async (name = 'screenshot.png', t = 4) => { time.value = t; placeCamera(t); if (TERR) { renderer.setRenderTarget(terrRT); renderer.setClearColor(0, 0); renderer.clear(); renderer.render(terrScene, terrCam); renderer.setRenderTarget(null); } renderer.render(scene, camera); const src = renderer.domElement; const c2 = document.createElement('canvas'); c2.width = src.width; c2.height = src.height; const x = c2.getContext('2d')!; const g = x.createRadialGradient(c2.width / 2, c2.height * 0.45, 0, c2.width / 2, c2.height * 0.45, c2.width * 0.75); g.addColorStop(0, '#ffffff'); g.addColorStop(0.45, '#fbfbfc'); g.addColorStop(1, '#e9eaee'); x.fillStyle = g; x.fillRect(0, 0, c2.width, c2.height); x.drawImage(src, 0, 0); const url = c2.toDataURL('image/png'); const r = await fetch('/__save?name=' + encodeURIComponent(name), { method: 'POST', body: url }); return r.text(); };
+(window as any).__snap = async (name = 'screenshot.png', t = 4) => { time.value = t; placeCamera(t); if (TERR) { renderer.setRenderTarget(terrRT); renderer.setClearColor(0, 0); renderer.clear(); renderer.render(terrScene, terrCam); renderer.setRenderTarget(null); } renderer.render(scene, camera); const src = renderer.domElement; const c2 = document.createElement('canvas'); c2.width = src.width; c2.height = src.height; const x = c2.getContext('2d')!; x.fillStyle = DARK ? '#1C1C1C' : '#F6F8FC'; x.fillRect(0, 0, c2.width, c2.height); x.drawImage(src, 0, 0); const url = c2.toDataURL('image/png'); const r = await fetch('/__save?name=' + encodeURIComponent(name), { method: 'POST', body: url }); return r.text(); };
