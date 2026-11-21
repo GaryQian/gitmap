@@ -26,7 +26,9 @@ Each module's `index.ts` is its public surface. Round 0 left a stub there with t
 5. **Browser-safe by default.** Anything importing `node:*` goes in a `node.ts` entry or a test/script, never in a file the browser bundle reaches.
 6. **Never run `npm install`.** `node_modules` is shared. Every dependency you are likely to need is already installed (see `package.json`); if one is missing, request it.
 7. **Tests are light in this pass**: a handful per package, aimed at large regressions and at anything that would silently corrupt the map. No snapshot tests, no pixel tests, no assertions on tunable values or timings. Tests sit beside the code as `*.test.ts` and run in Node with Vitest.
-8. **Done means** `npm run check` passes (typecheck, lint, tests) and the package's own "done" check holds.
+8. **One checkout, many hands.** Packages of a round are built at the same time in this working tree, with no branches. Never run a git command that changes state (`add`, `commit`, `stash`, `checkout`, `restore`, `reset`, `clean`); the lead commits to `main` after each round. Other packages may be half-written while you work: their `index.ts` can still be a stub that throws, and `tsc` may report errors in their folders.
+9. **Done means** your scoped checks pass and the package's own "done" check holds: `npx vitest run <your folders>`, `npx eslint <your folders>`, and `npx tsc --noEmit` with no errors in your folders. The lead runs `npm run check` on the whole tree at integration.
+10. **Looking at the page.** A dev server for this checkout is already running at `http://localhost:5175` (do not stop it or start another on that port). `node scripts/shot.mjs <url> out/shots/<name>.png` saves a headless-Chromium screenshot you can open, and prints console errors. `out/` is gitignored.
 
 ## The data flow in one paragraph
 
