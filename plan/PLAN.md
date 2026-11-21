@@ -125,7 +125,7 @@ The folders actually used are finer-grained than this table, so that each work p
 
 **Stack:** Vite + React + TypeScript, deployed as a static single-page app with Vercel Functions under `/api`. Raw three.js (not react-three-fiber): React must not reconcile thousands of scene objects.
 
-**TypeScript first.** The git index reader, the per-language import scanners and the git pack walker start in TypeScript, each behind an interface that a WASM implementation can replace. The M0 measurements decide whether any of them moves to Rust. tree-sitter is WASM regardless. This avoids a Rust toolchain in the build unless the numbers demand it.
+**TypeScript first.** The git index reader, the per-language import scanners and the git pack walker start in TypeScript, each behind an interface that a WASM implementation can replace. M0 measured all three and found no case for Rust or WASM at S and M (§15). tree-sitter is WASM regardless. This avoids a Rust toolchain in the build unless the numbers demand it.
 
 ```
 gitmap/
@@ -190,7 +190,7 @@ One document, three provenance classes, each section independently versioned:
 interface RepoModel {
   schema: 1;
   meta: { id: string; name: string; headOid: string; indexChecksum: string;
-          parserVersion: string; parsedAt: number; structure: 'full' | 'imports-only'; stats: Stats };
+          parserVersion: string; parsedAt: number; structure: 'full' | 'provisional'; stats: Stats };
   strings: string[];                       // shared string table (paths, symbols, names)
   files:   Columns<{ path; lang; bytes; loc; oid; unit }>;
   units:   Columns<{ primaryFile; fileCount; loc; importancePct; district }>;   // 1 unit = 1 sphere
@@ -211,7 +211,7 @@ Rules:
 
 - **Unit** is the drawable sphere: one file, or a C/C++/Obj-C header+implementation pair. Its line count is the sum. The sidebar shows both files as tabs.
 - **Persistent IDs** (path-derived for files and units, minted for cities and districts) are what annotations and saved state reference. Dense integer indices are per-session and exist only for typed arrays.
-- **One model entity ↔ one drawn entity.** Unit ↔ sphere, edge ↔ line instance, district ↔ pill + ground territory, city ↔ pill + ground territory, POI ↔ beam, tour ↔ tour UI. Every generated entity carries `parent: NodeRef`.
+- **One model entity ↔ one drawn entity.** Unit ↔ sphere, edge ↔ line instance, district ↔ pill + ground territory, city ↔ pill + ground territory, POI ↔ beam, tour ↔ tour UI. **Points of interest and tour steps are parented to a file's sphere, never to a district or city**, so they survive any change of clustering. A city or district summary belongs to that cluster and is regenerated if its membership changes.
 - **Edge kinds:** `import`, `call`, `reference`, `inherit`, `bridge` (cross-language, with a `mechanism` such as `jni` or `protobuf`, §6.4.1).
 - **Layers** hold overlay data: `{ kind: 'scalar' | 'categorical' | 'sparse' | 'parametric', values, domain, colormap, status }`. Switching overlays never recomputes anything.
 - **File contents are not in the model.** The sidebar reads them on demand: from disk for a local repo, from the content pack for a demo (§12.1).
@@ -306,24 +306,27 @@ Opening files one by one is the limiting cost of the parse. Decided: stop openin
 - **Decompression becomes the limit** (about 80% of the pack path, roughly 150 MB/s per core with `fflate`). Unlike file opens, it is pure CPU and splits cleanly across workers by offset range.
 - All sampled blobs matched the working-tree files byte for byte, or after CRLF → LF conversion. Packed content is always LF, so offsets and line counts do not vary by platform.
 - Read size barely matters when warm: 1 MB chunks cut flutter to 50 reads with the same I/O time. Offset-sorted versus path-sorted order made no difference when warm.
-- **Not measured:** the browser read paths (per-file File System Access calls, and `FileReaderSync` on pack slices), a cold OS cache, and repos with many loose objects. All three test repos were fully packed.
+- **Not measured:** the browser read paths (per-file File System Access calls, and `FileReaderSync` on pack slices), a cold OS cache, and repos with many loose objects. All three test repos were fresh, fully packed clones with short delta chains. A long-used repo with loose objects and several packs must be benchmarked before these numbers are relied on.
 
 **Strategy, in order of effect**
 
-1. **Pack first.** Look up each index entry's blob OID in the pack index, sort by pack offset, and hand contiguous offset ranges to the parse workers. Each worker reads its range in large chunks and inflates and delta-resolves into the scanners. Both passes run on the inflated bytes.
-2. **Fall back per file to the working tree** when a blob is not in a pack: loose objects, partial clones, Git LFS pointers (treated as binary assets), and plain folders. Submodule entries are skipped.
-3. **Read nothing that is already known.** Parse facts are cached by blob OID, so a return visit reads only blobs whose OID changed. Non-code files are sized from the index and never opened.
-4. **Touch less memory.** The browser offers no memory-mapped files and no control over the OS page cache, so the equivalent of reducing page faults is to read fewer bytes (the pack is 5–10× smaller than the raw files), read them in offset order so OS read-ahead works, inflate into a reused per-worker buffer instead of allocating per file, scan bytes directly without first decoding to a string, and transfer buffers between threads instead of copying.
-5. **For the working-tree fallback path:** order reads by directory, cache directory handles, keep several reads in flight per worker, and enumerate a directory once when most of its files are wanted.
-6. **If inflate still dominates,** it is now the first candidate for WASM, ahead of the scanners.
+1. **Pack first, across every pack.** A repo that has been fetched into has several packs, not one. Look up each index entry's blob OID in every pack index, sort by pack and offset, and hand contiguous ranges to the pool. Each worker reads its range in large chunks and inflates and delta-resolves into the scanners. A delta whose base lies outside the range, in another pack or among the loose objects, is resolved through the shared object reader: ranges are a way to split the work, not a promise that a range is self-contained. Both passes run on the inflated bytes.
+2. **Loose objects next, read as git objects.** Recent commits and staged files live as individual files under `.git/objects/`. They are read and inflated directly, so the content is exactly the blob the index names. This costs one file open each, but only for recently changed files.
+3. **The working tree is the last resort and is never trusted blindly.** It is used only when the blob exists nowhere in `.git` (partial clones) or there is no `.git` at all (plain folders). A file on disk can differ from the committed blob through unstaged edits or CRLF line endings, so its content is hashed the way git hashes a blob. Parse results are cached under the index OID only if that hash matches; otherwise they are cached under the content's own hash and the file is counted as changed.
+4. **Special index entries.** Git LFS pointers are treated as binary assets. Submodule entries are skipped. A path in merge conflict appears once, using its "ours" stage.
+5. **If a pack disappears mid-read** because git repacked or fetched in the background, the reader reloads the pack list and retries the task once. A second failure falls back to step 3 for the affected files.
+6. **Read nothing that is already known.** Parse facts are cached by blob OID, so a return visit reads only blobs whose OID changed. Non-code files are sized from the index and never opened.
+7. **Touch less memory.** The browser offers no memory-mapped files and no control over the OS page cache, so the equivalent of reducing page faults is to read fewer bytes (the pack is 5–10× smaller than the raw files), read them in offset order so OS read-ahead works, inflate into a reused per-worker buffer instead of allocating per file, scan bytes directly without first decoding to a string, and transfer buffers between threads instead of copying.
+8. **For the working-tree fallback path:** order reads by directory, cache directory handles, keep several reads in flight per worker, and enumerate a directory once when most of its files are wanted.
+9. **If inflate still dominates,** it is now the first candidate for WASM, ahead of the scanners.
 
 **What the map shows.** The pack holds what is staged or committed, so the reveal shows that state. A file edited on disk but not yet `git add`ed first appears in its last staged form.
 
-**Background working-tree check.** After the reveal, a low-priority pass compares each tracked file's size and modified time on disk with the values recorded in `.git/index`. This is a metadata call per file with no content read, and it never delays the reveal. Files that differ are re-read from disk and re-parsed off-screen; if any did, the top bar offers "N files changed · Update" (§6.8). Nothing moves until that is clicked.
+**Background working-tree check.** After the reveal, a low-priority pass compares each tracked file's size and modified time on disk with the values recorded in `.git/index`. A browser has no cheap stat call, so this is a file-handle lookup per file with no content read; it never delays the reveal. **A mismatch is not yet a change:** formatters, builds and checkouts touch timestamps without changing content. A mismatched file is read and hashed the way git hashes a blob (trying CRLF → LF as well), and only if that hash differs from the index OID is it re-parsed off-screen and counted. If any files did change, the top bar offers "N files changed · Update" (§6.8). Nothing moves until that is clicked.
 
 #### 6.3.2 Disk reads after the reveal
 
-The parse is not the only reader. Everything below runs after the reveal and must not compete with it.
+The parse is not the only reader. Everything below sits outside the reveal gate and must never delay it.
 
 | Consumer | What it reads | From | How the cost is controlled |
 |---|---|---|---|
@@ -338,7 +341,7 @@ The parse is not the only reader. Everything below runs after the reveal and mus
 
 Rules that follow:
 
-- **One pack reader, shared.** The pack index is loaded once into a `SharedArrayBuffer` and used by the parse workers and the history worker alike. For tensorflow the index covers 2.3 million objects; one copy per worker would cost tens of MB each.
+- **One pack reader, shared.** The pack index is loaded once into a `SharedArrayBuffer` and used by every pool worker, for parse tasks and history tasks alike. For tensorflow the index covers 2.3 million objects; one copy per worker would cost tens of MB each.
 - **The reveal has priority.** Before the map appears, history only ever gets workers the parse has no task for, and the working-tree check waits in the lowest lane (§3.1). Neither lengthens the wait.
 - **Layers are saved as they complete**, so a closed tab does not repeat the history walk.
 
@@ -398,7 +401,7 @@ History runs as chunked tasks on the shared pool, using idle workers before the 
 - Streams progressively; applies `.mailmap`. Bounded by `history.maxCommits` (50,000) and `history.timeBudgetSeconds` (20), whichever comes first, with a "Load full history" action for the rest.
 - **Incremental on return.** The snapshot stores the head commit the walk reached. A later visit walks only commits newer than that and merges them into the saved per-file facts.
 
-**Measured** (raw output of the fork's git spike; Node, one thread, full history, 64 KB pages with a 32 MB page cache):
+**Measured** (raw output of the first, untuned run of the git spike; Node, one thread, full history, 64 KB pages with a 32 MB page cache). After tuning, [M0-RESULTS.md](M0-RESULTS.md) reports 2.5 s, 8.8 s and 52 s for the same three repos:
 
 | Repo | Commits | Time | Pack reads | MB read | Time in I/O | Peak memory | At 20,000 commits |
 |---|---|---|---|---|---|---|---|
@@ -407,7 +410,7 @@ History runs as chunked tasks on the shared pool, using idle workers before the 
 | tensorflow | 204,106 | 71.2 s | 69,444 | 4,340 | 3.5 s | 928 MB | 6.5 s, 50% of current files seen |
 
 - **History is CPU-bound in Node, not disk-bound**: I/O is 2–5% of the time; inflating and diffing trees is the rest.
-- **The read count is the browser risk.** Tensorflow re-read 4.3 GB from a 1.5 GB pack because the small page cache thrashed: 69,444 reads. In a browser each read is a cross-process call of unknown cost. The spike's follow-up runs settled on 256 KB pages (`history.pageBytes`) and a two-generation object cache of 16–32 MB (`history.objectCacheBytes`); the walker also reads the commit-graph file when present to skip commit objects entirely. Per-read cost in a browser is still unmeasured.
+- **The read count is the browser risk.** Tensorflow re-read 4.3 GB from a 1.5 GB pack because the small page cache thrashed: 69,444 reads. In a browser each read is a cross-process call of unknown cost. The spike's follow-up runs settled on 256 KB pages (`history.pageBytes`) and a two-generation object cache of 16–32 MB (`history.objectCacheBytes`); the walker also reads the commit-graph file when present. That file holds each commit's parents, tree and date but not its author, so it lets Recency skip commit objects; Ownership and Knowledge risk still read them. Per-read cost in a browser is still unmeasured.
 - **The default cap is 50,000 commits or 20 seconds.** That covers the whole history at S and M. At L it can leave older files without history; they show as "older than the window" in Recency and as unknown in Ownership until "Load full history" is used.
 - **Memory, not disk, limits full-history walks at L.** The spike collected two growing tables, authors per file and co-change pairs. The plan no longer collects co-change, so the memory figures above overstate what the product will use; by how much is not measured.
 - Unsupported cases degrade to "no history layers" with a notice: plain folders, shallow clones (partial), worktrees whose `.git` points outside the picked folder.
@@ -471,7 +474,8 @@ The slow pass is inside the gate because in Java, Kotlin, C#, Go and Swift, file
 
 **After the reveal the map only reorganises when asked.**
 
-- If the 30-second escape hatch fired, the model is marked `structure: 'imports-only'` and the slow pass continues. The map stays frozen: positions, sizes, glow and membership do not change. New call edges appear as lines only. When the slow pass finishes, the top bar offers **"Refined structure ready · Apply"**, which re-computes importance and clustering and performs one animated re-layout.
+- If the 30-second escape hatch fired, the model is marked `structure: 'provisional'` and the slow pass continues. The provisional clustering was built from imports plus whichever call edges had been found by then, so it can differ between runs and will usually change once the connection pass completes. **That is accepted:** the first complete pass is what fixes the structure. Meanwhile the map stays frozen: positions, sizes, glow and membership do not change, and new call edges appear as lines only. When the slow pass finishes, the top bar offers **"Refined structure ready · Apply"**, which re-computes importance and clustering and performs one animated re-layout. City and district identities, names and home positions are simply recomputed; nothing depends on them yet, because AI has not run (§11.1).
+- **After the first complete pass, clustering is stable.** "N files changed · Update" places changed and new files into the existing city and district they connect to most strongly. It does not re-run Louvain over the whole repo.
 - Returning to a repo that has changed: the saved map loads untouched and the top bar offers **"N files changed · Update"**, which re-parses the changed files and applies them in one animated step.
 - The same action appears on a first visit when the background working-tree check (§6.3.1) finds files edited on disk but not staged.
 - Annotations (POI beams, summaries, tour) and overlay layers arrive live; they attach to existing entities and move nothing.
@@ -628,7 +632,7 @@ A sphere is drawn as a self-lit ball of gas. The first version read as a glossy 
 
 - **Stellar wind.** Small motes leave each star's surface, drift outward and upward a few radii, and fade. Each particle is bound to a host sphere chosen in proportion to importance, so important files visibly shed more energy and the smallest files shed almost none. A particle's position is `host position + f(seed, time)`; it follows its host through the same GPU hierarchy.
 - **Void dust.** A sparse field of very faint, slow motes through the whole volume, to give depth and parallax when the camera moves.
-- One pool, fixed size (`visual.particles.ambient`, default 4,000 at M). Particles fade with distance, so the visible density stays even as the camera zooms. This pool is the first thing reduced under load.
+- One pool, fixed size (`visual.particles.ambient`, default 4,000 at M). Particles fade with distance, so the visible density stays even as the camera zooms. It costs almost nothing to draw, so it is not part of the step-down under load (§8.5); it can be switched off in Settings.
 
 **Interaction particles** (a second small pool; each burst is a spawn time, an origin and a seed)
 
@@ -693,7 +697,7 @@ Screen layout:
 
 ## 10. Overlays
 
-All overlays are layers in the model, computed on the compute pool. Processing starts on idle workers before the reveal, the selected overlay is promoted above remaining parse work, and an overlay can be viewed while still partial (§3.1). The active overlay is shown in the top bar, and importance glow fades while one is active.
+All overlays are layers in the model. The history-based ones are computed on the compute pool; Tests and Reach take milliseconds in the analysis worker. History processing starts on idle workers before the reveal, the selected overlay is promoted above remaining parse work, and an overlay can be viewed while still partial (§3.1). The active overlay is shown in the top bar, and importance glow fades while one is active.
 
 | Overlay | Colour | Source | Notes |
 |---|---|---|---|
@@ -719,13 +723,13 @@ First release: Recency, Ownership, Reach, Knowledge risk, Tests. Removed from th
 - **Workflow, not an open-ended agent.** A fixed map-reduce pipeline with structured outputs (`pois[].label` ≤ 3 words, `summary` ≈ 30 words, tour of 3–6 steps of 10–30 words, every item citing `NodeRef`s). The server drops any item whose refs do not exist and retries once on length violations. Refusal stop reasons are handled explicitly.
 - **Later option:** a bounded tool-using loop for the detail buttons, with tools (`read_file`, `list_district`, `neighbors`) that execute in the browser, since only the browser has the repo.
 
-Pipeline, started at the reveal once consent is given:
+Pipeline. **It starts only when the parse has finished** (both passes complete) and consent has been given. If the escape hatch fired, AI waits for the slow pass and never runs on a provisional structure. It does not wait for Apply: its output attaches to files, so it is valid whichever clustering is on screen.
 
 1. **Map:** one bulk-model call per city (parallel) → a short neutral summary of what that city contains.
 2. **Reduce, two calls in parallel:** POIs and Tour, both given the repo digest plus the city summaries. The shared digest prefix is prompt-cached.
 3. **On demand:** POI detail buttons ("Role in the system", "Who uses this", "Key entry points", "Walk me through it") send a focused context: that file's skeleton or content plus its neighbours' signatures.
 
-- **POI count:** about one per city plus a few repo-wide: roughly 5 at 50 files, up to about 15 at 10k.
+- **POI count:** about one per city plus a few repo-wide: roughly 7 at 50 files (four cities plus three repo-wide), up to 15 at 10k.
 - Results are stored as annotations keyed by a hash of the digest, so a return visit regenerates nothing.
 
 ### 11.2 Context design and bias control
@@ -745,17 +749,23 @@ Bias mitigations:
 - **Not only hubs.** Per district: top files by importance, one most *distinctive*, and one seeded-random representative.
 - **No order cues.** Candidate lists are shuffled with a fixed seed.
 - **Exclusions:** vendored, generated, fixtures, lockfiles. Tests appear only as structure.
+- **Secrets never leave the machine.** Files matching `ai.excludePaths` (`.env*`, `*.pem`, `*.key`, `id_rsa*`, `*.p12`, `*.pfx`, `.npmrc`, `.netrc`, `*.tfvars`, `credentials*`, `secrets.*`) are never read for AI. Every excerpt is also scanned for key-shaped content (private-key headers, common token prefixes, long high-entropy strings), and the whole file is dropped on a hit. This covers the digest and the detail buttons alike; a detail button on a withheld file says so instead of calling the model.
 - **Evidence required.** Each POI and tour step cites node refs and one structural fact.
 - **Audience instruction.** Reader knows code but not this repo; describe roles and flow, avoid repo-internal jargon.
 
 ### 11.3 Shapes
 
 ```ts
-interface Poi  { id; parent: NodeRef; label: string /* ≤3 words */; summary: string /* ~30 words */;
+interface Poi  { id; parent: UnitRef /* a file's sphere; never a district or city */; label: string /* ≤3 words */; summary: string /* ~30 words */;
                  kind: 'entry' | 'core' | 'boundary' | 'data' | 'risk'; evidence: string;
                  details: Record<string, { status: 'idle' | 'loading' | 'ready'; markdown?: string }> }
-interface Tour { id; steps: { target: NodeRef; text: string /* 10–30 words */; highlights: NodeRef[] }[] /* 3–6 */ }
+interface Tour { id; steps: { parent: UnitRef; frame: 'file' | 'district' | 'city'; text: string /* 10–30 words */; highlights: UnitRef[] }[] /* 3–6 */ }
 ```
+
+- `UnitRef` is the `u:` form of `NodeRef`: one sphere.
+- **Points of interest and tour steps always stand on a file.** One about a whole area is attached to the file that best represents it, and its text says what area it speaks for.
+- A tour step also carries a `frame`. The camera frames that file alone, or the district or city the file belongs to at that moment, looked up when the step is shown. A step about a city therefore still works after the clustering changes.
+- The server rejects any point of interest or tour step whose parent is not a file.
 
 ### 11.4 Operational concerns
 
@@ -874,6 +884,7 @@ One file, typed and validated at build, imported by client and server. Secrets a
                   "tests": { "patterns": ["**/tests/**", "**/__tests__/**", "**/*_test.*", "**/*.test.*", "**/*.spec.*", "**/*Test.java", "**/test_*.py"] } },
   "ai":         { "enabled": true, "provider": "anthropic",
                   "models": { "synthesis": "claude-opus-5-5", "bulk": "claude-haiku-5-5" },
+                  "excludePaths": [".env*", "*.pem", "*.key", "id_rsa*", "*.p12", "*.pfx", ".npmrc", ".netrc", "*.tfvars", "credentials*", "secrets.*"], "scanForSecrets": true,
                   "digestTokens": 60000, "budgetSplit": { "structure": 0.35, "skeletons": 0.35, "docs": 0.30 },
                   "pois": { "perCity": 1, "repoWide": 3, "max": 15 }, "tour": { "minSteps": 3, "maxSteps": 6 } }
 }
@@ -883,7 +894,7 @@ One file, typed and validated at build, imported by client and server. Secrets a
 
 ## 14. Performance targets and how each is met
 
-Targets are goals to validate in M0, not measurements.
+Targets are goals. M0 measured several of them on one desktop machine (§15); none has been checked in a browser on modest hardware.
 
 | Target | Mechanism |
 |---|---|
@@ -893,7 +904,7 @@ Targets are goals to validate in M0, not measurements.
 | 60 fps at S and M; usable at L with reduced detail | Instanced impostors; GPU-composed hierarchy; edge level-of-detail and budget; adaptive pixel ratio |
 | Dragging a city costs O(1) uploads | One texel in the city transform texture |
 | Size slider and overlay switch respond in one frame | One uniform; one attribute upload |
-| Idle CPU near zero | All sims asleep after settle; territory texture re-rendered only while hot |
+| Idle compute near zero | All sims asleep and all workers idle after settle; territory texture re-rendered only while hot. The renderer still draws ambient motion, at a reduced rate (§8.5). |
 | Return visit interactive < 1 s (M) | OPFS snapshot with cached layout |
 | Update after a pull proportional to the diff | Per-file cache keyed by blob OID |
 
@@ -916,11 +927,11 @@ No part needs Rust or WASM at S and M. Still unmeasured: the browser read paths 
 
 The build order, work packages and test policy for M1–M6 are in [IMPLEMENTATION.md](IMPLEMENTATION.md). The summaries below say what each milestone delivers.
 
-**M1 — Skeleton.** Model + patches + store; theme tokens for both modes and the wisp background; landing page and folder validation; manifest; fast pass for TS/JS, Python, C/C++; waiting screen; instanced spheres with size blend and glow; city-tier sim; reveal.
+**M1 — Skeleton.** Model + patches + store; theme tokens for both modes and the wisp background; landing page and folder validation; manifest; fast pass for TS/JS, Python, C/C++; waiting screen; importance; instanced spheres sized and glowing by it; city-tier sim; reveal.
 
-**M2 — Hierarchy and physics. First showable version.** graphology Louvain with dendrogram levels and the city/district counts; importance; slow pass for the three languages; district and file tiers; Voronoi territories; pre-reveal settle; pills and dragging; camera controls; hover, selection, marquee; jiggle; ribbons and edge level-of-detail; legend with type filter and minimum-lines slider. No history, AI or saved repos yet.
+**M2 — Hierarchy and physics. First showable version.** graphology Louvain with dendrogram levels and the city/district counts; slow pass for the three languages; symbol linking and header pairing; district and file tiers; Voronoi territories; pre-reveal settle; pills and dragging; camera controls; hover, selection, marquee; jiggle; ribbons and edge level-of-detail; legend with type filter and minimum-lines slider. No history, AI or saved repos yet.
 
-**M3 — Parser breadth and persistence.** Remaining languages, including Scala, PHP, Ruby, Vue/Svelte/Astro components, CSS/SCSS and HTML; JNI and Protobuf bridges; header pairing; OPFS snapshots; "N files changed · Update"; export/import; the `ContentSource` interface; the sidebar reader; the demo build script and demo mode with two repos, including a check that range requests work on the host.
+**M3 — Parser breadth and persistence.** Remaining languages, including Scala, PHP, Ruby, Vue/Svelte/Astro components, CSS/SCSS and HTML; JNI and Protobuf bridges; OPFS snapshots; "N files changed · Update"; export/import; the `ContentSource` interface; the sidebar reader; the demo build script and demo mode with two repos, including a check that range requests work on the host.
 
 **M4 — History and overlays.** Pack walker as chunked pool tasks; priority lanes and overlay promotion (§3.1); partial-overlay display; Recency, Ownership, Reach, Knowledge risk, Tests; search.
 
@@ -944,7 +955,7 @@ The build order, work packages and test policy for M1–M6 are in [IMPLEMENTATIO
 | Framework | Vite single-page app + Vercel Functions. |
 | Implementation language | TypeScript first behind swappable interfaces; M0 decides on any WASM. |
 | Input | Git repos; plain folders accepted without history overlays. Untracked files off by default. |
-| Reading files | Pack first: contents come from the git packfile, with per-file fallback to the working tree. The reveal shows the staged/committed state; on-disk edits are found by a background check and applied through "N files changed · Update" (§6.3.1). |
+| Reading files | Pack first across every pack, then loose objects read as git objects. The working tree is a last resort and is hash-checked before its results are cached. The reveal shows the staged/committed state; on-disk edits are found by a background check that re-hashes on a mismatch, and applied through "N files changed · Update" (§6.3.1). |
 | Call-edge accuracy | Name-based with stored confidence; architecture-grade, not compiler-exact. |
 | Languages | The original 13 plus Scala, PHP, Ruby, Vue/Svelte/Astro components, CSS/SCSS and HTML. Schema languages, build files, shell and others are not parsed. |
 | Cross-language boundaries | High-confidence only: JNI in both directions and Protobuf stubs matched by name. Weaker mechanisms deferred (§6.4.1). |
@@ -967,15 +978,16 @@ The build order, work packages and test policy for M1–M6 are in [IMPLEMENTATIO
 | Legend | Minimum-lines slider; hides without changing layout; glowing files exempt. |
 | Overlays, first release | Recency, Ownership (commit share), Reach, Knowledge risk, Tests. Hotspots, Cycles and Hidden coupling removed. |
 | Compute scheduling | One shared pool with priority lanes: interactive, selected overlay, parse, other overlays, housekeeping. Idle workers always take lower-lane work; parse keeps a one-worker floor (§3.1). |
-| AI | Ask once per repo, then automatic. Opus 5.5 for synthesis, Haiku 5.5 for bulk. 35/35/30 context split. About one POI per city plus a few. Rate limits only. |
+| AI | Ask once per repo, then automatic, starting only when the parse has finished. Points of interest and tour steps attach to a file, never to a district or city. Secret files and key-shaped content are never sent. Opus 5.5 for synthesis, Haiku 5.5 for bulk. 35/35/30 context split. About one POI per city plus a few. Rate limits only. |
+| Clustering stability | The provisional clustering shown when the escape hatch fires may change once the connection pass completes; that is accepted. After the first complete pass it is stable: Update places changed files into existing cities. |
 | Storage | Local to the browser; no accounts; share by exported file. |
 | Demo | M3, two permissively licensed repos (~200 and ~5,000 files). Each ships a snapshot plus a zip of the actual files, read one entry at a time; no git history is included. Recency, Ownership and Knowledge risk still work from precomputed per-file values, with contributor emails stripped (§12.1). |
 
 ### Risks
 
 - **Pack reading in the browser is unmeasured.** The 5–10× gain is from Node. If `FileReaderSync` slice reads carry a high per-call cost, larger chunks are the lever; if the gain disappears, the working-tree path remains.
-- **The wait before the reveal.** If the slow pass regularly exceeds 30 s at M, most users see the imports-only structure first and have to press Apply. The spike measured 2.3–12.7 s on an 8-core desktop and projects about 21 s for a Dart-heavy 10k-file repo on a 4-core laptop, so slower machines are close to the limit. The levers are the time cap and the per-language cost of tree-sitter.
-- **Imports-only structure** is weak for Java, Kotlin, C#, Go and Swift, which is exactly when the escape hatch matters most. The map is labelled as provisional in that state.
+- **The wait before the reveal.** If the slow pass regularly exceeds 30 s at M, most users see a provisional structure first and have to press Apply. The spike measured 2.3–12.7 s on an 8-core desktop and projects about 21 s for a Dart-heavy 10k-file repo on a 4-core laptop, so slower machines are close to the limit. The levers are the time cap and the per-language cost of tree-sitter.
+- **Provisional structure** is weak for Java, Kotlin, C#, Go and Swift, which is exactly when the escape hatch matters most. The map is labelled as provisional in that state.
 - **Git history is proven in Node, not yet in a browser.** The walker's output matches `git log` on four repos, but it has not run end to end in a browser on a disk-backed pack, where each read is a cross-process call. If that cost is high, the levers are page size and the commit cap.
 - **Symbol linking accuracy** varies by language (weakest: C#, Swift, macro-heavy C++). Confidence is stored per edge so weak links are discounted.
 - **Library dependence for Louvain.** The dendrogram's per-level format is undocumented; if it cannot give nested levels cleanly, districts fall back to per-city runs, and a port is the last resort.
@@ -1049,7 +1061,7 @@ Shape: fully rounded pills for single-line elements, 20 px radius for multi-line
 
 Material: the void colour (dark) or white (light) at 55–70% opacity. Text on any pill must reach 4.5:1 contrast against the worst-case backdrop, which sets the minimum opacity.
 
-- **Backdrop blur is rationed.** Blurring behind an element over a canvas that redraws every frame is paid per element per frame. Only the fixed chrome (about ten elements) gets `backdrop-filter`, at a small radius. In-scene pills for cities, districts and points of interest (up to 150) use a flat translucent fill. Blur is the first thing dropped under load.
+- **Backdrop blur is rationed.** Blurring behind an element over a canvas that redraws every frame is paid per element per frame. Only the fixed chrome (about ten elements) gets `backdrop-filter`, at a small radius. In-scene pills for cities, districts and points of interest (up to 150) use a flat translucent fill. Blur is dropped under load together with the steps in §8.5.
 
 What was called the "top bar" elsewhere in this plan is a top row of separate floating pills:
 

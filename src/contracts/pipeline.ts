@@ -17,6 +17,8 @@ export type RepoSource =
   | { kind: 'demo'; name: string; baseUrl: string }
   | { kind: 'synthetic'; files: number; seed?: number };
 
+export interface AttachOptions { theme?: 'dark' | 'light'; particles?: boolean; reducedMotion?: boolean }
+
 export type Stage =
   | 'idle' | 'manifest' | 'reading' | 'structure' | 'layout' | 'revealed' | 'failed';
 
@@ -60,8 +62,11 @@ export interface Session {
   /** Null when file contents are unavailable (an imported map with no folder). */
   readonly content: ContentSource | null;
   readonly stage: StageInfo;
-  /** Create the renderer on a canvas. May be called before or after the reveal. */
-  attachCanvas(canvas: HTMLCanvasElement): RenderApi;
+  /**
+   * Create the renderer on a canvas. May be called before or after the reveal. `opts` carries the
+   * viewer's saved preferences; anything omitted falls back to config.settings.
+   */
+  attachCanvas(canvas: HTMLCanvasElement, opts?: AttachOptions): RenderApi;
   /** Begin loading or parsing. Resolves at the reveal; rejects on a fatal error. */
   start(): Promise<void>;
   on<E extends keyof PipelineEvents>(evt: E, fn: (e: PipelineEvents[E]) => void): () => void;

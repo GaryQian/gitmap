@@ -160,6 +160,8 @@ export interface RepoMeta {
   history?: { reachedOid: string | null; commitsWalked: number; complete: boolean };
   /** Present on demo snapshots. */
   demo?: { sourceUrl: string; commit: string; license: string };
+  /** Display name and fallback colour of each language on the map, by LangId (from the plug-ins). */
+  languages?: Record<string, { name: string; color: string }>;
   /** Hash of the AI digest the stored annotations were generated from. */
   digestHash?: string;
 }

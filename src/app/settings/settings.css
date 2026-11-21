@@ -1,0 +1,10 @@
+.gm-settings { position: relative; display: inline-flex; }
+
+/* Anchored beneath the gear, right edges aligned. */
+.gm-settings-card {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 248px;
+  z-index: 1;
+}

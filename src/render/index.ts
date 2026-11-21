@@ -1,13 +1,20 @@
 // Public surface of src/render. Package 1G owns core/, spheres/ and background/.
+// How features plug in (scene modules) is described in ./README.md.
 import type { Config, ThemeMode } from '../config';
 import type { BackgroundApi, RenderApi, RenderInit } from '../contracts/render';
+import { createStandaloneBackground } from './background/standalone';
+import { createSceneRenderer } from './core/renderer';
 
-/** The three.js scene on a canvas. Imperative; no React inside. */
-export function createRenderer(_init: RenderInit): RenderApi {
-  throw new Error('not implemented: createRenderer (package 1G)');
+export type {
+  BatchInfo, FrameState, RevealInfo, SceneContext, SceneEvents, SceneModule, SceneModuleFactory, SharedUniforms, ViewState,
+} from './core/types';
+
+/** The three.js scene on a canvas. Imperative; no React inside. Throws when WebGL2 is unavailable. */
+export function createRenderer(init: RenderInit): RenderApi {
+  return createSceneRenderer(init);
 }
 
 /** The wisp background alone on a small canvas (landing page, waiting screen). */
-export function createBackground(_canvas: HTMLCanvasElement, _opts: { config: Config; theme: ThemeMode; reducedMotion?: boolean }): BackgroundApi {
-  throw new Error('not implemented: createBackground (package 1G)');
+export function createBackground(canvas: HTMLCanvasElement, opts: { config: Config; theme: ThemeMode; reducedMotion?: boolean }): BackgroundApi {
+  return createStandaloneBackground(canvas, opts);
 }

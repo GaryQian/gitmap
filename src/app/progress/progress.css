@@ -1,0 +1,13 @@
+/* One segment per subsystem, divided by hairlines; the overall line runs along the lower edge. */
+.gm-progress { gap: 0; }
+.gm-progress-part { display: inline-flex; align-items: baseline; gap: 7px; line-height: 16px; }
+.gm-progress-part + .gm-progress-part {
+  margin-left: 12px;
+  padding-left: 12px;
+  border-left: 1px solid var(--gm-hairline);
+}
+
+.gm-info-pill { max-width: min(520px, 60vw); }
+.gm-info-text { overflow: hidden; text-overflow: ellipsis; }
+.gm-info-close { color: var(--gm-text-dim); padding-left: 10px; }
+.gm-info-close:hover { color: var(--gm-text); }

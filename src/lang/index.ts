@@ -31,13 +31,22 @@ export function pluginForPath(path: string): LanguagePlugin | undefined {
   return byName.get(basename(path)) ?? byExt.get(extname(path));
 }
 
-/** True when some plug-in wants this file's text kept as a manifest (LanguagePlugin.manifests). */
+const manifestExact = new Set<string>();
+const manifestPatterns: RegExp[] = [];
+for (const p of plugins) {
+  for (const m of p.manifests ?? []) {
+    if (!m.includes('*')) manifestExact.add(m);
+    else manifestPatterns.push(new RegExp('^' + m.split('*').map((s) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*') + '$'));
+  }
+}
+
+/**
+ * True when some plug-in wants this file's text kept as a manifest (LanguagePlugin.manifests).
+ * Entries are basenames; `*` matches any run of characters ('*.csproj', 'tsconfig*.json').
+ */
 export function isManifestFile(path: string): boolean {
   const base = basename(path);
-  for (const p of plugins) {
-    for (const m of p.manifests ?? []) {
-      if (m === base || (m.startsWith('*.') && base.endsWith(m.slice(1)))) return true;
-    }
-  }
+  if (manifestExact.has(base)) return true;
+  for (const rx of manifestPatterns) if (rx.test(base)) return true;
   return false;
 }

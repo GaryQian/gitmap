@@ -64,7 +64,7 @@ export interface ComputePool {
    * 2 = also park the selected-overlay lane. Running tasks finish; the interactive lane always runs.
    */
   setParkLevel(level: 0 | 1 | 2): void;
-  /** Reject and drop queued tasks, optionally only one group's. Running tasks finish and are ignored. */
+  /** Reject queued and running tasks with `cancelled`, optionally only one group's. A running task still occupies its worker until it ends; its result is dropped. */
   cancel(group?: string): void;
   stats(): PoolStats;
   dispose(): void;

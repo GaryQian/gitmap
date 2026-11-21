@@ -1,27 +1,28 @@
 // Public surface of src/git (browser-safe). Package 1C owns this folder. Node-only code lives in ./node.ts.
-import type { GitFs, GitRepo, IndexEntry, RepoAccess, RepoLocator } from '../contracts/git';
-
-/** Parse .git/index (v2–v4) into tracked entries. Throws on anything unsupported. */
-export function parseGitIndex(_buf: Uint8Array): IndexEntry[] {
-  throw new Error('not implemented: parseGitIndex (package 1C)');
-}
-
-export interface GitRepoOptions {
-  /** Page size for pack reads. Default config.history.pageBytes. */
-  pageBytes?: number;
-  /** Object cache budget in bytes. Default config.history.cacheBytes. */
-  cacheBytes?: number;
-}
-
-/** A parsed view over a .git directory. */
-export function openGitRepo(_fs: GitFs, _opts?: GitRepoOptions): GitRepo {
-  throw new Error('not implemented: openGitRepo (package 1C)');
-}
-
-/**
- * Open the repo a locator points at, from a browser worker ('fsa', 'files') or anywhere ('memory').
- * For 'node' locators use openNodeRepoAccess from ./node. `git` is null when there is no .git directory.
- */
-export async function openRepoAccess(_locator: RepoLocator): Promise<RepoAccess> {
-  throw new Error('not implemented: openRepoAccess (package 1C)');
-}
+//
+//   openRepoAccess(locator)  → RepoAccess { name, tree, git }      (access.ts)
+//   openGitRepo(access.git)  → GitRepository: head, index, objects (repo.ts)
+//   parseGitIndex(bytes)     → IndexEntry[]                         (gitIndex.ts)
+//   parseCommit / parseTree / treeEntries / parseTag               (objects.ts)
+//   ObjectDb, PackIndex, applyDelta                                (odb.ts)
+//   hex, text and SHA-1 helpers                                    (bytes.ts)
+export { parseGitIndex, UnsupportedIndexError, type UnsupportedIndexReason } from './gitIndex';
+export {
+  openGitRepo, parseGitConfig, normalizeRemoteUrl,
+  type GitRepoOptions, type GitRepository, type GitConfigEntry,
+} from './repo';
+export {
+  openRepoAccess, BrowserGitFs, FsaWorkingTree, MapWorkingTree,
+  type OpenRepoOptions,
+} from './access';
+export {
+  ObjectDb, PackIndex, applyDelta, typeName, T_COMMIT, T_TREE, T_BLOB, T_TAG,
+  type RawObject, type ObjectDbOptions, type ObjectDbStats,
+} from './odb';
+export {
+  parseCommit, parseTag, parseTree, treeEntries,
+  MODE_TREE, MODE_FILE, MODE_EXEC, MODE_SYMLINK, MODE_GITLINK,
+  type ParsedCommit, type ParsedTag, type TreeEntry, type GitPerson,
+} from './objects';
+export { toHex, hexToBytes, asciiHexToBytes, isOid, decodeText, sha1, hashObject } from './bytes';
+export { PagedFile, PageCache, type IoStats } from './paged';

@@ -14,7 +14,10 @@
     "e2e": "playwright test",
     "fixture": "node scripts/run.mjs scripts/make-fixture.ts",
     "parse": "node scripts/run.mjs scripts/parse.ts",
-    "build-demo": "node scripts/run.mjs scripts/build-demo.ts"
+    "build-demo": "node scripts/run.mjs scripts/build-demo.ts",
+    "grammars": "node scripts/copy-grammars.mjs",
+    "predev": "node scripts/copy-grammars.mjs",
+    "prebuild": "node scripts/copy-grammars.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.12.0",

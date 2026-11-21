@@ -3,13 +3,13 @@
   "settings": { "appearance": "dark", "particles": true },
   "theme": {
     "fonts": { "ui": "Jost", "code": "Commit Mono" },
-    "dark": { "void": "#1C1C1C", "dustCool": "#4B5158", "dustWarm": "#6B5A4C", "text": "#EDEFF2", "halo": "#9FD8FF", "warm": "#FFD9A0", "sidebar": "#141414" },
-    "light": { "void": "#F6F8FC", "dustCool": "#D3DAE3", "dustWarm": "#F3DCC6", "text": "#1E2126", "halo": "#2A6FDB", "warm": "#E8A23A", "sidebar": "#FFFFFF" },
+    "dark": { "void": "#1C1C1C", "dustCool": "#4B5158", "dustWarm": "#6B5A4C", "text": "#EDEFF2", "halo": "#9FD8FF", "warm": "#FFD9A0", "sidebar": "#141414", "surface": "#1C1C1C" },
+    "light": { "void": "#F6F8FC", "dustCool": "#D3DAE3", "dustWarm": "#F3DCC6", "text": "#1E2126", "halo": "#2A6FDB", "warm": "#E8A23A", "sidebar": "#FFFFFF", "surface": "#FFFFFF" },
     "pill": { "opacity": 0.6, "borderOpacity": 0.14, "blurPx": 10, "cardRadiusPx": 20 },
     "wisps": { "contrast": 0.25, "driftSpeed": 0.02, "parallax": 0.05, "stars": true }
   },
   "scheduler": {
-    "workerShare": 0.5, "maxWorkers": 14, "memoryCapMB": 2048, "memoryPerWorkerMB": 140,
+    "workerShare": 0.5, "maxWorkers": 14, "memoryCapMB": 2048, "memoryPerWorkerMB": 140, "deviceMemoryShare": 0.5,
     "taskTargetMs": 40, "parseFloorWorkers": 1, "historyChunkCommits": 200, "parkWhenFrameMsOver": 20
   },
   "parser": {
@@ -32,12 +32,14 @@
     "bridges": ["jni", "protobuf"]
   },
   "reveal": { "maxWaitSeconds": 30, "perFileTimeoutMs": 2000, "settleMaxMs": 3000, "growMs": 2000 },
-  "history": { "maxCommits": 50000, "timeBudgetSeconds": 20, "merges": "skip", "pageBytes": 262144, "objectCacheBytes": 33554432 },
+  "history": { "maxCommits": 50000, "timeBudgetSeconds": 20, "merges": "skip", "pageBytes": 262144, "pageCacheBytes": 67108864, "objectCacheBytes": 33554432 },
   "clustering": {
     "citiesPerDecade": 3.5, "cityOffset": -2.2, "minCities": 1, "maxCities": 20,
     "districtsPerDecade": 3.5, "districtOffset": -2.2, "minDistrictSize": 5,
     "resolution": 1.0, "seed": 1, "directoryAffinity": 0.1, "hubDamping": true
   },
+  "importance": { "damping": 0.85, "maxIterations": 100, "tolerance": 1e-9 },
+  "analysis": { "topSymbolsPerEdge": 5 },
   "physics": {
     "sliceMs": 8, "reheat": 0.3, "velocityDecay": 0.6, "settleTicks": 150, "alphaMin": 0.001,
     "city": { "gap": 40, "linkStrength": 0.5, "charge": -60, "gravity": 0.02 },

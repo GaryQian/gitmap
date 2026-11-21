@@ -59,7 +59,10 @@ export interface PhysicsApi {
    * gentle reheat (config.physics.reheat) unless a settle or loadLayout follows.
    */
   applyBatch(batch: PatchBatch): void;
-  /** Run every simulation to rest without rendering, city → district → file, under a time cap. Marks home. */
+  /**
+   * Run every simulation to rest without rendering, under a time cap, and mark home. Lower tiers
+   * settle first so each tier is sized from settled content: files, then districts, then cities.
+   */
   settle(maxMs: number): Promise<SettleReport>;
   /** Pin a city or district ('c:…' / 'd:…') at a world position and heat its tier. Districts are clamped to their city. */
   drag(ref: NodeRef, x: number, z: number): void;

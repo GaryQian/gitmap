@@ -67,7 +67,7 @@ From [M0-RESULTS.md](M0-RESULTS.md). PLAN.md was updated to match these on 2026-
 | Stock `forceCollide` misses the settle budget (3.2 s at 10k); spatial-hash collide takes 0.7 s | Port the spike's spatial-hash collide; do not use `forceCollide` |
 | tree-sitter leaked ~700 MB without cleanup | Call `tree.delete()` after every file |
 | Grammar sources | `web-tree-sitter` 0.27 with `@repomix/tree-sitter-wasms`; Kotlin and Obj-C grammars from another source; parse Flow-typed `.js` with the TSX grammar |
-| Corona drawn in one pass cuts into spheres behind | Two draws over the same instances: bodies, then coronas |
+| Corona drawn in one pass cuts into spheres behind | Three draws over the same instances: bodies, then glows, then ground light (PLAN.md §8.6) |
 | White core read as a glossy marble | Superseded by the star look in `spikes/render/main.ts` (PLAN.md §8.6): no light direction, highlight or silhouette; an exposure-curve core; glow that starts at the edge; ground light. Port that shader as is. |
 | 50,000 ambient connections buried the stars | Ambient file-to-file edges default to 1,500 (`render.ambientEdges`); hover and selection draw the rest |
 | Edge budget is the real performance lever | Degradation order: edge budget, then pixel ratio; particles and corona are nearly free |
@@ -95,6 +95,12 @@ Small on purpose. Nothing here is clever; it exists so sixteen agents can start 
 
 **Folder layout.** The folders named below are finer-grained than the module table in PLAN.md §4 (for example `src/git/`, `src/lang/<id>/`, `src/pipeline/`, `src/content/`), so that each package owns a folder outright. The module boundaries and their rules are unchanged; PLAN.md §4 is brought in line at the first integration.
 
+**Contract changes after Round 0** (decided 2026-11-21; `src/model/types.ts` still has the old shapes):
+
+- `Poi.parent` is a unit ref (one file's sphere), never a district or city.
+- `TourStep.target` becomes `parent`, a unit ref, and gains `frame: 'file' | 'district' | 'city'`; `highlights` are unit refs.
+- `structure: 'imports-only'` is renamed `'provisional'`, since that clustering also uses whatever call edges were found.
+
 ## 6. Work packages
 
 `Depends` lists packages whose *merged code* is needed. Everything else is consumed through contracts and fakes, and can run in parallel.
@@ -105,13 +111,14 @@ Small on purpose. Nothing here is clever; it exists so sixteen agents can start 
 |---|---|---|---|---|
 | 1A | Model store | `src/model/` (not `types.ts`) | — | Patch equivalence, revision gap, validation, round trip |
 | 1B | Compute pool | `src/compute/` | — | Lane order, work-conserving, floor (scripted workers) |
-| 1C | Git access | `src/git/` | `spikes/scan/gitindex.ts`, `spikes/git/core/{odb,fs}.ts` | Index vs `ls-files`, blob vs file, deltas |
+| 1C | Git access | `src/git/` | `spikes/scan/gitindex.ts`, `spikes/git/core/{odb,fs}.ts` | Index vs `ls-files`; blob vs file; deltas; loose objects; two packs with a cross-pack delta; working-tree result not cached under the index OID when the hash differs |
 | 1D | Fast pass + three plug-ins | `src/ingest/`, `src/lang/{ts,python,cfamily}/` | `spikes/scan/scanner.ts` | Imports per fixture |
 | 1E | Resolve, units, importance | `src/analysis/` | — | Resolved edges on fixtures; percentile properties |
 | 1F | Physics core | `src/physics/` | `spikes/physics/` (worker, buffers, spatial-hash collide) | Reaches rest, no city overlap, deterministic |
 | 1G | Render core | `src/render/core/`, `src/render/spheres/`, `src/render/background/` | `spikes/render/` | Radius formula, slot writes (pure functions only) |
 | 1H | App shell | `src/app/` | — | None beyond typecheck |
 
+- **1C** reads every pack plus loose objects (`spikes/git/core/odb.ts` already does both) and ports the pack-first blob reader from `spikes/io/packblobs.ts`. The working tree is a last resort and is hash-checked (PLAN.md §6.3.1).
 - **1E** uses top-level folders as placeholder cities. Real clustering replaces it in 2A.
 - **1G** includes the wisp background, both colour modes, the two-draw star look, basic pan and zoom, and the grow-in reveal.
 - **1H** includes theme tokens, fonts, the landing page, the waiting screen, the title and progress pills, and the settings card.
@@ -163,7 +170,7 @@ Small on purpose. Nothing here is clever; it exists so sixteen agents can start 
 |---|---|---|---|---|
 | 3K | Bridges: JNI, Protobuf stubs | `src/bridges/` | 3A to verify | Mangling round trip; two fixtures |
 | 3L | Persistence | `src/persist/` | 1A | Snapshot round trip through OPFS fake; facts cache keyed by OID |
-| 3M | Update flow | `src/pipeline/update/` | 3L, 2H | Changed-OID diff yields the right re-parse set; working-tree check flags an edited file |
+| 3M | Update flow | `src/pipeline/update/` | 3L, 2H | Changed-OID diff yields the right re-parse set; working-tree check flags an edited file and ignores one whose timestamp changed but whose hash did not |
 | 3N | Demo and export | `src/content/`, `scripts/build-demo.ts`, landing repo pills in `src/app/landing/` | 1I | Zip entry by range equals the file; hash mismatch detected |
 | 3O | Sidebar reader | `src/app/sidebar/` | — | None beyond typecheck |
 | 3Q | Folder walk | `src/ingest/walk/` | 1D | Gitignore matcher against `git check-ignore` on a fixture; plain folder yields the same file list as the index for a clean repo |
@@ -197,14 +204,15 @@ Small on purpose. Nothing here is clever; it exists so sixteen agents can start 
 | ID | Package | Owns | Depends | Core tests |
 |---|---|---|---|---|
 | 5A | Server and provider | `api/ai/`, `src/ai/server/` | — | Schema validation, reference filtering, caps (canned provider) |
-| 5B | Digest builder | `src/ai/digest/` | 2B | Budget shares, determinism, exclusions |
+| 5B | Digest builder | `src/ai/digest/` | 2B | Budget shares; determinism; exclusions; a secret-named file and a key-shaped string never appear in any output |
 | 5C | Client orchestration | `src/ai/client/` | 5A, 5B contracts | Sequence with a fake server; cache hit by digest hash |
 | 5D | Points of interest | `src/render/poi/`, `src/app/poi/` | 2G | None beyond typecheck |
 | 5E | Tour | `src/app/tour/` | 2F | Step sequencing |
 | 5F | Demo pre-generation | `scripts/build-demo.ts` | 3N, 5C | — |
 
 - **5A** loads the `claude-api` skill before writing any SDK code, and uses structured outputs, not forced tool calls.
-- **5C** includes the consent prompt and the summaries → points of interest + tour sequence.
+- **5C** includes the consent prompt and the summaries → points of interest + tour sequence. It starts only when the parse has finished, never on a provisional structure.
+- **5D and 5E** attach every point of interest and tour step to a file; **5A** rejects any other parent.
 
 **Exit:** on a consented repo, beams and a tour appear; a demo shows both with no key.
 

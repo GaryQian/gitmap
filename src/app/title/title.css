@@ -1,0 +1,18 @@
+.gm-title-pill { gap: 10px; max-width: 100%; }
+.gm-title-pill .gm-strong { overflow: hidden; text-overflow: ellipsis; }
+
+/* The app title is also the way back to the landing page. */
+.gm-title-home {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 300;
+  letter-spacing: 0.14em;
+  cursor: pointer;
+}
+.gm-title-home:hover { color: var(--gm-halo); }

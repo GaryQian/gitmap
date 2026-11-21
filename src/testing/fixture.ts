@@ -62,8 +62,29 @@ export function buildFixtureRepo(name: string, variant = ''): string {
   const out = path.join(root, '.fixtures', variant ? `${name}--${variant}` : name);
   const stamp = JSON.stringify([script, walk(src).map((f) => [f, statSync(path.join(src, f)).mtimeMs, statSync(path.join(src, f)).size])]);
   const stampFile = path.join(out, '.git', 'gitmap-fixture-stamp');
-  if (existsSync(stampFile) && readFileSync(stampFile, 'utf8') === stamp) return out;
+  const fresh = () => existsSync(stampFile) && readFileSync(stampFile, 'utf8') === stamp;
+  if (fresh()) return out;
 
+  // Test files run in separate processes: take a lock so two of them do not rebuild the same fixture at once.
+  mkdirSync(path.dirname(out), { recursive: true });
+  const lock = `${out}.lock`;
+  const deadline = Date.now() + 60000;
+  for (;;) {
+    try { mkdirSync(lock); break; } catch {
+      if (fresh()) return out;
+      if (Date.now() > deadline) { rmSync(lock, { recursive: true, force: true }); continue; }
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
+    }
+  }
+  try {
+    if (fresh()) return out;
+    return buildLocked(out, src, script, stamp, stampFile);
+  } finally {
+    rmSync(lock, { recursive: true, force: true });
+  }
+}
+
+function buildLocked(out: string, src: string, script: FixtureScript, stamp: string, stampFile: string): string {
   rmSync(out, { recursive: true, force: true });
   mkdirSync(out, { recursive: true });
   git(out, ['init', '-q', '-b', 'main']);

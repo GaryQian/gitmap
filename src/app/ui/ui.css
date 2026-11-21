@@ -1,0 +1,184 @@
+/* Chrome primitives (PLAN.md §17.6). Colours come from the --gm-* tokens that theme.ts writes on
+   :root; nothing here names a colour. Neutral grays with the halo (blue) and warm accents only. */
+
+:root {
+  --gm-text-dim: color-mix(in srgb, var(--gm-text) 72%, transparent);
+  --gm-text-faint: color-mix(in srgb, var(--gm-text) 10%, transparent);
+  --gm-halo-soft: color-mix(in srgb, var(--gm-halo) 30%, transparent);
+  --gm-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+html, body, #root { height: 100%; margin: 0; }
+body {
+  background: var(--gm-void);
+  color: var(--gm-text);
+  font-family: var(--gm-font-ui);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+}
+
+/* One focus ring everywhere: the halo colour, clear of the element. */
+:focus-visible { outline: 2px solid var(--gm-halo); outline-offset: 2px; }
+:focus:not(:focus-visible) { outline: none; }
+
+/* ---- pill ---- */
+
+.gm-pill {
+  --gm-pill-h: 34px;
+  position: relative;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--gm-pill-h);
+  margin: 0;
+  padding: 0 calc(var(--gm-pill-h) * 0.44);
+  border: 1px solid var(--gm-hairline);
+  border-radius: 999px;
+  background: var(--gm-pill-bg);
+  color: var(--gm-text);
+  font-family: var(--gm-font-ui);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: 0.025em;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  pointer-events: auto;
+  transition: background-color 140ms var(--gm-ease), border-color 140ms var(--gm-ease), box-shadow 140ms var(--gm-ease);
+}
+.gm-pill-small { --gm-pill-h: 26px; font-size: 12px; gap: 6px; }
+.gm-pill-large { --gm-pill-h: 46px; font-size: 15px; letter-spacing: 0.04em; }
+
+/* Rationed: only the fixed chrome asks for this (§17.6). */
+.gm-blur {
+  -webkit-backdrop-filter: blur(var(--gm-pill-blur));
+  backdrop-filter: blur(var(--gm-pill-blur));
+}
+
+.gm-pill-button { cursor: pointer; user-select: none; }
+.gm-pill-button:hover,
+.gm-pill.is-active {
+  background: var(--gm-pill-bg-strong);
+  border-color: color-mix(in srgb, var(--gm-text) 34%, transparent);
+}
+.gm-pill.is-active { border-color: var(--gm-halo); }
+.gm-pill-button:disabled { cursor: default; color: var(--gm-text-dim); border-color: var(--gm-hairline); background: var(--gm-pill-bg); }
+
+/* No drop shadows. In dark mode an active element gets a faint halo instead. */
+:root[data-theme='dark'] .gm-pill.is-active,
+:root[data-theme='dark'] .gm-pill-button:hover:not(:disabled) {
+  box-shadow: 0 0 16px color-mix(in srgb, var(--gm-halo) 16%, transparent);
+}
+
+.gm-pill-round { width: var(--gm-pill-h); padding: 0; justify-content: center; }
+
+/* A button segment at the end of a pill, flush with its rounded end. */
+.gm-pill-segment {
+  align-self: stretch;
+  display: inline-flex;
+  align-items: center;
+  margin: 0 calc(var(--gm-pill-h) * -0.44) 0 4px;
+  padding: 0 calc(var(--gm-pill-h) * 0.46) 0 12px;
+  border: 0;
+  border-left: 1px solid var(--gm-hairline);
+  border-radius: 0 999px 999px 0;
+  background: transparent;
+  color: var(--gm-halo);
+  font: inherit;
+  font-weight: 500;
+  letter-spacing: inherit;
+  cursor: pointer;
+  transition: background-color 140ms var(--gm-ease);
+}
+.gm-pill-segment:hover { background: var(--gm-text-faint); }
+.gm-pill-segment:focus-visible { outline-offset: -4px; }
+.gm-pill-segment:disabled { cursor: default; color: var(--gm-text-dim); background: transparent; }
+
+.gm-strong { font-weight: 500; }
+.gm-dim { color: var(--gm-text-dim); }
+
+/* The thin progress line: it lies on the pill's lower border, between the rounded ends. */
+.gm-line {
+  position: absolute;
+  left: calc(var(--gm-pill-h) / 2);
+  right: calc(var(--gm-pill-h) / 2);
+  bottom: -1px;
+  height: 2px;
+  border-radius: 1px;
+  overflow: hidden;
+  background: var(--gm-text-faint);
+  pointer-events: none;
+}
+.gm-line > span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--gm-halo);
+  transform-origin: 0 50%;
+  transition: transform 200ms linear;
+}
+
+/* ---- card ---- */
+
+.gm-card {
+  box-sizing: border-box;
+  padding: 16px;
+  border: 1px solid var(--gm-hairline);
+  border-radius: var(--gm-card-radius);
+  background: var(--gm-pill-bg);
+  color: var(--gm-text);
+  font-family: var(--gm-font-ui);
+  font-size: 13px;
+  line-height: 1.45;
+  letter-spacing: 0.02em;
+  pointer-events: auto;
+}
+
+/* ---- segmented choice ---- */
+
+.gm-field + .gm-field { margin-top: 14px; }
+.gm-field-label { margin: 0 0 7px 2px; font-size: 12px; letter-spacing: 0.035em; color: var(--gm-text-dim); }
+.gm-segmented {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--gm-hairline);
+  border-radius: 999px;
+}
+.gm-segment {
+  flex: 1 1 0;
+  height: 26px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--gm-text-dim);
+  font: inherit;
+  letter-spacing: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 140ms var(--gm-ease), color 140ms var(--gm-ease);
+}
+.gm-segment:hover { color: var(--gm-text); }
+.gm-segment.is-active {
+  background: color-mix(in srgb, var(--gm-text) 14%, transparent);
+  color: var(--gm-text);
+  font-weight: 500;
+}
+
+/* Code, wherever it appears. */
+.gm-code { font-family: var(--gm-font-code); font-size: 12px; letter-spacing: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

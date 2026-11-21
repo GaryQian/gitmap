@@ -59,9 +59,13 @@ export function createFakeSession(config: Config, opts: FakeSessionOptions = {})
     get render() { return render; },
     content: new MemoryContentSource({}),
     get stage() { return stage; },
-    attachCanvas(canvas) {
+    attachCanvas(canvas, attach = {}) {
       if (render) return render;
-      const init: RenderInit = { canvas, config, replica, positions: physics.positions, theme: config.settings.appearance === 'light' ? 'light' : 'dark', particles: config.settings.particles };
+      const init: RenderInit = {
+        canvas, config, replica, positions: physics.positions,
+        theme: attach.theme ?? (config.settings.appearance === 'light' ? 'light' : 'dark'),
+        particles: attach.particles ?? config.settings.particles, reducedMotion: attach.reducedMotion,
+      };
       try { render = createRenderer(init); } catch { render = createNoopRenderer(init); }
       physics.onBuffers((b) => render?.setPositions(b));
       if (replica.rev > 0) {

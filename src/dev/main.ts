@@ -1,35 +1,85 @@
-// /dev harness: load a synthetic model (or a saved snapshot) straight into the renderer, so visuals
+// /dev harness: load a synthetic model or a saved snapshot straight into the renderer, so visuals
 // and physics can be iterated on without parsing anything. Lead-owned.
-//   /dev.html?n=10000&seed=1&mode=dark|light&physics=static|engine|worker&wait=0
+//   /dev.html?n=10000&seed=1          synthetic model through the real session (store, physics worker, renderer)
+//   /dev.html?snapshot=/out/react.gitmap.json.gz   a snapshot written by `npm run parse`
+//   /dev.html?fake=1&n=2000           the fake session: static layout, no workers
+//   &mode=dark|light
 //   window.__gitmap exposes the session for tests and the console.
 import { config } from '../config';
+import type { RepoLocator } from '../contracts/git';
+import type { RepoSource, Session } from '../contracts/pipeline';
+import { decodeModel } from '../model';
+import { createSession } from '../pipeline';
 import { createFakeSession } from '../testing/fakeSession';
 
 const qs = new URLSearchParams(location.search);
 const n = Number(qs.get('n') ?? 1000);
 const seed = Number(qs.get('seed') ?? 1);
+const mode = qs.get('mode') === 'light' ? 'light' : 'dark';
 const hud = document.getElementById('hud')!;
 const canvas = document.getElementById('scene') as HTMLCanvasElement;
+if (mode === 'light') { document.body.style.background = config.theme.light.void; document.body.style.color = config.theme.light.text; }
 
-const session = createFakeSession(config, { files: n, seed, waitMs: Number(qs.get('wait') ?? 0) });
-const render = session.attachCanvas(canvas);
-if (qs.get('mode') === 'light') {
-  render.setTheme('light');
-  document.body.style.background = config.theme.light.void;
+const state = { ready: false, spheres: 0, error: '' };
+const handle: { session: Session | null; render: unknown; state: typeof state } = { session: null, render: null, state };
+(window as unknown as { __gitmap: unknown }).__gitmap = handle;
+
+/**
+ * A fixture repo (written by scripts/bundle-fixture.ts) as a locator, so the folder pipeline runs in
+ * a browser with no folder picker: 'opfs' gives a real FileSystemDirectoryHandle, 'files' the
+ * dropped-files path, 'memory' plain bytes.
+ */
+async function fixtureLocator(name: string, via: string): Promise<RepoLocator> {
+  hud.textContent = `loading fixture ${name}`;
+  const res = await fetch(`/out/fixtures/${name}.json`);
+  if (!res.ok) throw new Error(`fixture bundle missing: run "node scripts/run.mjs scripts/bundle-fixture.ts ${name}"`);
+  const bundle = (await res.json()) as { name: string; files: Record<string, string> };
+  const bytes = (b64: string) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  if (via === 'memory') return { kind: 'memory', name, files: Object.fromEntries(Object.entries(bundle.files).map(([p, b]) => [p, bytes(b)])) };
+  if (via === 'files') return { kind: 'files', name, files: Object.entries(bundle.files).map(([p, b]) => ({ path: p, file: new File([bytes(b)], p.split('/').pop()!) })) };
+  const opfs = await navigator.storage.getDirectory();
+  const parent = await opfs.getDirectoryHandle('gitmap-dev-fixtures', { create: true });
+  try { await parent.removeEntry(name, { recursive: true }); } catch { /* first run */ }
+  const root = await parent.getDirectoryHandle(name, { create: true });
+  for (const [p, b] of Object.entries(bundle.files)) {
+    const segs = p.split('/');
+    let dir = root;
+    for (const s of segs.slice(0, -1)) dir = await dir.getDirectoryHandle(s, { create: true });
+    const w = await (await dir.getFileHandle(segs[segs.length - 1], { create: true })).createWritable();
+    await w.write(bytes(b));
+    await w.close();
+  }
+  return { kind: 'fsa', root };
 }
-session.on('stage', (s) => { hud.textContent = s.label || s.stage; });
-session.on('error', (e) => { hud.textContent = `error: ${e.message}`; });
 
-const state = { ready: false, spheres: 0 };
-(window as unknown as { __gitmap: unknown }).__gitmap = { session, render, state };
+async function open(): Promise<Session> {
+  if (qs.has('fake')) return createFakeSession(config, { files: n, seed, waitMs: Number(qs.get('wait') ?? 0) });
+  let source: RepoSource = { kind: 'synthetic', files: n, seed };
+  const fixture = qs.get('fixture');
+  if (fixture) return createSession({ kind: 'directory', locator: await fixtureLocator(fixture, qs.get('via') ?? 'opfs') }, config);
+  const snapshot = qs.get('snapshot');
+  if (snapshot) {
+    hud.textContent = `loading ${snapshot}`;
+    const res = await fetch(snapshot);
+    if (!res.ok) throw new Error(`${snapshot}: ${res.status}`);
+    source = { kind: 'snapshot', model: await decodeModel(new Uint8Array(await res.arrayBuffer())) };
+  }
+  return createSession(source, config);
+}
 
-session.start().then(() => {
+open().then(async (session) => {
+  handle.session = session;
+  const render = session.attachCanvas(canvas, { theme: mode });
+  handle.render = render;
+  session.on('stage', (s) => { hud.textContent = s.label || s.stage; });
+  session.on('error', (e) => { state.error = e.message; hud.textContent = `error: ${e.message}`; });
+  await session.start();
   state.ready = true;
   state.spheres = session.replica.table('unit').count;
   const tick = () => {
     const s = render.stats();
-    hud.textContent = `${state.spheres.toLocaleString()} spheres · ${session.replica.table('edge').count.toLocaleString()} edges\n${s.fps.toFixed(0)} fps · ${s.frameMs.toFixed(1)} ms · quality ${s.quality}`;
+    hud.textContent = `${session.replica.meta?.name ?? ''} · ${state.spheres.toLocaleString()} spheres · ${session.replica.table('edge').count.toLocaleString()} edges\n${s.fps.toFixed(0)} fps · ${s.frameMs.toFixed(1)} ms · quality ${s.quality} · resyncs ${s.resyncs}`;
   };
   tick();
   setInterval(tick, 500);
-}, (err) => { hud.textContent = `failed: ${err?.message ?? err}`; });
+}).catch((err) => { state.error = String(err?.message ?? err); hud.textContent = `failed: ${state.error}`; });
