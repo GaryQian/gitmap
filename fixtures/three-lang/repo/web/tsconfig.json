@@ -1,0 +1,3 @@
+{
+  "compilerOptions": { "baseUrl": ".", "paths": { "@util/*": ["src/util/*"] }, "strict": true }
+}

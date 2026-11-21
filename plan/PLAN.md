@@ -31,7 +31,7 @@ Section 16 lists every decision taken in review (2026-11-21).
 | "Connecting lines between all files" | Unreadable and slow when all drawn | All edges are stored. Zoomed out, they aggregate into city and district ribbons; file-level lines appear for districts in view. Hovered and selected spheres always draw every connection (§8.3). |
 | "File ownership by blame" | Line-level blame over full history is too slow in a browser | Ownership = share of commits touching the file per author. True blame on demand for one file. |
 | "2-tiered physics" but files also need d3-force | Three levels exist | Three tiers, one rule: a node only interacts with siblings under the same parent. |
-| "Vertical dimension represents size and importance" | Elevation vs sphere size | Every sphere rests on the plane. Height is the sphere's own size, which blends file size and importance 70/30 (§8.1). |
+| "Vertical dimension represents size and importance" | Elevation vs sphere size | Every sphere rests on the plane. Height is the sphere's own size, set by file size and enlarged by up to half for important files (§8.1). |
 | "View begins empty, shows as it parses" / Louvain needs the whole graph | Clusters would reshuffle as edges arrive | Nothing is drawn during the parse. The map is revealed at a stable point (§6.8). |
 | "All configurable values in one config.json" / API key | Keys must not ship to the browser | `config.json` holds provider and model names. The key lives in `.env.local` / Vercel env vars. |
 | "White void with grey vignette" / later: "cosmic void", light and dark | The background brief changed | Superseded by §17: galactic dust wisps in both modes. Light mode keeps the cool-white, warm-light feel of the original. |
@@ -60,7 +60,7 @@ Section 16 lists every decision taken in review (2026-11-21).
 ```
 
 - **Coordinator worker** holds the canonical model. The main thread holds a *view replica*: only the columns needed to draw and to answer UI queries.
-- **Compute pool**: `N = clamp(hardwareConcurrency − 2, 1, config.scheduler.maxWorkers)`, reduced when `navigator.deviceMemory` is low. It runs parse tasks and history tasks alike (§3.1); there is no separate git worker.
+- **Compute pool**: `N = clamp(round(hardwareConcurrency × scheduler.workerShare), 1, scheduler.maxWorkers)`, with `workerShare` 0.5. Browsers report logical cores, and the spikes got about 7× from 14 workers on 8 physical cores, so half is the useful number. The pool is also capped by memory (`scheduler.memoryCapMB`): 14 tree-sitter workers peaked at 0.8–1.9 GB. It runs parse tasks and history tasks alike (§3.1); there is no separate git worker.
 - **Physics worker** receives topology patches straight from the coordinator over a `MessageChannel` and writes positions into a `SharedArrayBuffer`.
 - **Patch flow control**: producers coalesce to at most ~10 patch batches per second. The main thread applies whole batches inside a per-frame budget (default 4 ms) and queues the rest; a batch too large for one frame is staged and committed at once (§5.1).
 - `SharedArrayBuffer` needs cross-origin isolation: `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp` in `vercel.json`, with every asset served same-origin. Fallback when not isolated: the physics worker posts dirty position chunks as transferables at 30 Hz.
@@ -98,7 +98,7 @@ How much the pool speeds up the walk is not measured; the spike ran it on one th
 
 **Interaction comes first.**
 
-- The pool leaves two cores free for the main thread and the physics worker.
+- The pool uses about half the logical cores, which leaves the main thread and the physics worker room to run.
 - After the reveal, the renderer reports frame time. If frames run over budget while the user is moving the camera or dragging, the coordinator parks workers serving lanes 3–5, then lane 2 if that is not enough, and restores them when frames recover.
 
 ---
@@ -120,6 +120,8 @@ Single package, strict folder boundaries enforced by a lint rule. Each module ex
 | `persist/` | Snapshot save/load (OPFS), repo registry (IndexedDB), export/import, demo | model | model | coordinator |
 | `app/` | React shell: landing, waiting screen, top bar, panels, legend, sidebar, tour UI | view replica, view state | commands | main |
 | `config/` | Typed loader for `config.json` | — | — | everywhere |
+
+The folders actually used are finer-grained than this table, so that each work package owns one outright; they are listed in [IMPLEMENTATION.md](IMPLEMENTATION.md) §5–6. The boundaries and rules here still hold.
 
 **Stack:** Vite + React + TypeScript, deployed as a static single-page app with Vercel Functions under `/api`. Raw three.js (not react-three-fiber): React must not reconcile thousands of scene objects.
 
@@ -278,8 +280,9 @@ The manifest gives the waiting screen its totals and lets physics and render pre
 
 ### 6.3 Parse tasks
 
-- Each worker gets the **root directory handle** (structured-cloneable) and a batch of paths, resolves file handles itself with a per-directory handle cache, and reads with `getFile().arrayBuffer()`. No file bytes cross a thread boundary.
-- Batches are sized by bytes (~2 MB) and pulled from a shared queue. Paths are ordered by directory to keep handle caches warm.
+- **Contents come from the git packfile** (§6.3.1). Each task is a contiguous range of pack offsets; the worker reads it in large chunks and inflates blobs straight into the scanners. No file bytes cross a thread boundary.
+- **Fallback, per file:** when a blob is not in a pack, the worker opens the working-tree file instead, using the root directory handle (structured-cloneable) with a per-directory handle cache.
+- Tasks are sized by bytes (~2 MB) and pulled from the shared pool queue (§3.1).
 - **Languages are plug-ins.** Each one declares its file extensions, an import scanner, an optional tree-sitter grammar and query, bridge extractors (§6.4.1) and a resolver. A repo pays only for the languages it contains.
 - **Fast pass:** per-language scanners that skip comments and strings and extract import/include/using specifiers and line counts. In the same sweep over the bytes, a multi-pattern match looks for bridge trigger words; only files that hit one run a bridge extractor.
 - **Slow pass:** tree-sitter with `tags`-style queries for definitions and call-site references. Grammars are separate `.wasm` files, fetched only for languages present. Stylesheets and HTML have no slow pass.
@@ -390,9 +393,9 @@ Not included, because the match is by convention or free-form string and therefo
 History runs as chunked tasks on the shared pool, using idle workers before the reveal and taking priority when a history-based overlay is selected (§3.1).
 
 - Pack walker reading `.idx` and `.pack` through `FileReaderSync` on `File.slice()` (synchronous random access in a worker without loading whole packs). Uses the commit-graph file when present.
-- Walks commits newest-first from `HEAD`, diffing each commit's tree against its first parent. Tree diffs only descend into subtrees whose OID differs, so no blobs are read.
+- Walks commits newest-first from `HEAD`, diffing each commit's tree against its first parent. **Merge commits are skipped by default** (`history.merges`): diffing a merge against its first parent would credit it with everything its branch brought in and let its date win "last modified". This default is still open (§16). Tree diffs only descend into subtrees whose OID differs, so no blobs are read.
 - Emits per-file: last-modified time, first-seen time, commit count and per-author commit counts. Co-change pairs are not collected: their only consumer was the removed Hidden coupling overlay.
-- Streams progressively; bounded by `config.history.maxCommits`; applies `.mailmap`.
+- Streams progressively; applies `.mailmap`. Bounded by `history.maxCommits` (50,000) and `history.timeBudgetSeconds` (20), whichever comes first, with a "Load full history" action for the rest.
 - **Incremental on return.** The snapshot stores the head commit the walk reached. A later visit walks only commits newer than that and merges them into the saved per-file facts.
 
 **Measured** (raw output of the fork's git spike; Node, one thread, full history, 64 KB pages with a 32 MB page cache):
@@ -404,8 +407,8 @@ History runs as chunked tasks on the shared pool, using idle workers before the 
 | tensorflow | 204,106 | 71.2 s | 69,444 | 4,340 | 3.5 s | 928 MB | 6.5 s, 50% of current files seen |
 
 - **History is CPU-bound in Node, not disk-bound**: I/O is 2–5% of the time; inflating and diffing trees is the rest.
-- **The read count is the browser risk.** Tensorflow re-read 4.3 GB from a 1.5 GB pack because the small page cache thrashed: 69,444 reads. In a browser each read is a cross-process call of unknown cost. The history walker therefore gets larger pages (`history.pageBytes`, 1 MB) and a larger page cache (`history.cacheBytes`), and reads the commit-graph file when present to skip commit objects entirely.
-- **The default cap of 20,000 commits is enough at S and M.** At L it leaves older files without history; they show as "older than the window" in Recency and as unknown in Ownership.
+- **The read count is the browser risk.** Tensorflow re-read 4.3 GB from a 1.5 GB pack because the small page cache thrashed: 69,444 reads. In a browser each read is a cross-process call of unknown cost. The spike's follow-up runs settled on 256 KB pages (`history.pageBytes`) and a two-generation object cache of 16–32 MB (`history.objectCacheBytes`); the walker also reads the commit-graph file when present to skip commit objects entirely. Per-read cost in a browser is still unmeasured.
+- **The default cap is 50,000 commits or 20 seconds.** That covers the whole history at S and M. At L it can leave older files without history; they show as "older than the window" in Recency and as unknown in Ownership until "Load full history" is used.
 - **Memory, not disk, limits full-history walks at L.** The spike collected two growing tables, authors per file and co-change pairs. The plan no longer collects co-change, so the memory figures above overstate what the product will use; by how much is not measured.
 - Unsupported cases degrade to "no history layers" with a notice: plain folders, shallow clones (partial), worktrees whose `.git` points outside the picked folder.
 
@@ -485,16 +488,17 @@ Each tier is a set of independent `forceSimulation` instances in the physics wor
 
 | Tier | Nodes | Coordinates | Forces |
 |---|---|---|---|
-| **City** (1 sim) | cities | world XZ | `forceLink` on inter-city weights; `forceCollide(radius + gap)`; weak `forceManyBody`; weak `forceX`/`forceY` gravity |
-| **District** (1 sim per city) | that city's districts | local to city centre | `forceLink` on intra-city inter-district weights; `forceCollide(√area)`; custom `forceContain` (city radius); custom `forceExternalPull` (toward the bearing of connected outside cities); optional Lloyd relaxation toward the Voronoi cell centroid |
-| **File** (1 sim per district) | that district's spheres | local to district centre | `forceRadial` (size input); `forceLink` on intra-district edges (connectivity input); `forceCollide(sphere radius + pad)`; custom `forceContain` (district cell) |
+| **City** (1 sim) | cities | world XZ | `forceLink` on inter-city weights; spatial-hash collide (radius + gap); weak `forceManyBody`; weak `forceX`/`forceY` gravity |
+| **District** (1 sim per city) | that city's districts | local to city centre | `forceLink` on intra-city inter-district weights; spatial-hash collide (√area); custom `forceContain` (city radius); custom `forceExternalPull` (toward the bearing of connected outside cities); optional Lloyd relaxation toward the Voronoi cell centroid |
+| **File** (1 sim per district) | that district's spheres | local to district centre | `forceRadial` (size input); `forceLink` on intra-district edges (connectivity input); spatial-hash collide (sphere radius + pad); custom `forceContain` (district cell) |
 
 - **All spheres rest on the plane.** Layout is 2D. A sphere's centre sits at `y = radius`; nothing floats and height is never simulated.
 - **Rubber-band links.** `forceLink.distance = rA + rB + gap · f(1/weight)`, strength below 1 so links have give. d3's default strength is `1 / min(degree(source), degree(target))` and its bias makes the higher-degree node move less; we keep that and scale it by a config factor.
-- **Mass.** `forceCollide` resolves overlap in proportion to radius², so big cities and big files shove small ones aside.
+- **Collision is our own force, not d3's `forceCollide`.** The stock force took 3.2 s to settle 10k files, over the 3 s budget; the spatial-hash collide written in the physics spike takes 0.7 s. It keeps d3's behaviour of resolving overlap in proportion to radius², so big cities and big files shove small ones aside.
 - **No `forceCenter` at the city tier.** It translates every node's position directly each tick, which would make the world slide when one city is dragged. Weak `forceX`/`forceY` gravity is used instead.
 - **File tier, the intended look.** Larger spheres tend toward the middle of a district, but not strictly: files that are strongly connected should sit near each other even when that pulls a large file off-centre or a small one inward. Concentric rings sorted by size, as the render spike's placeholder layout shows, are the wrong result.
 - **File tier, size vs connectivity.** `forceRadial` targets a radius by size rank (largest spheres at the district centre; size already includes importance, so important files gravitate inward); `forceLink` pulls connected files together. One knob, `physics.file.sizeVsConnectivity` (default 0.5), sets `radial.strength = 2w·base` and scales link strength by `2(1−w)`. d3 already normalises link strength by degree, so equal coefficients give the two inputs equal pull per node. "50/50" is defined operationally this way.
+- **Open tuning question.** The physics spike found that `sizeVsConnectivity` at 0.5 leaves 11–17% of files overlapping at 10k after settling, and that about 0.8 does not. The default stays at the specified 0.5; the physics test reports overlap so the value can be chosen from numbers (§16).
 - **Voronoi districts.** `d3-delaunay` computes the Voronoi diagram of district centres clipped to the city outline. Each cell is that district's territory and the containment region for its files. Collide radii ∝ √(district area) keep cell areas roughly proportional to content.
 - **Space propagates upward.** When a district's content grows, its collide radius grows (eased) → siblings are pushed → the city's radius grows → neighbouring cities are pushed. This is how others "move aside to make room" during a user-triggered update.
 
@@ -502,7 +506,7 @@ Each tier is a set of independent `forceSimulation` instances in the physics wor
 
 Facts from the d3-force source that shape the design:
 
-- A simulation starts its own `d3-timer` on construction. We call `.stop()` immediately and call `.tick()` from our scheduler. Manual `tick()` does not dispatch events and does not check `alphaMin`, so **the scheduler owns sleeping**: a sim whose `alpha < alphaMin` leaves the hot set.
+- A simulation starts its own `d3-timer` on construction. We call `.stop()` immediately and call `.tick()` from our scheduler. Manual `tick()` does not dispatch events and does not check `alphaMin`, so **the scheduler owns sleeping**: a sim leaves the hot set only when both `alpha` and `alphaTarget` are below `alphaMin` (a dragged sim holds `alphaTarget` up while its `alpha` decays).
 - Each tick: `alpha += (alphaTarget − alpha) · alphaDecay`, then forces, then velocities are multiplied by the retention factor and added to positions. Nodes with `fx`/`fy` are snapped there with zero velocity.
 - Defaults: `alphaMin 0.001`, `alphaDecay ≈ 0.0228` (~300 ticks to rest), `velocityDecay 0.4`. For "friction, settles quickly" we use a higher `velocityDecay` (~0.6) and a faster decay (~150 ticks), all in config.
 - **Pre-reveal settle.** `settle()` ticks city → district → file sims to rest with no rendering, under a time cap. d3's fixed-seed random source makes the result reproducible.
@@ -511,7 +515,7 @@ Facts from the d3-force source that shape the design:
 - `simulation.find()` is a linear scan and is not used; picking is done in the renderer (§9).
 - Custom forces are plain functions `force(alpha)` with `force.initialize(nodes, random)`. `forceContain`, `forceExternalPull` and the Lloyd force follow that contract.
 
-*To verify in the first spike:* that `d3-timer` constructs cleanly in a worker with no `requestAnimationFrame`.
+*Verified in the physics spike:* d3-force and `d3-timer` construct and tick manually inside a worker, and positions are shared with the page without copying.
 
 ### 7.3 Scheduler
 
@@ -536,19 +540,30 @@ Hover wobble, bump transfer and selection pulsing are a **display-only spring la
 
 ### 8.1 Spheres: size, glow, visibility
 
-One instanced draw call for all spheres, drawn as camera-facing quads shaded as spheres in the fragment shader. World position is composed in the vertex shader from three data textures (file-local, district, city).
+Spheres are camera-facing quads shaded in the fragment shader, in three instanced draws over the same instances: bodies, glows and ground light (§8.6). World position is composed in the vertex shader from three data textures (file-local, district, city).
 
-**Size is 70% file size, 30% importance, mixed as radii:**
+**File size sets the radius; importance can enlarge it by up to half.**
 
 ```
-r_size   = clamp(k · lines^(1/3), rMin, rMax)          // volume ∝ lines of code
-r_import = rMin + (rMax − rMin) · importancePct        // percentile across the repo
-radius   = 0.7 · r_size + 0.3 · r_import
+r_size = clamp(k · lines^(1/3), rMin, rMax)     // volume ∝ lines of code
+boost  = importancePct ^ curve                  // 0 for the least important file, 1 for the most
+radius = r_size · (1 + 0.5 · boost)
 ```
 
-With `rMax = 12`: a 10-line file that is the most depended-on in the repo gets a radius of about 4; a huge file nothing depends on shrinks by about 30%. The 70/30 split is `visual.sizeBlend` in config.
+File size is the main contributor, and importance only ever scales it. With the defaults (`k = 0.8`, `rMin = 0.8`, `rMax = 12`, `curve = 2`):
 
-**Glow marks importance.** Every sphere is drawn as a small star with a lit core (§8.6). What importance adds is the light that leaves the sphere: the outer corona and the pool of coloured light on the ground. That outward glow depends on importance alone: it starts faintly at the 70th percentile and reaches full brightness at the top (`visual.glowFromPct`). Large important files glow too, so the most depended-on file is never dim beside a glowing small helper. The outward glow fades while an overlay is active.
+| File | Least important | Median importance | Most important |
+|---|---|---|---|
+| 10 lines | 1.7 | 1.9 | 2.6 |
+| 500 lines | 6.3 | 7.1 | 9.5 |
+| 3,400 lines or more | 12 | 13.5 | 18 |
+
+- **Size order is mostly preserved.** At most, importance makes a file look like one about 3.4 times its length (1.5³). A small helper can stand out among its peers but can never pass for a large file.
+- **The curve keeps the boost for the files that earn it.** A file of median importance grows by about 12%; the full 50% goes only to the most depended-on file in the repo.
+- The maximum boost, the curve and the scale are `visual.importanceBoost`, `visual.importanceCurve` and `visual.sizeScale` in config.
+- The earlier rule mixed a file-size radius and an importance radius 70/30. Because importance percentiles spread evenly while most files are of similar length, importance ended up moving the radius about twice as much as size did. This rule replaces it.
+
+**Glow marks importance.** Every sphere is drawn as a small star with a lit core (§8.6). What importance adds is the light that leaves the sphere: the outer corona and the pool of coloured light on the ground. That outward glow depends on importance alone: only about the top 10% of files glow. It starts faintly at the 90th percentile and reaches full brightness at the top (`visual.glowFromPct`). Large important files glow too, so the most depended-on file is never dim beside a glowing small helper. The outward glow fades while an overlay is active.
 
 **Minimum-size filter.** The legend's slider sets a minimum line count. It is one shader uniform compared against each sphere's line count: spheres below it, and their lines, are not drawn. The layout does not change, so nothing shifts as the slider moves. Glowing files are exempt, so the slider only removes files that are both small and unimportant.
 
@@ -579,7 +594,7 @@ Other per-instance state (hover, selected ×1.3 with pulsing, dimmed, growing-in
 
 ### 8.5 Frame budget
 
-- Quality steps down before frame rate does, in this order: ambient particle count, corona and ground-light resolution, pixel ratio, edge budget. Sphere colour, core light and edge pulses are never dropped.
+- Quality steps down before frame rate does, in this order: edge count first, then pixel ratio. The render spike found those are the only two levers that matter; particles, glow and territory resolution cost almost nothing and are left alone. Sphere colour and core light are never dropped.
 - Ambient motion (particles, pulses, core shimmer) keeps the scene rendering continuously, at a reduced rate when the camera is still and nothing is hovered. Rendering pauses when the tab is hidden.
 
 ### 8.6 Visual language: stars, particles, pulses
@@ -598,7 +613,7 @@ A sphere is drawn as a self-lit ball of gas. The first version read as a glossy 
 | **Core** | Not a drawn shape. Brightness rises smoothly toward the centre and goes through an exposure curve, so the centre burns out toward white the way a bright light does in a photograph. Wider and hotter with importance; a slow flicker with its own phase per sphere. | always on; importance |
 | **Surface** | Slow, faint turbulence in brightness, shown only when the sphere is large on screen. | zoom |
 | **Edge** | No silhouette. The opaque disc is cut slightly inside its radius and the glow begins there at the edge's own brightness, so the edge dissolves into light. | always on |
-| **Glow** | A smooth tail of the type colour falling away from the edge. Thin on every star, wide on important ones. | importance (from the 70th percentile), selection, hover |
+| **Glow** | A smooth tail of the type colour falling away from the edge. Thin on every star, wide on important ones. | importance (top 10%), selection, hover |
 | **Spikes** | Thin, faint four-point diffraction spikes at a fixed tilt, on the top 2–3% only. | importance |
 | **Ground light** | Every star lights a small pool on the plane beneath it; important ones light a wide one. | importance |
 
@@ -829,14 +844,14 @@ One file, typed and validated at build, imported by client and server. Secrets a
                   "light": { "void": "#F6F8FC", "dustCool": "#D3DAE3", "dustWarm": "#F3DCC6", "text": "#1E2126", "halo": "#2A6FDB", "warm": "#E8A23A", "sidebar": "#FFFFFF" },
                   "pill":  { "opacity": 0.6, "borderOpacity": 0.14, "blurPx": 10, "cardRadiusPx": 20 },
                   "wisps": { "contrast": 0.25, "driftSpeed": 0.02, "parallax": 0.05, "stars": true } },
-  "scheduler":  { "maxWorkers": 14, "reservedCores": 2, "taskTargetMs": 40, "parseFloorWorkers": 1,
+  "scheduler":  { "workerShare": 0.5, "maxWorkers": 14, "memoryCapMB": 2048, "taskTargetMs": 40, "parseFloorWorkers": 1,
                   "historyChunkCommits": 200, "parkWhenFrameMsOver": 20 },
   "parser":     { "source": "pack", "packChunkBytes": 1048576,
                   "batchBytes": 2097152, "maxFileBytes": 1048576, "retainBytes": 268435456,
                   "exclude": ["**/vendor/**", "**/*.min.js"], "includeUntracked": false, "workingTreeCheck": true,
                   "bridges": ["jni", "protobuf"] },
   "reveal":     { "maxWaitSeconds": 30, "perFileTimeoutMs": 2000, "settleMaxMs": 3000, "growMs": 2000 },
-  "history":    { "maxCommits": 20000, "pageBytes": 1048576, "cacheBytes": 134217728 },
+  "history":    { "maxCommits": 50000, "timeBudgetSeconds": 20, "merges": "skip", "pageBytes": 262144, "objectCacheBytes": 33554432 },
   "clustering": { "citiesPerDecade": 3.5, "cityOffset": -2.2, "minCities": 1, "maxCities": 20,
                   "districtsPerDecade": 3.5, "districtOffset": -2.2, "minDistrictSize": 5,
                   "resolution": 1.0, "seed": 1, "directoryAffinity": 0.1, "hubDamping": true },
@@ -844,9 +859,9 @@ One file, typed and validated at build, imported by client and server. Secrets a
                   "city":     { "gap": 40, "linkStrength": 0.5, "charge": -60, "gravity": 0.02 },
                   "district": { "pad": 6, "linkStrength": 0.6, "externalPull": 0.15, "lloyd": 0.1 },
                   "file":     { "pad": 0.5, "sizeVsConnectivity": 0.5, "baseStrength": 0.1 } },
-  "visual":     { "radiusMin": 0.6, "radiusMax": 12, "sizeBlend": { "lines": 0.7, "importance": 0.3 },
-                  "glowFromPct": 0.7, "selectedScale": 1.3, "languageColors": { "ts": "#3178c6" }, "grid": {}, "background": {},
-                  "star":      { "coreRadius": 0.33, "shimmer": 0.04, "coronaScale": 1.8, "breatheMs": 1500 },
+  "visual":     { "radiusMin": 0.8, "radiusMax": 12, "sizeScale": 0.8, "importanceBoost": 0.5, "importanceCurve": 2,
+                  "glowFromPct": 0.9, "selectedScale": 1.3, "languageColors": { "ts": "#3178c6" }, "grid": {}, "background": {},
+                  "star":      { "coreGain": [2.4, 5.0], "coreTightness": [13, 8], "limbDarkening": 0.62, "flicker": 0.07, "glowFalloff": [8, 2.2], "spikesFromPct": 0.975, "breatheMs": 1500 },
                   "particles": { "ambient": 4000, "voidDustShare": 0.2, "selectBurst": 40, "openBurst": 150 },
                   "edgePulse": { "speed": 120, "tailLength": 30, "restSeconds": [0.5, 2.4], "flickerHz": 10, "traceOpacity": 0.16 } },
   "legend":     { "minLinesDefault": 0 },
@@ -886,21 +901,28 @@ Targets are goals to validate in M0, not measurements.
 
 ## 15. Milestones
 
-**M0 — Spikes.** Each produces a number, and together they decide whether any piece moves from TypeScript to WASM:
-1. Read throughput and fast-pass scanning: File System Access + worker pool on a 1k and a 10k-file repo (and one 100k).
-2. tree-sitter in WASM: grammar sizes, parse time per MB, query cost. This sets the real default for `reveal.maxWaitSeconds`.
-3. Git pack walk via `FileReaderSync`: commits per second on a long history.
-4. Render: 10k impostor spheres + arcs + territory pass on integrated graphics; the same at 100k to size the L degradation.
-5. `SharedArrayBuffer` under COOP/COEP on a Vercel preview; d3-force (with `d3-timer`) constructed and manually ticked in a worker.
-6. Browser read paths, which need a person to pick a folder: per-file File System Access reads (`spikes/fsa`) against `FileReaderSync` reads of pack slices (`spikes/git/browser/frs-bench.html`). The Node measurements in §6.3.1 are a stand-in until this is run.
+**M0 — Spikes. Done** (2026-11-21; results in [M0-RESULTS.md](M0-RESULTS.md)).
+
+| Spike | Result |
+|---|---|
+| Fast pass | Pass: 0.8–3.0 s for 4.6k–21k code files across workers, in TypeScript |
+| tree-sitter slow pass | Pass on the test machine: 2.3–12.7 s; a 4-core laptop is projected, not measured |
+| Git history | Pass in Node: output matches `git log` on four repos |
+| Render | Pass on a discrete GPU at 10k; integrated graphics untested |
+| Physics | Pass with the spatial-hash collide (0.7 s at 10k); stock d3 collide misses the budget |
+| Pack-first reads (added) | 5–10× faster than opening files, in Node (§6.3.1) |
+
+No part needs Rust or WASM at S and M. Still unmeasured: the browser read paths (they need a person to pick a folder: `spikes/fsa` and `spikes/git/browser/frs-bench.html`), integrated graphics, a 4-core laptop, a real 100k-file repo, and the Vercel headers.
+
+The build order, work packages and test policy for M1–M6 are in [IMPLEMENTATION.md](IMPLEMENTATION.md). The summaries below say what each milestone delivers.
 
 **M1 — Skeleton.** Model + patches + store; theme tokens for both modes and the wisp background; landing page and folder validation; manifest; fast pass for TS/JS, Python, C/C++; waiting screen; instanced spheres with size blend and glow; city-tier sim; reveal.
 
 **M2 — Hierarchy and physics. First showable version.** graphology Louvain with dendrogram levels and the city/district counts; importance; slow pass for the three languages; district and file tiers; Voronoi territories; pre-reveal settle; pills and dragging; camera controls; hover, selection, marquee; jiggle; ribbons and edge level-of-detail; legend with type filter and minimum-lines slider. No history, AI or saved repos yet.
 
-**M3 — Parser breadth and persistence.** Remaining languages, including Scala, PHP, Ruby, Vue/Svelte/Astro components, CSS/SCSS and HTML; JNI and Protobuf bridges; header pairing; OPFS snapshots; "N files changed · Update"; export/import; the `ContentSource` interface; the demo build script and demo mode with two repos, including a check that range requests work on the host.
+**M3 — Parser breadth and persistence.** Remaining languages, including Scala, PHP, Ruby, Vue/Svelte/Astro components, CSS/SCSS and HTML; JNI and Protobuf bridges; header pairing; OPFS snapshots; "N files changed · Update"; export/import; the `ContentSource` interface; the sidebar reader; the demo build script and demo mode with two repos, including a check that range requests work on the host.
 
-**M4 — History and overlays.** Pack walker as chunked pool tasks; priority lanes and overlay promotion (§3.1); partial-overlay display; Recency, Ownership, Reach, Knowledge risk, Tests; search; sidebar reader.
+**M4 — History and overlays.** Pack walker as chunked pool tasks; priority lanes and overlay promotion (§3.1); partial-overlay display; Recency, Ownership, Reach, Knowledge risk, Tests; search.
 
 **M5 — AI.** Consent prompt; digest builder; server routes and provider adapter; city summaries; POIs with beams and detail buttons; tour with camera choreography.
 
@@ -930,9 +952,9 @@ Targets are goals to validate in M0, not measurements.
 | City count | `round(3.5·log10(files) − 2.2)`: 4 at 50, 8 at 1k, 12 at 10k. Districts use the same curve per city, minimum 5 files. |
 | Physics | Three tiers; nodes interact only with siblings. |
 | Height | All spheres rest on the plane. Height is sphere size. |
-| Sphere size | 70% lines of code (volume-proportional), 30% importance percentile, mixed as radii. |
+| Sphere size | Set by lines of code (volume-proportional). Importance enlarges it by up to 50%, on a curve that favours the most important files. |
 | Importance | PageRank over the dependency graph, as a percentile across the repo. |
-| Glow | By importance alone, from the 70th percentile up; fades under overlays. |
+| Glow | By importance alone; about the top 10% of files glow (from the 90th percentile). Fades under overlays. |
 | Sphere look | Small stars: file-type colour dominates, lit core on every sphere, corona and ground light by importance. Ambient stellar-wind particles; bursts on single and double click (§8.6). |
 | Edges | Stored in full; ribbons when zoomed out (one band per pair, two-way pulses); spheres always individual at S and M. Pulses of energy travel from the dependent file to the file it depends on. |
 | When the map appears | At the stable point (both passes, clustered, settled), or after 30 s with imports plus partial call edges. Waiting screen is the wisp background with a progress pill, no grid. |
@@ -952,12 +974,12 @@ Targets are goals to validate in M0, not measurements.
 ### Risks
 
 - **Pack reading in the browser is unmeasured.** The 5–10× gain is from Node. If `FileReaderSync` slice reads carry a high per-call cost, larger chunks are the lever; if the gain disappears, the working-tree path remains.
-- **The wait before the reveal.** If the slow pass regularly exceeds 30 s at M, most users see the imports-only structure first and have to press Apply. M0 spike 2 measures this; the levers are the time cap, more workers, or moving scanners to WASM.
+- **The wait before the reveal.** If the slow pass regularly exceeds 30 s at M, most users see the imports-only structure first and have to press Apply. The spike measured 2.3–12.7 s on an 8-core desktop and projects about 21 s for a Dart-heavy 10k-file repo on a 4-core laptop, so slower machines are close to the limit. The levers are the time cap and the per-language cost of tree-sitter.
 - **Imports-only structure** is weak for Java, Kotlin, C#, Go and Swift, which is exactly when the escape hatch matters most. The map is labelled as provisional in that state.
-- **Git history in the browser** is the least proven piece. Fallback: `isomorphic-git` for small histories with a depth cap; worst case, history overlays are unavailable for very long histories.
+- **Git history is proven in Node, not yet in a browser.** The walker's output matches `git log` on four repos, but it has not run end to end in a browser on a disk-backed pack, where each read is a cross-process call. If that cost is high, the levers are page size and the commit cap.
 - **Symbol linking accuracy** varies by language (weakest: C#, Swift, macro-heavy C++). Confidence is stored per edge so weak links are discounted.
 - **Library dependence for Louvain.** The dendrogram's per-level format is undocumented; if it cannot give nested levels cleanly, districts fall back to per-city runs, and a port is the last resort.
-- **tree-sitter payload** (several MB for large grammars), mitigated by lazy per-language loading.
+- **tree-sitter quality, not size.** All 14 grammars are 1.4 MB compressed, so payload is not a concern. Syntax errors are: 29% of tensorflow's C++ files, 16% of flutter's Dart and 24% of react's Flow-typed JS had parse errors in the spike, which will cost call edges in those languages.
 
 ---
 

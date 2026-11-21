@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.fixtures/
+.worktrees/
+.claude/worktrees/
+.env
+.env.local
+.vercel/
+test-results/
+playwright-report/
+out/
+*.log
+CHANGES.md

@@ -2,6 +2,12 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "gitmap",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["node_modules/vite/bin/vite.js", "--port", "5175", "--strictPort"],
+      "port": 5175
+    },
+    {
       "name": "render-spike",
       "runtimeExecutable": "node",
       "runtimeArgs": ["spikes/node_modules/vite/bin/vite.js", "--config", "spikes/render/vite.config.ts"],

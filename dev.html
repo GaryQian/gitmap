@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gitmap dev harness</title>
+    <style>
+      html, body { height: 100%; margin: 0; background: #1c1c1c; overflow: hidden; font: 12px system-ui, sans-serif; color: #edeff2; }
+      #scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+      #hud { position: fixed; left: 12px; top: 12px; padding: 8px 12px; background: rgba(28, 28, 28, 0.6); border: 1px solid rgba(237, 239, 242, 0.14); border-radius: 12px; white-space: pre; pointer-events: none; }
+    </style>
+  </head>
+  <body>
+    <canvas id="scene"></canvas>
+    <div id="hud">dev harness</div>
+    <script type="module" src="/src/dev/main.ts"></script>
+  </body>
+</html>

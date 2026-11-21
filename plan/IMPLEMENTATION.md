@@ -23,6 +23,8 @@ How to build what [PLAN.md](PLAN.md) describes, as fast as possible, using paral
 
 ## 3. Test policy for this pass
 
+**Go light in this pass (decided 2026-11-21).** The aim is to stay nimble and catch large regressions, not to pin behaviour. Each package ships a handful of tests: one or two that prove its main path works end to end, plus any property that would silently corrupt the map if it broke. The table below is the menu to pick from, not a checklist to complete. The fuller suite is written in the final step after M6 (§6, "Final step").
+
 **Tools:** Vitest for unit and pipeline tests in Node. Playwright for one browser smoke test per milestone, from M1.
 
 **The pipeline runs headless in Node** (parse → resolve → cluster → settle → snapshot). This is what makes tests fast, and the demo build script needs it anyway. Browser-only pieces sit behind `ContentSource`, `GitFs` and the pool, each with a Node implementation.
@@ -57,7 +59,7 @@ Tests read tunable values from `config.json` instead of repeating them, so retun
 
 ## 4. M0 findings built in from the start
 
-From [M0-RESULTS.md](M0-RESULTS.md). These override PLAN.md where they differ; PLAN.md is updated at the first integration.
+From [M0-RESULTS.md](M0-RESULTS.md). PLAN.md was updated to match these on 2026-11-21.
 
 | Finding | What we build |
 |---|---|
@@ -217,6 +219,10 @@ Small on purpose. Nothing here is clever; it exists so sixteen agents can start 
 | 6E | Benchmarks, including integrated graphics and the browser read paths |
 | 6F | Test hardening: lock the decisions that have settled |
 
+### Final step — more tests
+
+After M6, once behaviour has settled. Work through the "Test now" table in §3 and fill what the light first pass skipped: the per-language edge fixtures, the patch-equivalence property test at full strength, scheduler and reveal-gate edge cases, history against `git log`, content hashing, the AI validation paths, and a Playwright smoke test per milestone. 6F (locking settled decisions) folds into this step.
+
 ## 7. Launch order
 
 Four rounds of parallel work, each followed by integration.
@@ -228,6 +234,9 @@ Four rounds of parallel work, each followed by integration.
 | **2** | 2A–2H, **plus** 3A–3J, 4A, 5A | Language plug-ins need only the plug-in contract that 1D proved; 4A needs only the pool and git access; 5A needs nothing |
 | **3** | 3K–3Q, 4B–4E, 5B | Need M2's pipeline, chrome and slow pass |
 | **4** | 5C–5F, then 6A–6F | Need the AI contracts filled and a complete app to polish |
+| **5** | Final step: more tests | Needs settled behaviour to lock down |
+
+The lead commits and pushes after each round's integration.
 
 **Critical path:** Round 0 → 1D/1E/1F/1G → integration 1I → 2A/2D/2E/2F → integration 2I. That chain produces the first showable version; everything else hangs off it and cannot delay it.
 
@@ -241,4 +250,4 @@ Each has a default so work proceeds. All are config values.
 |---|---|---|
 | File placement: size vs connectivity | `0.5`, as you specified | The spike found 0.5 leaves 11–17% of files overlapping at 10k after settling and suggests ~0.8. The physics test reports overlap so we can decide with numbers. |
 | Merge commits in history | Skip them | Diffing a merge against its first parent credits it with everything the branch brought in and makes its date win "last modified". The alternatives are walking the mainline only, or keeping the double count. |
-| History depth | 50,000 commits with a ~20 s budget | PLAN.md says 20,000; the spike recommends 50,000 plus a "Load full history" action. |
+| History depth | 50,000 commits with a ~20 s budget | PLAN.md originally said 20,000; the spike recommends 50,000 plus a "Load full history" action, and PLAN.md now uses that. |

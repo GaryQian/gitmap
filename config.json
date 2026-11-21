@@ -1,0 +1,79 @@
+{
+  "app": { "title": "Gitmap" },
+  "settings": { "appearance": "dark", "particles": true },
+  "theme": {
+    "fonts": { "ui": "Jost", "code": "Commit Mono" },
+    "dark": { "void": "#1C1C1C", "dustCool": "#4B5158", "dustWarm": "#6B5A4C", "text": "#EDEFF2", "halo": "#9FD8FF", "warm": "#FFD9A0", "sidebar": "#141414" },
+    "light": { "void": "#F6F8FC", "dustCool": "#D3DAE3", "dustWarm": "#F3DCC6", "text": "#1E2126", "halo": "#2A6FDB", "warm": "#E8A23A", "sidebar": "#FFFFFF" },
+    "pill": { "opacity": 0.6, "borderOpacity": 0.14, "blurPx": 10, "cardRadiusPx": 20 },
+    "wisps": { "contrast": 0.25, "driftSpeed": 0.02, "parallax": 0.05, "stars": true }
+  },
+  "scheduler": {
+    "workerShare": 0.5, "maxWorkers": 14, "memoryCapMB": 2048, "memoryPerWorkerMB": 140,
+    "taskTargetMs": 40, "parseFloorWorkers": 1, "historyChunkCommits": 200, "parkWhenFrameMsOver": 20
+  },
+  "parser": {
+    "version": "1",
+    "source": "pack", "packChunkBytes": 1048576, "batchBytes": 2097152, "maxFileBytes": 1048576, "retainBytes": 268435456,
+    "excerptBytes": 4096,
+    "exclude": [
+      "**/vendor/**", "**/node_modules/**", "**/third_party/**", "**/dist/**",
+      "**/*.min.js", "**/*.min.css", "**/*.map",
+      "**/package-lock.json", "**/yarn.lock", "**/pnpm-lock.yaml", "**/*.lock",
+      "**/*.generated.*", "**/*.pb.go", "**/*_pb2.py"
+    ],
+    "binaryExtensions": [
+      "png", "jpg", "jpeg", "gif", "webp", "ico", "bmp", "tiff", "psd", "pdf", "zip", "gz", "tar", "7z", "jar", "war",
+      "class", "so", "dll", "dylib", "exe", "bin", "o", "a", "lib", "wasm", "woff", "woff2", "ttf", "otf", "eot",
+      "mp3", "mp4", "mov", "wav", "ogg", "webm", "avi", "db", "sqlite", "pyc", "icns", "keystore", "tflite", "pb",
+      "npy", "npz", "h5", "onnx"
+    ],
+    "includeUntracked": false, "workingTreeCheck": true,
+    "bridges": ["jni", "protobuf"]
+  },
+  "reveal": { "maxWaitSeconds": 30, "perFileTimeoutMs": 2000, "settleMaxMs": 3000, "growMs": 2000 },
+  "history": { "maxCommits": 50000, "timeBudgetSeconds": 20, "merges": "skip", "pageBytes": 262144, "objectCacheBytes": 33554432 },
+  "clustering": {
+    "citiesPerDecade": 3.5, "cityOffset": -2.2, "minCities": 1, "maxCities": 20,
+    "districtsPerDecade": 3.5, "districtOffset": -2.2, "minDistrictSize": 5,
+    "resolution": 1.0, "seed": 1, "directoryAffinity": 0.1, "hubDamping": true
+  },
+  "physics": {
+    "sliceMs": 8, "reheat": 0.3, "velocityDecay": 0.6, "settleTicks": 150, "alphaMin": 0.001,
+    "city": { "gap": 40, "linkStrength": 0.5, "charge": -60, "gravity": 0.02 },
+    "district": { "pad": 6, "linkStrength": 0.6, "externalPull": 0.15, "lloyd": 0.1 },
+    "file": { "pad": 0.5, "sizeVsConnectivity": 0.5, "baseStrength": 0.1 }
+  },
+  "visual": {
+    "radiusMin": 0.8, "radiusMax": 12, "sizeScale": 0.8, "importanceBoost": 0.5, "importanceCurve": 2,
+    "glowFromPct": 0.9, "selectedScale": 1.3,
+    "languageColors": {
+      "ts": "#3178c6", "js": "#e8c53a", "python": "#3fa672", "c": "#7d8fa6", "cpp": "#d9486e", "objc": "#5aa9e6",
+      "java": "#e0803a", "kotlin": "#a97bff", "scala": "#d73a4a", "csharp": "#2fb37c", "go": "#00add8", "rust": "#dea584",
+      "dart": "#2bb7f6", "swift": "#f05138", "php": "#8892bf", "ruby": "#cc342d", "vue": "#41b883", "svelte": "#ff5d2a",
+      "astro": "#b845ed", "css": "#c6538c", "html": "#e34c26", "other": "#8a9099"
+    },
+    "grid": { "cell": 50, "opacity": 0.06 },
+    "star": { "coreGain": [2.4, 5.0], "coreTightness": [13, 8], "limbDarkening": 0.62, "flicker": 0.07, "glowFalloff": [8, 2.2], "spikesFromPct": 0.975, "breatheMs": 1500 },
+    "particles": { "ambient": 4000, "voidDustShare": 0.2, "selectBurst": 40, "openBurst": 150 },
+    "edgePulse": { "speed": 120, "tailLength": 30, "restSeconds": [0.5, 2.4], "flickerHz": 10, "traceOpacity": 0.16 }
+  },
+  "legend": { "minLinesDefault": 0 },
+  "demo": { "repos": [] },
+  "render": { "ambientEdges": 1500, "edgeBudget": 50000, "maxPills": 150, "patchBudgetMs": 4, "adaptiveDpr": true, "maxDpr": 2 },
+  "interaction": { "jiggleMax": 0.35, "jiggleSettleMs": 800, "hoverDelayMs": 80 },
+  "camera": { "minDistance": 10, "maxDistance": 5000, "flyMs": 900, "defaultTilt": 0.55 },
+  "overlays": {
+    "enabled": ["recency", "ownership", "reach", "knowledgeRisk", "tests"],
+    "knowledgeRisk": { "minCommits": 3 },
+    "tests": { "patterns": ["**/tests/**", "**/test/**", "**/__tests__/**", "**/*_test.*", "**/*.test.*", "**/*.spec.*", "**/*Test.java", "**/test_*.py"] }
+  },
+  "ai": {
+    "enabled": true, "provider": "anthropic",
+    "models": { "synthesis": "claude-opus-5-5", "bulk": "claude-haiku-5-5" },
+    "digestTokens": 60000, "maxInputTokens": 120000, "maxDetailCallsPerDigest": 60,
+    "budgetSplit": { "structure": 0.35, "skeletons": 0.35, "docs": 0.30 },
+    "pois": { "perCity": 1, "repoWide": 3, "max": 15 },
+    "tour": { "minSteps": 3, "maxSteps": 6 }
+  }
+}
