@@ -93,31 +93,55 @@ export class PackIndex {
   }
 }
 
+/**
+ * Two-generation cache with a byte budget (approximate LRU). Each generation holds up
+ * to max/2 bytes; when the young one fills it becomes the old one and the previous old
+ * generation is dropped wholesale. Hits in the old generation are promoted.
+ * (A Map-based LRU that evicts via map.keys().next() is O(deleted holes) in V8 and was
+ * measured to take ~50% of total walk time.)
+ */
 class Lru {
-  map = new Map<number, GitObject>();
-  bytes = 0;
+  young = new Map<number, GitObject>();
+  old = new Map<number, GitObject>();
+  youngBytes = 0;
+  oldBytes = 0;
   hits = 0;
   misses = 0;
   constructor(public max: number) {}
+  get bytes() {
+    return this.youngBytes + this.oldBytes;
+  }
   get(k: number): GitObject | undefined {
-    const v = this.map.get(k);
+    let v = this.young.get(k);
     if (v) {
-      this.map.delete(k);
-      this.map.set(k, v);
       this.hits++;
-    } else this.misses++;
-    return v;
+      return v;
+    }
+    v = this.old.get(k);
+    if (v) {
+      this.hits++;
+      this.old.delete(k);
+      this.oldBytes -= v.data.length + 80;
+      this.insert(k, v);
+      return v;
+    }
+    this.misses++;
+    return undefined;
   }
   set(k: number, v: GitObject) {
-    if (this.map.has(k)) return;
+    if (this.young.has(k)) return;
     const sz = v.data.length + 80;
     if (sz > this.max / 4) return;
-    this.map.set(k, v);
-    this.bytes += sz;
-    while (this.bytes > this.max) {
-      const [fk, fv] = this.map.entries().next().value!;
-      this.map.delete(fk);
-      this.bytes -= fv.data.length + 80;
+    this.insert(k, v);
+  }
+  private insert(k: number, v: GitObject) {
+    this.young.set(k, v);
+    this.youngBytes += v.data.length + 80;
+    if (this.youngBytes > this.max / 2) {
+      this.old = this.young;
+      this.oldBytes = this.youngBytes;
+      this.young = new Map();
+      this.youngBytes = 0;
     }
   }
 }

@@ -1,0 +1,102 @@
+{
+  "label": "flutter-c8",
+  "repo": "C:/Users/Gary/git/flutter",
+  "stoppedBy": "done",
+  "objects": 1171826,
+  "packs": 1,
+  "openMs": 152.3,
+  "idxLoadMs": 152.1,
+  "headTreeMs": 72.5,
+  "runMs": 11900.8,
+  "commits": 92682,
+  "commitsPerSec": 7788,
+  "commitReadMs": 2577.5,
+  "diffMs": 8390.8,
+  "treesRead": 1379611,
+  "treesPerCommit": 14.89,
+  "treeMB": 1097.2,
+  "filesTouched": 479145,
+  "paths": 32656,
+  "headFiles": 16356,
+  "headCoverage": 1,
+  "authors": 2509,
+  "authorFileEntries": 176955,
+  "coChangePairs": 843922,
+  "coChangeSkippedCommits": 1129,
+  "objectReads": 1472293,
+  "cacheHits": 1179653,
+  "cacheMisses": 824756,
+  "cacheHitRate": 0.5885,
+  "cacheMBAtEnd": 8,
+  "ioCalls": 7857,
+  "ioMB": 491,
+  "ioMs": 518.8,
+  "inflateCalls": 824756,
+  "inflateMs": 2899.6,
+  "inflateMBOut": 152,
+  "deltaCalls": 532116,
+  "deltaMs": 949.6,
+  "lookupMs": 769.9,
+  "avgChain": 1.35,
+  "maxChain": 49,
+  "byType": {
+    "commit": 92682,
+    "tree": 1379611,
+    "blob": 0,
+    "tag": 0
+  },
+  "peakRssMB": 496,
+  "peakHeapMB": 169,
+  "peakArrayBuffersMB": 154,
+  "checkpoints": [
+    {
+      "commits": 100,
+      "ms": 113,
+      "coverage": 0.0257,
+      "rssMB": 163
+    },
+    {
+      "commits": 500,
+      "ms": 209,
+      "coverage": 0.0833,
+      "rssMB": 190
+    },
+    {
+      "commits": 1000,
+      "ms": 333,
+      "coverage": 0.1522,
+      "rssMB": 209
+    },
+    {
+      "commits": 2000,
+      "ms": 505,
+      "coverage": 0.333,
+      "rssMB": 249
+    },
+    {
+      "commits": 5000,
+      "ms": 984,
+      "coverage": 0.4706,
+      "rssMB": 291
+    },
+    {
+      "commits": 10000,
+      "ms": 1869,
+      "coverage": 0.668,
+      "rssMB": 288
+    },
+    {
+      "commits": 20000,
+      "ms": 3403,
+      "coverage": 0.8781,
+      "rssMB": 375
+    },
+    {
+      "commits": 50000,
+      "ms": 6774,
+      "coverage": 0.9326,
+      "rssMB": 399
+    }
+  ],
+  "options": "--label flutter-c8 --cache-mb 8"
+}

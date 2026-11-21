@@ -67,6 +67,8 @@ const summary = {
   ioCalls: s.io.calls,
   ioMB: +(s.io.bytes / 1048576).toFixed(1),
   ioMs: +s.io.ms.toFixed(1),
+  ioMaxEndMB: +((s.io.maxEnd ?? 0) / 1048576).toFixed(1),
+  packMB: +(h.odb.packs.reduce((a, p) => a + p.file.fileSize, 0) / 1048576).toFixed(1),
   inflateCalls: s.inflateCalls,
   inflateMs: +s.inflateMs.toFixed(1),
   inflateMBOut: +(s.inflateBytesOut / 1048576).toFixed(1),

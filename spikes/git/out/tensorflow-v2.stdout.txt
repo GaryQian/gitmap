@@ -1,0 +1,154 @@
+[tensorflow-v2] 5000 commits 1.6s 3119/s rss=381MB
+[tensorflow-v2] 10000 commits 3.3s 3032/s rss=471MB
+[tensorflow-v2] 15000 commits 4.4s 3410/s rss=478MB
+[tensorflow-v2] 20000 commits 5.3s 3758/s rss=511MB
+[tensorflow-v2] 25000 commits 6.2s 4002/s rss=531MB
+[tensorflow-v2] 30000 commits 7.5s 4012/s rss=540MB
+[tensorflow-v2] 35000 commits 8.7s 4031/s rss=525MB
+[tensorflow-v2] 40000 commits 9.8s 4090/s rss=521MB
+[tensorflow-v2] 45000 commits 11.0s 4103/s rss=570MB
+[tensorflow-v2] 50000 commits 12.4s 4045/s rss=587MB
+[tensorflow-v2] 55000 commits 14.0s 3915/s rss=572MB
+[tensorflow-v2] 60000 commits 15.7s 3822/s rss=545MB
+[tensorflow-v2] 65000 commits 17.3s 3751/s rss=599MB
+[tensorflow-v2] 70000 commits 18.8s 3731/s rss=613MB
+[tensorflow-v2] 75000 commits 20.0s 3755/s rss=613MB
+[tensorflow-v2] 80000 commits 21.1s 3787/s rss=620MB
+[tensorflow-v2] 85000 commits 22.3s 3816/s rss=658MB
+[tensorflow-v2] 90000 commits 23.6s 3815/s rss=626MB
+[tensorflow-v2] 95000 commits 25.2s 3774/s rss=634MB
+[tensorflow-v2] 100000 commits 27.0s 3700/s rss=667MB
+[tensorflow-v2] 105000 commits 28.9s 3633/s rss=699MB
+[tensorflow-v2] 110000 commits 30.4s 3623/s rss=705MB
+[tensorflow-v2] 115000 commits 31.7s 3625/s rss=708MB
+[tensorflow-v2] 120000 commits 33.2s 3618/s rss=713MB
+[tensorflow-v2] 125000 commits 34.9s 3585/s rss=714MB
+[tensorflow-v2] 130000 commits 36.5s 3558/s rss=726MB
+[tensorflow-v2] 135000 commits 38.0s 3552/s rss=736MB
+[tensorflow-v2] 140000 commits 39.9s 3509/s rss=795MB
+[tensorflow-v2] 145000 commits 41.3s 3515/s rss=806MB
+[tensorflow-v2] 150000 commits 42.9s 3496/s rss=807MB
+[tensorflow-v2] 155000 commits 44.6s 3476/s rss=811MB
+[tensorflow-v2] 160000 commits 46.0s 3475/s rss=802MB
+[tensorflow-v2] 165000 commits 47.6s 3466/s rss=817MB
+[tensorflow-v2] 170000 commits 49.0s 3470/s rss=827MB
+[tensorflow-v2] 175000 commits 50.0s 3499/s rss=828MB
+[tensorflow-v2] 180000 commits 51.1s 3525/s rss=830MB
+[tensorflow-v2] 185000 commits 51.8s 3570/s rss=832MB
+[tensorflow-v2] 190000 commits 52.5s 3620/s rss=842MB
+[tensorflow-v2] 195000 commits 53.2s 3666/s rss=855MB
+[tensorflow-v2] 200000 commits 54.0s 3702/s rss=858MB
+{
+  "label": "tensorflow-v2",
+  "repo": "C:/Users/Gary/git/tensorflow",
+  "stoppedBy": "done",
+  "objects": 2308634,
+  "packs": 1,
+  "openMs": 311.2,
+  "idxLoadMs": 311,
+  "headTreeMs": 134.8,
+  "runMs": 54423.9,
+  "commits": 204106,
+  "commitsPerSec": 3750,
+  "commitReadMs": 5407.7,
+  "diffMs": 45275.3,
+  "treesRead": 4262975,
+  "treesPerCommit": 20.89,
+  "treeMB": 10166.1,
+  "filesTouched": 5766906,
+  "paths": 86553,
+  "headFiles": 38312,
+  "headCoverage": 1,
+  "authors": 5099,
+  "authorFileEntries": 3125634,
+  "coChangePairs": 1849669,
+  "coChangeSkippedCommits": 4016,
+  "objectReads": 4467081,
+  "cacheHits": 4046830,
+  "cacheMisses": 1813316,
+  "cacheHitRate": 0.6906,
+  "cacheMBAtEnd": 49.6,
+  "ioCalls": 98961,
+  "ioMB": 6185,
+  "ioMs": 4172.3,
+  "inflateCalls": 1813316,
+  "inflateMs": 12869.6,
+  "inflateMBOut": 472.4,
+  "deltaCalls": 1393065,
+  "deltaMs": 6311.2,
+  "lookupMs": 2664.8,
+  "avgChain": 1.77,
+  "maxChain": 50,
+  "byType": {
+    "commit": 204106,
+    "tree": 4262975,
+    "blob": 0,
+    "tag": 0
+  },
+  "peakRssMB": 873,
+  "peakHeapMB": 406,
+  "peakArrayBuffersMB": 248,
+  "checkpoints": [
+    {
+      "commits": 100,
+      "ms": 170,
+      "coverage": 0.0132,
+      "rssMB": 272
+    },
+    {
+      "commits": 500,
+      "ms": 291,
+      "coverage": 0.0589,
+      "rssMB": 268
+    },
+    {
+      "commits": 1000,
+      "ms": 384,
+      "coverage": 0.0871,
+      "rssMB": 294
+    },
+    {
+      "commits": 2000,
+      "ms": 635,
+      "coverage": 0.1522,
+      "rssMB": 355
+    },
+    {
+      "commits": 5000,
+      "ms": 1604,
+      "coverage": 0.3493,
+      "rssMB": 381
+    },
+    {
+      "commits": 10000,
+      "ms": 3299,
+      "coverage": 0.4395,
+      "rssMB": 471
+    },
+    {
+      "commits": 20000,
+      "ms": 5322,
+      "coverage": 0.4983,
+      "rssMB": 511
+    },
+    {
+      "commits": 50000,
+      "ms": 12361,
+      "coverage": 0.836,
+      "rssMB": 587
+    },
+    {
+      "commits": 100000,
+      "ms": 27029,
+      "coverage": 0.8604,
+      "rssMB": 667
+    },
+    {
+      "commits": 200000,
+      "ms": 54025,
+      "coverage": 0.9994,
+      "rssMB": 858
+    }
+  ],
+  "options": "--label tensorflow-v2 --dump git/out/tensorflow.files.json --time-limit-s 600"
+}

@@ -1,0 +1,102 @@
+{
+  "label": "flutter-v2-c32",
+  "repo": "C:/Users/Gary/git/flutter",
+  "stoppedBy": "done",
+  "objects": 1171826,
+  "packs": 1,
+  "openMs": 152.5,
+  "idxLoadMs": 152.2,
+  "headTreeMs": 68.6,
+  "runMs": 9218.7,
+  "commits": 92682,
+  "commitsPerSec": 10054,
+  "commitReadMs": 2137.1,
+  "diffMs": 6214.2,
+  "treesRead": 1379611,
+  "treesPerCommit": 14.89,
+  "treeMB": 1097.2,
+  "filesTouched": 479145,
+  "paths": 32656,
+  "headFiles": 16356,
+  "headCoverage": 1,
+  "authors": 2509,
+  "authorFileEntries": 176955,
+  "coChangePairs": 843922,
+  "coChangeSkippedCommits": 1129,
+  "objectReads": 1472293,
+  "cacheHits": 1199719,
+  "cacheMisses": 756449,
+  "cacheHitRate": 0.6133,
+  "cacheMBAtEnd": 30.8,
+  "ioCalls": 9637,
+  "ioMB": 602.3,
+  "ioMs": 591.7,
+  "inflateCalls": 756449,
+  "inflateMs": 2555.7,
+  "inflateMBOut": 135.5,
+  "deltaCalls": 483875,
+  "deltaMs": 880.1,
+  "lookupMs": 688.3,
+  "avgChain": 1.26,
+  "maxChain": 49,
+  "byType": {
+    "commit": 92682,
+    "tree": 1379611,
+    "blob": 0,
+    "tag": 0
+  },
+  "peakRssMB": 519,
+  "peakHeapMB": 182,
+  "peakArrayBuffersMB": 161,
+  "checkpoints": [
+    {
+      "commits": 100,
+      "ms": 100,
+      "coverage": 0.0257,
+      "rssMB": 164
+    },
+    {
+      "commits": 500,
+      "ms": 167,
+      "coverage": 0.0833,
+      "rssMB": 190
+    },
+    {
+      "commits": 1000,
+      "ms": 275,
+      "coverage": 0.1522,
+      "rssMB": 201
+    },
+    {
+      "commits": 2000,
+      "ms": 429,
+      "coverage": 0.333,
+      "rssMB": 241
+    },
+    {
+      "commits": 5000,
+      "ms": 868,
+      "coverage": 0.4706,
+      "rssMB": 303
+    },
+    {
+      "commits": 10000,
+      "ms": 1682,
+      "coverage": 0.668,
+      "rssMB": 301
+    },
+    {
+      "commits": 20000,
+      "ms": 2861,
+      "coverage": 0.8781,
+      "rssMB": 368
+    },
+    {
+      "commits": 50000,
+      "ms": 5595,
+      "coverage": 0.9326,
+      "rssMB": 442
+    }
+  ],
+  "options": "--label flutter-v2-c32 --cache-mb 32"
+}

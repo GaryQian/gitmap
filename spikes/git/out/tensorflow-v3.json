@@ -1,0 +1,114 @@
+{
+  "label": "tensorflow-v3",
+  "repo": "C:/Users/Gary/git/tensorflow",
+  "stoppedBy": "done",
+  "objects": 2308634,
+  "packs": 1,
+  "openMs": 314.4,
+  "idxLoadMs": 314,
+  "headTreeMs": 149.8,
+  "runMs": 52203.6,
+  "commits": 204106,
+  "commitsPerSec": 3910,
+  "commitReadMs": 5334.4,
+  "diffMs": 43113.1,
+  "treesRead": 4262975,
+  "treesPerCommit": 20.89,
+  "treeMB": 10166.1,
+  "filesTouched": 5766906,
+  "paths": 86553,
+  "headFiles": 38312,
+  "headCoverage": 1,
+  "authors": 5099,
+  "authorFileEntries": 3125634,
+  "coChangePairs": 1849669,
+  "coChangeSkippedCommits": 4016,
+  "objectReads": 4467081,
+  "cacheHits": 4046830,
+  "cacheMisses": 1813316,
+  "cacheHitRate": 0.6906,
+  "cacheMBAtEnd": 49.6,
+  "ioCalls": 98961,
+  "ioMB": 6185,
+  "ioMs": 3857.7,
+  "inflateCalls": 1813316,
+  "inflateMs": 12954.5,
+  "inflateMBOut": 472.4,
+  "deltaCalls": 1393065,
+  "deltaMs": 6439.6,
+  "lookupMs": 2606.2,
+  "avgChain": 1.77,
+  "maxChain": 50,
+  "byType": {
+    "commit": 204106,
+    "tree": 4262975,
+    "blob": 0,
+    "tag": 0
+  },
+  "peakRssMB": 869,
+  "peakHeapMB": 420,
+  "peakArrayBuffersMB": 247,
+  "checkpoints": [
+    {
+      "commits": 100,
+      "ms": 188,
+      "coverage": 0.0132,
+      "rssMB": 274
+    },
+    {
+      "commits": 500,
+      "ms": 311,
+      "coverage": 0.0589,
+      "rssMB": 271
+    },
+    {
+      "commits": 1000,
+      "ms": 401,
+      "coverage": 0.0871,
+      "rssMB": 295
+    },
+    {
+      "commits": 2000,
+      "ms": 651,
+      "coverage": 0.1522,
+      "rssMB": 355
+    },
+    {
+      "commits": 5000,
+      "ms": 1619,
+      "coverage": 0.3493,
+      "rssMB": 385
+    },
+    {
+      "commits": 10000,
+      "ms": 3229,
+      "coverage": 0.4395,
+      "rssMB": 451
+    },
+    {
+      "commits": 20000,
+      "ms": 5114,
+      "coverage": 0.4983,
+      "rssMB": 499
+    },
+    {
+      "commits": 50000,
+      "ms": 12084,
+      "coverage": 0.836,
+      "rssMB": 570
+    },
+    {
+      "commits": 100000,
+      "ms": 25341,
+      "coverage": 0.8604,
+      "rssMB": 661
+    },
+    {
+      "commits": 200000,
+      "ms": 51723,
+      "coverage": 0.9994,
+      "rssMB": 851
+    }
+  ],
+  "options": "--label tensorflow-v3 --dump git/out/tensorflow.files.json"
+}

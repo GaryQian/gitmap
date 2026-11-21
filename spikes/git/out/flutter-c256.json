@@ -1,0 +1,102 @@
+{
+  "label": "flutter-c256",
+  "repo": "C:/Users/Gary/git/flutter",
+  "stoppedBy": "done",
+  "objects": 1171826,
+  "packs": 1,
+  "openMs": 161.2,
+  "idxLoadMs": 160.9,
+  "headTreeMs": 78,
+  "runMs": 51052.2,
+  "commits": 92682,
+  "commitsPerSec": 1815,
+  "commitReadMs": 8102.6,
+  "diffMs": 41665.2,
+  "treesRead": 1379611,
+  "treesPerCommit": 14.89,
+  "treeMB": 1097.2,
+  "filesTouched": 479145,
+  "paths": 32656,
+  "headFiles": 16356,
+  "headCoverage": 1,
+  "authors": 2509,
+  "authorFileEntries": 176955,
+  "coChangePairs": 843922,
+  "coChangeSkippedCommits": 1129,
+  "objectReads": 1472293,
+  "cacheHits": 1214103,
+  "cacheMisses": 729296,
+  "cacheHitRate": 0.6247,
+  "cacheMBAtEnd": 256,
+  "ioCalls": 5262,
+  "ioMB": 328.8,
+  "ioMs": 449.5,
+  "inflateCalls": 729296,
+  "inflateMs": 3643.4,
+  "inflateMBOut": 129.7,
+  "deltaCalls": 471106,
+  "deltaMs": 1744.4,
+  "lookupMs": 1121.9,
+  "avgChain": 1.24,
+  "maxChain": 49,
+  "byType": {
+    "commit": 92682,
+    "tree": 1379611,
+    "blob": 0,
+    "tag": 0
+  },
+  "peakRssMB": 926,
+  "peakHeapMB": 281,
+  "peakArrayBuffersMB": 381,
+  "checkpoints": [
+    {
+      "commits": 100,
+      "ms": 112,
+      "coverage": 0.0257,
+      "rssMB": 165
+    },
+    {
+      "commits": 500,
+      "ms": 187,
+      "coverage": 0.0833,
+      "rssMB": 190
+    },
+    {
+      "commits": 1000,
+      "ms": 335,
+      "coverage": 0.1522,
+      "rssMB": 211
+    },
+    {
+      "commits": 2000,
+      "ms": 545,
+      "coverage": 0.333,
+      "rssMB": 251
+    },
+    {
+      "commits": 5000,
+      "ms": 1041,
+      "coverage": 0.4706,
+      "rssMB": 317
+    },
+    {
+      "commits": 10000,
+      "ms": 2028,
+      "coverage": 0.668,
+      "rssMB": 418
+    },
+    {
+      "commits": 20000,
+      "ms": 3344,
+      "coverage": 0.8781,
+      "rssMB": 624
+    },
+    {
+      "commits": 50000,
+      "ms": 10146,
+      "coverage": 0.9326,
+      "rssMB": 781
+    }
+  ],
+  "options": "--label flutter-c256 --cache-mb 256"
+}

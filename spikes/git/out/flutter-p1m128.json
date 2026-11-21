@@ -1,0 +1,104 @@
+{
+  "label": "flutter-p1m128",
+  "repo": "C:/Users/Gary/git/flutter",
+  "stoppedBy": "done",
+  "objects": 1171826,
+  "packs": 1,
+  "openMs": 151.5,
+  "idxLoadMs": 151.1,
+  "headTreeMs": 75.4,
+  "runMs": 9092.8,
+  "commits": 92682,
+  "commitsPerSec": 10193,
+  "commitReadMs": 2192.3,
+  "diffMs": 6039.2,
+  "treesRead": 1379611,
+  "treesPerCommit": 14.89,
+  "treeMB": 1097.2,
+  "filesTouched": 479145,
+  "paths": 32656,
+  "headFiles": 16356,
+  "headCoverage": 1,
+  "authors": 2509,
+  "authorFileEntries": 176955,
+  "coChangePairs": 843922,
+  "coChangeSkippedCommits": 1129,
+  "objectReads": 1472293,
+  "cacheHits": 1207381,
+  "cacheMisses": 739869,
+  "cacheHitRate": 0.62,
+  "cacheMBAtEnd": 38.2,
+  "ioCalls": 1244,
+  "ioMB": 1243.3,
+  "ioMs": 535.1,
+  "ioMaxEndMB": 455.3,
+  "packMB": 455.3,
+  "inflateCalls": 739869,
+  "inflateMs": 2667.5,
+  "inflateMBOut": 131.8,
+  "deltaCalls": 474957,
+  "deltaMs": 889.8,
+  "lookupMs": 652.2,
+  "avgChain": 1.25,
+  "maxChain": 49,
+  "byType": {
+    "commit": 92682,
+    "tree": 1379611,
+    "blob": 0,
+    "tag": 0
+  },
+  "peakRssMB": 603,
+  "peakHeapMB": 184,
+  "peakArrayBuffersMB": 243,
+  "checkpoints": [
+    {
+      "commits": 100,
+      "ms": 111,
+      "coverage": 0.0257,
+      "rssMB": 189
+    },
+    {
+      "commits": 500,
+      "ms": 192,
+      "coverage": 0.0833,
+      "rssMB": 227
+    },
+    {
+      "commits": 1000,
+      "ms": 286,
+      "coverage": 0.1522,
+      "rssMB": 266
+    },
+    {
+      "commits": 2000,
+      "ms": 444,
+      "coverage": 0.333,
+      "rssMB": 273
+    },
+    {
+      "commits": 5000,
+      "ms": 844,
+      "coverage": 0.4706,
+      "rssMB": 360
+    },
+    {
+      "commits": 10000,
+      "ms": 1610,
+      "coverage": 0.668,
+      "rssMB": 422
+    },
+    {
+      "commits": 20000,
+      "ms": 2785,
+      "coverage": 0.8781,
+      "rssMB": 502
+    },
+    {
+      "commits": 50000,
+      "ms": 5511,
+      "coverage": 0.9326,
+      "rssMB": 532
+    }
+  ],
+  "options": "--label flutter-p1m128 --page-kb 1024 --max-pages 128"
+}

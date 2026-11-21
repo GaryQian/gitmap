@@ -1,0 +1,102 @@
+{
+  "label": "flutter-c16b",
+  "repo": "C:/Users/Gary/git/flutter",
+  "stoppedBy": "done",
+  "objects": 1171826,
+  "packs": 1,
+  "openMs": 156.4,
+  "idxLoadMs": 155.8,
+  "headTreeMs": 74.8,
+  "runMs": 13690.9,
+  "commits": 92682,
+  "commitsPerSec": 6770,
+  "commitReadMs": 2815.1,
+  "diffMs": 9922,
+  "treesRead": 1379611,
+  "treesPerCommit": 14.89,
+  "treeMB": 1097.2,
+  "filesTouched": 479145,
+  "paths": 32656,
+  "headFiles": 16356,
+  "headCoverage": 1,
+  "authors": 2509,
+  "authorFileEntries": 176955,
+  "coChangePairs": 843922,
+  "coChangeSkippedCommits": 1129,
+  "objectReads": 1472293,
+  "cacheHits": 1193652,
+  "cacheMisses": 772408,
+  "cacheHitRate": 0.6071,
+  "cacheMBAtEnd": 16,
+  "ioCalls": 7624,
+  "ioMB": 476.5,
+  "ioMs": 541.5,
+  "inflateCalls": 772408,
+  "inflateMs": 2802.2,
+  "inflateMBOut": 139.1,
+  "deltaCalls": 493767,
+  "deltaMs": 1058.7,
+  "lookupMs": 791.1,
+  "avgChain": 1.28,
+  "maxChain": 49,
+  "byType": {
+    "commit": 92682,
+    "tree": 1379611,
+    "blob": 0,
+    "tag": 0
+  },
+  "peakRssMB": 523,
+  "peakHeapMB": 188,
+  "peakArrayBuffersMB": 163,
+  "checkpoints": [
+    {
+      "commits": 100,
+      "ms": 105,
+      "coverage": 0.0257,
+      "rssMB": 163
+    },
+    {
+      "commits": 500,
+      "ms": 180,
+      "coverage": 0.0833,
+      "rssMB": 189
+    },
+    {
+      "commits": 1000,
+      "ms": 285,
+      "coverage": 0.1522,
+      "rssMB": 210
+    },
+    {
+      "commits": 2000,
+      "ms": 472,
+      "coverage": 0.333,
+      "rssMB": 256
+    },
+    {
+      "commits": 5000,
+      "ms": 1006,
+      "coverage": 0.4706,
+      "rssMB": 309
+    },
+    {
+      "commits": 10000,
+      "ms": 1974,
+      "coverage": 0.668,
+      "rssMB": 297
+    },
+    {
+      "commits": 20000,
+      "ms": 3391,
+      "coverage": 0.8781,
+      "rssMB": 403
+    },
+    {
+      "commits": 50000,
+      "ms": 7296,
+      "coverage": 0.9326,
+      "rssMB": 413
+    }
+  ],
+  "options": "--label flutter-c16b --cache-mb 16"
+}

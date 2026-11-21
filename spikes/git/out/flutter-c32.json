@@ -1,0 +1,102 @@
+{
+  "label": "flutter-c32",
+  "repo": "C:/Users/Gary/git/flutter",
+  "stoppedBy": "done",
+  "objects": 1171826,
+  "packs": 1,
+  "openMs": 153.3,
+  "idxLoadMs": 153,
+  "headTreeMs": 69.1,
+  "runMs": 15912.5,
+  "commits": 92682,
+  "commitsPerSec": 5824,
+  "commitReadMs": 3013.6,
+  "diffMs": 11952.2,
+  "treesRead": 1379611,
+  "treesPerCommit": 14.89,
+  "treeMB": 1097.2,
+  "filesTouched": 479145,
+  "paths": 32656,
+  "headFiles": 16356,
+  "headCoverage": 1,
+  "authors": 2509,
+  "authorFileEntries": 176955,
+  "coChangePairs": 843922,
+  "coChangeSkippedCommits": 1129,
+  "objectReads": 1472293,
+  "cacheHits": 1203926,
+  "cacheMisses": 747006,
+  "cacheHitRate": 0.6171,
+  "cacheMBAtEnd": 32,
+  "ioCalls": 7178,
+  "ioMB": 448.6,
+  "ioMs": 497.4,
+  "inflateCalls": 747006,
+  "inflateMs": 2659.9,
+  "inflateMBOut": 133.4,
+  "deltaCalls": 478639,
+  "deltaMs": 1031.2,
+  "lookupMs": 794.9,
+  "avgChain": 1.25,
+  "maxChain": 49,
+  "byType": {
+    "commit": 92682,
+    "tree": 1379611,
+    "blob": 0,
+    "tag": 0
+  },
+  "peakRssMB": 536,
+  "peakHeapMB": 183,
+  "peakArrayBuffersMB": 178,
+  "checkpoints": [
+    {
+      "commits": 100,
+      "ms": 111,
+      "coverage": 0.0257,
+      "rssMB": 167
+    },
+    {
+      "commits": 500,
+      "ms": 184,
+      "coverage": 0.0833,
+      "rssMB": 192
+    },
+    {
+      "commits": 1000,
+      "ms": 281,
+      "coverage": 0.1522,
+      "rssMB": 222
+    },
+    {
+      "commits": 2000,
+      "ms": 455,
+      "coverage": 0.333,
+      "rssMB": 258
+    },
+    {
+      "commits": 5000,
+      "ms": 1041,
+      "coverage": 0.4706,
+      "rssMB": 289
+    },
+    {
+      "commits": 10000,
+      "ms": 2075,
+      "coverage": 0.668,
+      "rssMB": 337
+    },
+    {
+      "commits": 20000,
+      "ms": 3745,
+      "coverage": 0.8781,
+      "rssMB": 445
+    },
+    {
+      "commits": 50000,
+      "ms": 8545,
+      "coverage": 0.9326,
+      "rssMB": 491
+    }
+  ],
+  "options": "--label flutter-c32 --cache-mb 32"
+}

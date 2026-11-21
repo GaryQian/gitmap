@@ -11,7 +11,7 @@ onmessage = (e) => {
   const blob = e.data.blob;
   const fr = new FileReaderSync();
   const res = {};
-  for (const len of [256, 4096, 65536, 1048576]) {
+  for (const len of [256, 4096, 65536, 262144, 1048576]) {
     const n = len >= 1048576 ? 200 : 5000;
     // warmup
     for (let i = 0; i < 50; i++) fr.readAsArrayBuffer(blob.slice(0, len));

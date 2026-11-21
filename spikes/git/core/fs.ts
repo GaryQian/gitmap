@@ -13,6 +13,7 @@ export interface GitFs {
 
 export interface IoStats {
   calls: number; // underlying readAt calls
+  maxEnd?: number; // highest byte offset read (pack working-set extent)
   bytes: number;
   ms: number;
 }
@@ -27,7 +28,9 @@ export const now: () => number =
  * pages and must not be mutated.
  */
 export class PagedFile {
+  // two-generation page cache (see Lru in odb.ts for why not a Map-order LRU)
   private pages = new Map<number, Uint8Array>();
+  private oldPages = new Map<number, Uint8Array>();
   constructor(
     private fs: GitFs,
     readonly path: string,
@@ -43,21 +46,22 @@ export class PagedFile {
     this.io.ms += now() - t;
     this.io.calls++;
     this.io.bytes += len;
+    if (off + len > (this.io.maxEnd ?? 0)) this.io.maxEnd = off + len;
     return b;
   }
 
   private page(i: number): Uint8Array {
     let p = this.pages.get(i);
-    if (p) {
-      this.pages.delete(i);
-      this.pages.set(i, p);
-      return p;
+    if (p) return p;
+    p = this.oldPages.get(i);
+    if (!p) {
+      const off = i * this.pageSize;
+      p = this.raw(off, Math.min(this.pageSize, this.fileSize - off));
     }
-    const off = i * this.pageSize;
-    p = this.raw(off, Math.min(this.pageSize, this.fileSize - off));
     this.pages.set(i, p);
-    if (this.pages.size > this.maxPages) {
-      this.pages.delete(this.pages.keys().next().value!);
+    if (this.pages.size > this.maxPages / 2) {
+      this.oldPages = this.pages;
+      this.pages = new Map();
     }
     return p;
   }

@@ -1,0 +1,116 @@
+{
+  "label": "tensorflow-p256k512",
+  "repo": "C:/Users/Gary/git/tensorflow",
+  "stoppedBy": "done",
+  "objects": 2308634,
+  "packs": 1,
+  "openMs": 309.7,
+  "idxLoadMs": 309.4,
+  "headTreeMs": 156.3,
+  "runMs": 51761.2,
+  "commits": 204106,
+  "commitsPerSec": 3943,
+  "commitReadMs": 4749.5,
+  "diffMs": 43330.4,
+  "treesRead": 4262975,
+  "treesPerCommit": 20.89,
+  "treeMB": 10166.1,
+  "filesTouched": 5766906,
+  "paths": 86553,
+  "headFiles": 38312,
+  "headCoverage": 1,
+  "authors": 5099,
+  "authorFileEntries": 3125634,
+  "coChangePairs": 1849669,
+  "coChangeSkippedCommits": 4016,
+  "objectReads": 4467081,
+  "cacheHits": 4046830,
+  "cacheMisses": 1813316,
+  "cacheHitRate": 0.6906,
+  "cacheMBAtEnd": 49.6,
+  "ioCalls": 30321,
+  "ioMB": 7580,
+  "ioMs": 3329.9,
+  "ioMaxEndMB": 1407,
+  "packMB": 1407,
+  "inflateCalls": 1813316,
+  "inflateMs": 13606.6,
+  "inflateMBOut": 472.4,
+  "deltaCalls": 1393065,
+  "deltaMs": 6378.8,
+  "lookupMs": 2535.2,
+  "avgChain": 1.77,
+  "maxChain": 50,
+  "byType": {
+    "commit": 204106,
+    "tree": 4262975,
+    "blob": 0,
+    "tag": 0
+  },
+  "peakRssMB": 945,
+  "peakHeapMB": 417,
+  "peakArrayBuffersMB": 302,
+  "checkpoints": [
+    {
+      "commits": 100,
+      "ms": 190,
+      "coverage": 0.0132,
+      "rssMB": 306
+    },
+    {
+      "commits": 500,
+      "ms": 294,
+      "coverage": 0.0589,
+      "rssMB": 347
+    },
+    {
+      "commits": 1000,
+      "ms": 404,
+      "coverage": 0.0871,
+      "rssMB": 338
+    },
+    {
+      "commits": 2000,
+      "ms": 658,
+      "coverage": 0.1522,
+      "rssMB": 379
+    },
+    {
+      "commits": 5000,
+      "ms": 1595,
+      "coverage": 0.3493,
+      "rssMB": 452
+    },
+    {
+      "commits": 10000,
+      "ms": 3170,
+      "coverage": 0.4395,
+      "rssMB": 489
+    },
+    {
+      "commits": 20000,
+      "ms": 5084,
+      "coverage": 0.4983,
+      "rssMB": 528
+    },
+    {
+      "commits": 50000,
+      "ms": 12178,
+      "coverage": 0.836,
+      "rssMB": 652
+    },
+    {
+      "commits": 100000,
+      "ms": 25728,
+      "coverage": 0.8604,
+      "rssMB": 703
+    },
+    {
+      "commits": 200000,
+      "ms": 51260,
+      "coverage": 0.9994,
+      "rssMB": 931
+    }
+  ],
+  "options": "--label tensorflow-p256k512 --page-kb 256 --max-pages 512"
+}

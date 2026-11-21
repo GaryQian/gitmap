@@ -1,0 +1,198 @@
+{
+ "tag": "react-nocap",
+ "repo": "C:/Users/Gary/git/react",
+ "node": "v24.13.0",
+ "capMs": 0,
+ "runQuery": true,
+ "deleteTrees": true,
+ "wallMs": 10257,
+ "readMs": 2422,
+ "decodeMs": 24,
+ "rssStartMB": 100,
+ "peakRssMB": 196,
+ "rssTrace": [
+  [
+   0,
+   107
+  ],
+  [
+   500,
+   122
+  ],
+  [
+   1000,
+   126
+  ],
+  [
+   1500,
+   130
+  ],
+  [
+   2000,
+   149
+  ],
+  [
+   2500,
+   169
+  ],
+  [
+   3000,
+   175
+  ],
+  [
+   3500,
+   178
+  ],
+  [
+   4000,
+   182
+  ],
+  [
+   4500,
+   190
+  ]
+ ],
+ "all": {
+  "files": 4590,
+  "MB": 25.21,
+  "parseMs": 5923,
+  "queryMs": 1620,
+  "queryOverParsePct": 27.4,
+  "parseMBps": 4.26,
+  "totalMBps": 3.34,
+  "filesPerSec": 609,
+  "meanMsPerFile": 1.64,
+  "p50Ms": 0.24,
+  "p95Ms": 6.37,
+  "p99Ms": 23.5,
+  "maxMs": 143.1,
+  "over2s": 0,
+  "cancelled": 0,
+  "withSyntaxErrors": 926,
+  "defs": 24564,
+  "refs": 184034
+ },
+ "byLang": {
+  "typescript": {
+   "files": 431,
+   "MB": 2.46,
+   "parseMs": 432,
+   "queryMs": 151,
+   "queryOverParsePct": 34.9,
+   "parseMBps": 5.7,
+   "totalMBps": 4.22,
+   "filesPerSec": 739,
+   "meanMsPerFile": 1.35,
+   "p50Ms": 0.29,
+   "p95Ms": 5.88,
+   "p99Ms": 14.3,
+   "maxMs": 34.9,
+   "over2s": 0,
+   "cancelled": 0,
+   "withSyntaxErrors": 0,
+   "defs": 2681,
+   "refs": 14689
+  },
+  "tsx": {
+   "files": 122,
+   "MB": 0.13,
+   "parseMs": 32,
+   "queryMs": 10,
+   "queryOverParsePct": 32.5,
+   "parseMBps": 3.9,
+   "totalMBps": 2.94,
+   "filesPerSec": 2860,
+   "meanMsPerFile": 0.35,
+   "p50Ms": 0.24,
+   "p95Ms": 1,
+   "p99Ms": 1.89,
+   "maxMs": 2.7,
+   "over2s": 0,
+   "cancelled": 0,
+   "withSyntaxErrors": 0,
+   "defs": 193,
+   "refs": 460
+  },
+  "javascript": {
+   "files": 3915,
+   "MB": 19.66,
+   "parseMs": 5006,
+   "queryMs": 1280,
+   "queryOverParsePct": 25.6,
+   "parseMBps": 3.93,
+   "totalMBps": 3.13,
+   "filesPerSec": 623,
+   "meanMsPerFile": 1.61,
+   "p50Ms": 0.22,
+   "p95Ms": 6.09,
+   "p99Ms": 23.68,
+   "maxMs": 143.1,
+   "over2s": 0,
+   "cancelled": 0,
+   "withSyntaxErrors": 926,
+   "defs": 19393,
+   "refs": 147174
+  },
+  "rust": {
+   "files": 122,
+   "MB": 2.96,
+   "parseMs": 452,
+   "queryMs": 179,
+   "queryOverParsePct": 39.5,
+   "parseMBps": 6.55,
+   "totalMBps": 4.69,
+   "filesPerSec": 193,
+   "meanMsPerFile": 5.17,
+   "p50Ms": 2.3,
+   "p95Ms": 17.96,
+   "p99Ms": 39.04,
+   "maxMs": 54.9,
+   "over2s": 0,
+   "cancelled": 0,
+   "withSyntaxErrors": 0,
+   "defs": 2297,
+   "refs": 21711
+  }
+ },
+ "warmup": {
+  "first200MBps": 3.33,
+  "restMBps": 3.34
+ },
+ "worst": [
+  {
+   "rel": "flow-typed/environments/dom.js",
+   "KB": 113,
+   "parseMs": 132,
+   "queryMs": 11,
+   "cancelled": false
+  },
+  {
+   "rel": "packages/react-devtools-shared/src/backend/fiber/renderer.js",
+   "KB": 292,
+   "parseMs": 110,
+   "queryMs": 18,
+   "cancelled": false
+  },
+  {
+   "rel": "packages/react-dom-bindings/src/client/ReactFiberConfigDOM.js",
+   "KB": 241,
+   "parseMs": 114,
+   "queryMs": 14,
+   "cancelled": false
+  },
+  {
+   "rel": "packages/react-server/src/ReactFlightServer.js",
+   "KB": 244,
+   "parseMs": 105,
+   "queryMs": 13,
+   "cancelled": false
+  },
+  {
+   "rel": "flow-typed/environments/node.js",
+   "KB": 125,
+   "parseMs": 108,
+   "queryMs": 7,
+   "cancelled": false
+  }
+ ]
+}

@@ -1,0 +1,102 @@
+{
+  "label": "flutter-v2-c8",
+  "repo": "C:/Users/Gary/git/flutter",
+  "stoppedBy": "done",
+  "objects": 1171826,
+  "packs": 1,
+  "openMs": 152.1,
+  "idxLoadMs": 151.9,
+  "headTreeMs": 71.6,
+  "runMs": 9944.3,
+  "commits": 92682,
+  "commitsPerSec": 9320,
+  "commitReadMs": 2299.9,
+  "diffMs": 6744,
+  "treesRead": 1379611,
+  "treesPerCommit": 14.89,
+  "treeMB": 1097.2,
+  "filesTouched": 479145,
+  "paths": 32656,
+  "headFiles": 16356,
+  "headCoverage": 1,
+  "authors": 2509,
+  "authorFileEntries": 176955,
+  "coChangePairs": 843922,
+  "coChangeSkippedCommits": 1129,
+  "objectReads": 1472293,
+  "cacheHits": 1169000,
+  "cacheMisses": 873896,
+  "cacheHitRate": 0.5722,
+  "cacheMBAtEnd": 7.4,
+  "ioCalls": 15115,
+  "ioMB": 944.7,
+  "ioMs": 806.5,
+  "inflateCalls": 873896,
+  "inflateMs": 2886.5,
+  "inflateMBOut": 164.1,
+  "deltaCalls": 570603,
+  "deltaMs": 967.6,
+  "lookupMs": 720.2,
+  "avgChain": 1.42,
+  "maxChain": 49,
+  "byType": {
+    "commit": 92682,
+    "tree": 1379611,
+    "blob": 0,
+    "tag": 0
+  },
+  "peakRssMB": 481,
+  "peakHeapMB": 158,
+  "peakArrayBuffersMB": 141,
+  "checkpoints": [
+    {
+      "commits": 100,
+      "ms": 105,
+      "coverage": 0.0257,
+      "rssMB": 182
+    },
+    {
+      "commits": 500,
+      "ms": 173,
+      "coverage": 0.0833,
+      "rssMB": 208
+    },
+    {
+      "commits": 1000,
+      "ms": 280,
+      "coverage": 0.1522,
+      "rssMB": 220
+    },
+    {
+      "commits": 2000,
+      "ms": 454,
+      "coverage": 0.333,
+      "rssMB": 264
+    },
+    {
+      "commits": 5000,
+      "ms": 1002,
+      "coverage": 0.4706,
+      "rssMB": 266
+    },
+    {
+      "commits": 10000,
+      "ms": 1891,
+      "coverage": 0.668,
+      "rssMB": 307
+    },
+    {
+      "commits": 20000,
+      "ms": 3177,
+      "coverage": 0.8781,
+      "rssMB": 322
+    },
+    {
+      "commits": 50000,
+      "ms": 6338,
+      "coverage": 0.9326,
+      "rssMB": 420
+    }
+  ],
+  "options": "--label flutter-v2-c8 --cache-mb 8"
+}

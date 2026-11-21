@@ -1,0 +1,102 @@
+{
+  "label": "flutter-p16",
+  "repo": "C:/Users/Gary/git/flutter",
+  "stoppedBy": "done",
+  "objects": 1171826,
+  "packs": 1,
+  "openMs": 152.8,
+  "idxLoadMs": 152.1,
+  "headTreeMs": 75.8,
+  "runMs": 21549.4,
+  "commits": 92682,
+  "commitsPerSec": 4301,
+  "commitReadMs": 3942.6,
+  "diffMs": 16527.8,
+  "treesRead": 1379611,
+  "treesPerCommit": 14.89,
+  "treeMB": 1097.2,
+  "filesTouched": 479145,
+  "paths": 32656,
+  "headFiles": 16356,
+  "headCoverage": 1,
+  "authors": 2509,
+  "authorFileEntries": 176955,
+  "coChangePairs": 843922,
+  "coChangeSkippedCommits": 1129,
+  "objectReads": 1472293,
+  "cacheHits": 1209499,
+  "cacheMisses": 736025,
+  "cacheHitRate": 0.6217,
+  "cacheMBAtEnd": 64,
+  "ioCalls": 17136,
+  "ioMB": 267.7,
+  "ioMs": 420.4,
+  "inflateCalls": 736025,
+  "inflateMs": 2872.7,
+  "inflateMBOut": 130.9,
+  "deltaCalls": 473231,
+  "deltaMs": 1119.7,
+  "lookupMs": 925.9,
+  "avgChain": 1.24,
+  "maxChain": 49,
+  "byType": {
+    "commit": 92682,
+    "tree": 1379611,
+    "blob": 0,
+    "tag": 0
+  },
+  "peakRssMB": 594,
+  "peakHeapMB": 192,
+  "peakArrayBuffersMB": 207,
+  "checkpoints": [
+    {
+      "commits": 100,
+      "ms": 117,
+      "coverage": 0.0257,
+      "rssMB": 153
+    },
+    {
+      "commits": 500,
+      "ms": 193,
+      "coverage": 0.0833,
+      "rssMB": 177
+    },
+    {
+      "commits": 1000,
+      "ms": 306,
+      "coverage": 0.1522,
+      "rssMB": 204
+    },
+    {
+      "commits": 2000,
+      "ms": 508,
+      "coverage": 0.333,
+      "rssMB": 239
+    },
+    {
+      "commits": 5000,
+      "ms": 971,
+      "coverage": 0.4706,
+      "rssMB": 305
+    },
+    {
+      "commits": 10000,
+      "ms": 2152,
+      "coverage": 0.668,
+      "rssMB": 405
+    },
+    {
+      "commits": 20000,
+      "ms": 3953,
+      "coverage": 0.8781,
+      "rssMB": 495
+    },
+    {
+      "commits": 50000,
+      "ms": 9951,
+      "coverage": 0.9326,
+      "rssMB": 551
+    }
+  ],
+  "options": "--label flutter-p16 --page-kb 16 --max-pages 2048"
+}

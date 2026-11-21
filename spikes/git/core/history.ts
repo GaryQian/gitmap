@@ -103,6 +103,35 @@ export class History {
     this.odb = new Odb(fs, opts);
   }
 
+  // directory interning: paths are resolved per directory level from short names, so no
+  // full-path strings are built or hashed on the hot path (only once per new path).
+  private dirPath: string[] = [''];
+  private dirDirs: (Map<string, number> | undefined)[] = [undefined];
+  private dirFiles: (Map<string, number> | undefined)[] = [undefined];
+  private childDir(dir: number, name: string): number {
+    let m = this.dirDirs[dir];
+    if (!m) this.dirDirs[dir] = m = new Map();
+    let id = m.get(name);
+    if (id === undefined) {
+      id = this.dirPath.length;
+      this.dirPath.push(this.dirPath[dir] + name + '/');
+      this.dirDirs.push(undefined);
+      this.dirFiles.push(undefined);
+      m.set(name, id);
+    }
+    return id;
+  }
+  private childFile(dir: number, name: string): number {
+    let m = this.dirFiles[dir];
+    if (!m) this.dirFiles[dir] = m = new Map();
+    let id = m.get(name);
+    if (id === undefined) {
+      id = this.pathId(this.dirPath[dir] + name);
+      m.set(name, id);
+    }
+    return id;
+  }
+
   private pathId(p: string): number {
     let id = this.pathIds.get(p);
     if (id === undefined) {
@@ -171,7 +200,7 @@ export class History {
   }
 
   /** diff tree a (new) vs b (old); push changed file paths (ids) to out */
-  diff(a: Uint8Array | null, b: Uint8Array | null, prefix: string, out: number[]) {
+  diff(a: Uint8Array | null, b: Uint8Array | null, dir: number, out: number[]) {
     const al = a ? a.length : 0, bl = b ? b.length : 0;
     let i = 0, j = 0;
     // current entry fields
@@ -216,22 +245,22 @@ export class History {
         }
       }
       if (cmp < 0) {
-        const name = prefix + str(a!, aName, aNameEnd);
-        if (aTree) this.diff(this.readTree(a!, aOid), null, name + '/', out);
-        else out.push(this.pathId(name));
+        const name = str(a!, aName, aNameEnd);
+        if (aTree) this.diff(this.readTree(a!, aOid), null, this.childDir(dir, name), out);
+        else out.push(this.childFile(dir, name));
         i = aOid + 20; needA = true;
       } else if (cmp > 0) {
-        const name = prefix + str(b!, bName, bNameEnd);
-        if (bTree) this.diff(null, this.readTree(b!, bOid), name + '/', out);
-        else out.push(this.pathId(name));
+        const name = str(b!, bName, bNameEnd);
+        if (bTree) this.diff(null, this.readTree(b!, bOid), this.childDir(dir, name), out);
+        else out.push(this.childFile(dir, name));
         j = bOid + 20; needB = true;
       } else {
         let same = aMode === bMode;
         if (same) for (let k = 0; k < 20; k++) if (a![aOid + k] !== b![bOid + k]) { same = false; break; }
         if (!same) {
-          const name = prefix + str(a!, aName, aNameEnd);
-          if (aTree) this.diff(this.readTree(a!, aOid), this.readTree(b!, bOid), name + '/', out);
-          else out.push(this.pathId(name));
+          const name = str(a!, aName, aNameEnd);
+          if (aTree) this.diff(this.readTree(a!, aOid), this.readTree(b!, bOid), this.childDir(dir, name), out);
+          else out.push(this.childFile(dir, name));
         }
         i = aOid + 20; needA = true;
         j = bOid + 20; needB = true;
@@ -240,8 +269,9 @@ export class History {
   }
 
   private sampleMem() {
-    if (typeof process === 'undefined') return;
-    const m = process.memoryUsage();
+    const proc = (globalThis as any).process; // Node-only instrumentation
+    if (!proc?.memoryUsage) return;
+    const m = proc.memoryUsage();
     const rss = m.rss / 1048576, heap = m.heapUsed / 1048576;
     if (rss > this.peakRssMB) this.peakRssMB = rss;
     if (heap > this.peakHeapMB) this.peakHeapMB = heap;
@@ -263,7 +293,7 @@ export class History {
     // HEAD file list (for coverage); in the app this comes from .git/index instead.
     const th = now();
     const headList: number[] = [];
-    this.diff(this.readTree(head.tree, 0), null, '', headList);
+    this.diff(this.readTree(head.tree, 0), null, 0, headList);
     for (const id of headList) this.headFiles.add(id);
     this.headTreeMs = now() - th;
 
@@ -321,7 +351,7 @@ export class History {
       touched.length = 0;
       const parentTree = c.parents.length ? this.treeOf.get(toHex(c.parents[0]))! : null;
       if (!parentTree || !eq20(parentTree, c.tree)) {
-        this.diff(this.readTree(c.tree, 0), parentTree ? this.readTree(parentTree, 0) : null, '', touched);
+        this.diff(this.readTree(c.tree, 0), parentTree ? this.readTree(parentTree, 0) : null, 0, touched);
       }
       this.diffMs += now() - t1;
       // aggregate
@@ -357,7 +387,7 @@ export class History {
           commits: n,
           ms: now() - t0,
           coverage: this.headFiles.size ? this.headCovered / this.headFiles.size : 0,
-          rssMB: typeof process !== 'undefined' ? process.memoryUsage().rss / 1048576 : 0,
+          rssMB: (globalThis as any).process?.memoryUsage ? (globalThis as any).process.memoryUsage().rss / 1048576 : 0,
         });
         cpi++;
       }

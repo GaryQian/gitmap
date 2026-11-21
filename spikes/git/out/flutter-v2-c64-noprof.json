@@ -1,0 +1,102 @@
+{
+  "label": "flutter-v2-c64-noprof",
+  "repo": "C:/Users/Gary/git/flutter",
+  "stoppedBy": "done",
+  "objects": 1171826,
+  "packs": 1,
+  "openMs": 151.9,
+  "idxLoadMs": 151.5,
+  "headTreeMs": 65.6,
+  "runMs": 8786.9,
+  "commits": 92682,
+  "commitsPerSec": 10548,
+  "commitReadMs": 2169.9,
+  "diffMs": 5732.9,
+  "treesRead": 1379611,
+  "treesPerCommit": 14.89,
+  "treeMB": 1097.2,
+  "filesTouched": 479145,
+  "paths": 32656,
+  "headFiles": 16356,
+  "headCoverage": 1,
+  "authors": 2509,
+  "authorFileEntries": 176955,
+  "coChangePairs": 843922,
+  "coChangeSkippedCommits": 1129,
+  "objectReads": 1472293,
+  "cacheHits": 1207381,
+  "cacheMisses": 739869,
+  "cacheHitRate": 0.62,
+  "cacheMBAtEnd": 38.2,
+  "ioCalls": 7617,
+  "ioMB": 476,
+  "ioMs": 503.6,
+  "inflateCalls": 0,
+  "inflateMs": 0,
+  "inflateMBOut": 0,
+  "deltaCalls": 0,
+  "deltaMs": 0,
+  "lookupMs": 0,
+  "avgChain": 1.25,
+  "maxChain": 49,
+  "byType": {
+    "commit": 92682,
+    "tree": 1379611,
+    "blob": 0,
+    "tag": 0
+  },
+  "peakRssMB": 551,
+  "peakHeapMB": 184,
+  "peakArrayBuffersMB": 196,
+  "checkpoints": [
+    {
+      "commits": 100,
+      "ms": 98,
+      "coverage": 0.0257,
+      "rssMB": 162
+    },
+    {
+      "commits": 500,
+      "ms": 161,
+      "coverage": 0.0833,
+      "rssMB": 186
+    },
+    {
+      "commits": 1000,
+      "ms": 259,
+      "coverage": 0.1522,
+      "rssMB": 202
+    },
+    {
+      "commits": 2000,
+      "ms": 418,
+      "coverage": 0.333,
+      "rssMB": 241
+    },
+    {
+      "commits": 5000,
+      "ms": 844,
+      "coverage": 0.4706,
+      "rssMB": 312
+    },
+    {
+      "commits": 10000,
+      "ms": 1579,
+      "coverage": 0.668,
+      "rssMB": 351
+    },
+    {
+      "commits": 20000,
+      "ms": 2702,
+      "coverage": 0.8781,
+      "rssMB": 418
+    },
+    {
+      "commits": 50000,
+      "ms": 5216,
+      "coverage": 0.9326,
+      "rssMB": 456
+    }
+  ],
+  "options": "--label flutter-v2-c64-noprof --no-profile"
+}

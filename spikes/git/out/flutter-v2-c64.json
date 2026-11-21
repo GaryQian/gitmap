@@ -1,0 +1,102 @@
+{
+  "label": "flutter-v2-c64",
+  "repo": "C:/Users/Gary/git/flutter",
+  "stoppedBy": "done",
+  "objects": 1171826,
+  "packs": 1,
+  "openMs": 158.6,
+  "idxLoadMs": 158.2,
+  "headTreeMs": 73.2,
+  "runMs": 9081.9,
+  "commits": 92682,
+  "commitsPerSec": 10205,
+  "commitReadMs": 2151,
+  "diffMs": 6074.9,
+  "treesRead": 1379611,
+  "treesPerCommit": 14.89,
+  "treeMB": 1097.2,
+  "filesTouched": 479145,
+  "paths": 32656,
+  "headFiles": 16356,
+  "headCoverage": 1,
+  "authors": 2509,
+  "authorFileEntries": 176955,
+  "coChangePairs": 843922,
+  "coChangeSkippedCommits": 1129,
+  "objectReads": 1472293,
+  "cacheHits": 1207381,
+  "cacheMisses": 739869,
+  "cacheHitRate": 0.62,
+  "cacheMBAtEnd": 38.2,
+  "ioCalls": 7617,
+  "ioMB": 476,
+  "ioMs": 481.4,
+  "inflateCalls": 739869,
+  "inflateMs": 2503.9,
+  "inflateMBOut": 131.8,
+  "deltaCalls": 474957,
+  "deltaMs": 982.5,
+  "lookupMs": 674.1,
+  "avgChain": 1.25,
+  "maxChain": 49,
+  "byType": {
+    "commit": 92682,
+    "tree": 1379611,
+    "blob": 0,
+    "tag": 0
+  },
+  "peakRssMB": 552,
+  "peakHeapMB": 179,
+  "peakArrayBuffersMB": 192,
+  "checkpoints": [
+    {
+      "commits": 100,
+      "ms": 106,
+      "coverage": 0.0257,
+      "rssMB": 167
+    },
+    {
+      "commits": 500,
+      "ms": 177,
+      "coverage": 0.0833,
+      "rssMB": 185
+    },
+    {
+      "commits": 1000,
+      "ms": 277,
+      "coverage": 0.1522,
+      "rssMB": 199
+    },
+    {
+      "commits": 2000,
+      "ms": 427,
+      "coverage": 0.333,
+      "rssMB": 242
+    },
+    {
+      "commits": 5000,
+      "ms": 843,
+      "coverage": 0.4706,
+      "rssMB": 311
+    },
+    {
+      "commits": 10000,
+      "ms": 1616,
+      "coverage": 0.668,
+      "rssMB": 348
+    },
+    {
+      "commits": 20000,
+      "ms": 2797,
+      "coverage": 0.8781,
+      "rssMB": 422
+    },
+    {
+      "commits": 50000,
+      "ms": 5415,
+      "coverage": 0.9326,
+      "rssMB": 461
+    }
+  ],
+  "options": "--label flutter-v2-c64 --cache-mb 64"
+}

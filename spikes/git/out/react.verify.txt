@@ -1,0 +1,40 @@
+{
+  "repo": "C:/Users/Gary/git/react",
+  "gitLogMs": 1374,
+  "gitCommits": 21800,
+  "quotedPaths": 0,
+  "refPaths": 26713,
+  "minePaths": 26713,
+  "onlyRef": 0,
+  "onlyMine": 0,
+  "onlyRefEx": [],
+  "onlyMineEx": [],
+  "badCount": 0,
+  "badLast": 0,
+  "badFirst": 0,
+  "badAuthors": 0,
+  "examples": []
+}
+
+| file | walker commits | git (ref cmd) commits | plain `git log -- f` | `--first-parent -- f` | walker last | ref last | plain last | walker == ref |
+|---|---|---|---|---|---|---|---|---|
+| `compiler/crates/react_compiler_ast/tests/round_trip.rs` | 1 | 1 | 1 | 1 | 2026-06-09 | 2026-06-09 | 2026-06-09 | yes |
+| `compiler/packages/babel-plugin-react-compiler/src/__tests__/fixtures/compiler/aliased-nested-scope-truncated-dep.expect.md` | 5 | 5 | 5 | 5 | 2025-12-11 | 2025-12-11 | 2025-12-11 | yes |
+| `compiler/packages/babel-plugin-react-compiler/src/__tests__/fixtures/compiler/const-propagation-phi-nodes.expect.md` | 5 | 5 | 4 | 2 | 2024-07-18 | 2024-07-18 | 2024-07-18 | yes |
+| `compiler/packages/babel-plugin-react-compiler/src/__tests__/fixtures/compiler/error.invalid-destructure-assignment-to-global.expect.md` | 7 | 7 | 6 | 6 | 2025-09-06 | 2025-09-06 | 2025-09-06 | yes |
+| `compiler/packages/babel-plugin-react-compiler/src/__tests__/fixtures/compiler/evaluation-order-mutate-call-after-dependency-load.expect.md` | 1 | 1 | 1 | 1 | 2024-09-12 | 2024-09-12 | 2024-09-12 | yes |
+| `compiler/packages/babel-plugin-react-compiler/src/__tests__/fixtures/compiler/hoisting-repro-variable-used-in-assignment.expect.md` | 7 | 7 | 6 | 4 | 2025-12-11 | 2025-12-11 | 2025-12-11 | yes |
+| `compiler/packages/babel-plugin-react-compiler/src/__tests__/fixtures/compiler/method-call-scope-merge-mutable-range-sync.expect.md` | 1 | 1 | 1 | 1 | 2026-06-09 | 2026-06-09 | 2026-06-09 | yes |
+| `compiler/packages/babel-plugin-react-compiler/src/__tests__/fixtures/compiler/pattern1a_type_to_primitive.expect.md` | 1 | 1 | 1 | 1 | 2026-06-09 | 2026-06-09 | 2026-06-09 | yes |
+| `compiler/packages/babel-plugin-react-compiler/src/__tests__/fixtures/compiler/reactive-ref-param.expect.md` | 2 | 2 | 2 | 2 | 2025-08-01 | 2025-08-01 | 2025-08-01 | yes |
+| `compiler/packages/babel-plugin-react-compiler/src/__tests__/fixtures/compiler/round3_effect_read_vs_capture_v2.expect.md` | 1 | 1 | 1 | 1 | 2026-06-09 | 2026-06-09 | 2026-06-09 | yes |
+| `compiler/packages/babel-plugin-react-compiler/src/__tests__/fixtures/compiler/static-components/invalid-dynamically-constructed-component-new.js` | 3 | 3 | 3 | 3 | 2025-12-12 | 2025-12-12 | 2025-12-12 | yes |
+| `compiler/packages/babel-plugin-react-compiler/src/__tests__/fixtures/compiler/useMemo-switch-return.js` | 4 | 4 | 3 | 3 | 2025-11-25 | 2025-11-25 | 2025-11-25 | yes |
+| `fixtures/eslint-v9/eslint.config.ts` | 5 | 5 | 5 | 5 | 2025-10-07 | 2025-10-07 | 2025-10-07 | yes |
+| `fixtures/view-transition/package.json` | 5 | 5 | 5 | 5 | 2025-07-02 | 2025-07-02 | 2025-07-02 | yes |
+| `packages/react-devtools-shared/src/__tests__/profilingCache-test.js` | 50 | 50 | 46 | 44 | 2026-10-12 | 2026-10-12 | 2026-10-12 | yes |
+| `packages/react-devtools-shared/src/hooks/__tests__/__source__/__compiled__/external/fb-sources-extended/ComponentWithNestedHooks.js` | 3 | 3 | 2 | 2 | 2024-05-15 | 2024-05-15 | 2022-10-18 | yes |
+| `packages/react-dom-bindings/src/shared/ReactDOMInvalidARIAHook.js` | 6 | 6 | 5 | 5 | 2024-05-15 | 2024-05-15 | 2024-03-03 | yes |
+| `packages/react-reconciler/src/ReactFiberCompleteWork.js` | 204 | 204 | 201 | 201 | 2026-10-07 | 2026-10-07 | 2026-10-07 | yes |
+| `packages/react-server-dom-webpack/src/ReactFlightWebpackNodeLoader.js` | 23 | 23 | 22 | 22 | 2026-06-05 | 2026-06-05 | 2026-06-05 | yes |
+| `scripts/bench/benchmarks/hacker-news/grayarrow.gif` | 2 | 2 | 1 | 1 | 2024-05-15 | 2024-05-15 | 2017-05-09 | yes |

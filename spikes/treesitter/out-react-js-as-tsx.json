@@ -1,0 +1,130 @@
+{
+ "tag": "react-js-as-tsx",
+ "repo": "C:/Users/Gary/git/react",
+ "node": "v24.13.0",
+ "capMs": 10000,
+ "runQuery": true,
+ "deleteTrees": true,
+ "wallMs": 7387,
+ "readMs": 2270,
+ "decodeMs": 19,
+ "rssStartMB": 91,
+ "peakRssMB": 170,
+ "rssTrace": [
+  [
+   0,
+   95
+  ],
+  [
+   500,
+   112
+  ],
+  [
+   1000,
+   119
+  ],
+  [
+   1500,
+   122
+  ],
+  [
+   2000,
+   141
+  ],
+  [
+   2500,
+   160
+  ],
+  [
+   3000,
+   165
+  ],
+  [
+   3500,
+   168
+  ]
+ ],
+ "all": {
+  "files": 3915,
+  "MB": 19.66,
+  "parseMs": 3578,
+  "queryMs": 1311,
+  "queryOverParsePct": 36.6,
+  "parseMBps": 5.49,
+  "totalMBps": 4.02,
+  "filesPerSec": 801,
+  "meanMsPerFile": 1.25,
+  "p50Ms": 0.22,
+  "p95Ms": 5.09,
+  "p99Ms": 20.53,
+  "maxMs": 93,
+  "over2s": 0,
+  "cancelled": 0,
+  "withSyntaxErrors": 277,
+  "defs": 24891,
+  "refs": 150130
+ },
+ "byLang": {
+  "tsx": {
+   "files": 3915,
+   "MB": 19.66,
+   "parseMs": 3578,
+   "queryMs": 1311,
+   "queryOverParsePct": 36.6,
+   "parseMBps": 5.49,
+   "totalMBps": 4.02,
+   "filesPerSec": 801,
+   "meanMsPerFile": 1.25,
+   "p50Ms": 0.22,
+   "p95Ms": 5.09,
+   "p99Ms": 20.53,
+   "maxMs": 93,
+   "over2s": 0,
+   "cancelled": 0,
+   "withSyntaxErrors": 277,
+   "defs": 24891,
+   "refs": 150130
+  }
+ },
+ "warmup": {
+  "first200MBps": 3.52,
+  "restMBps": 4.05
+ },
+ "worst": [
+  {
+   "rel": "packages/react-dom/src/__tests__/ReactDOMFloat-test.js",
+   "KB": 331,
+   "parseMs": 67,
+   "queryMs": 26,
+   "cancelled": false
+  },
+  {
+   "rel": "packages/react-reconciler/src/ReactFiberHooks.js",
+   "KB": 178,
+   "parseMs": 80,
+   "queryMs": 9,
+   "cancelled": false
+  },
+  {
+   "rel": "packages/react-dom/src/__tests__/ReactDOMFizzServer-test.js",
+   "KB": 307,
+   "parseMs": 56,
+   "queryMs": 30,
+   "cancelled": false
+  },
+  {
+   "rel": "packages/react-client/src/ReactFlightClient.js",
+   "KB": 193,
+   "parseMs": 52,
+   "queryMs": 15,
+   "cancelled": false
+  },
+  {
+   "rel": "packages/react-dom-bindings/src/client/ReactFiberConfigDOM.js",
+   "KB": 241,
+   "parseMs": 42,
+   "queryMs": 16,
+   "cancelled": false
+  }
+ ]
+}

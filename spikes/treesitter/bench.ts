@@ -16,6 +16,7 @@ const keep = flag('--no-delete') ? [] as any[] : null;
 const tag = arg('--tag', path.basename(repo) + '-' + [...langs].join('+'));
 
 let files = listFiles(repo, langs);
+const asLang = arg('--as'); if (asLang) { files = files.map(f => ({ ...f, lang: asLang })); langs.clear(); langs.add(asLang); }
 // deterministic shuffle so a --limit sample is spread across the tree
 let seed = 12345; const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
 for (let i = files.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [files[i], files[j]] = [files[j], files[i]]; }

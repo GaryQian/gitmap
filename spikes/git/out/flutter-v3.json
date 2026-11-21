@@ -1,0 +1,102 @@
+{
+  "label": "flutter-v3",
+  "repo": "C:/Users/Gary/git/flutter",
+  "stoppedBy": "done",
+  "objects": 1171826,
+  "packs": 1,
+  "openMs": 151.1,
+  "idxLoadMs": 150.8,
+  "headTreeMs": 74.8,
+  "runMs": 8823,
+  "commits": 92682,
+  "commitsPerSec": 10505,
+  "commitReadMs": 2120.7,
+  "diffMs": 5859.2,
+  "treesRead": 1379611,
+  "treesPerCommit": 14.89,
+  "treeMB": 1097.2,
+  "filesTouched": 479145,
+  "paths": 32656,
+  "headFiles": 16356,
+  "headCoverage": 1,
+  "authors": 2509,
+  "authorFileEntries": 176955,
+  "coChangePairs": 843922,
+  "coChangeSkippedCommits": 1129,
+  "objectReads": 1472293,
+  "cacheHits": 1207381,
+  "cacheMisses": 739869,
+  "cacheHitRate": 0.62,
+  "cacheMBAtEnd": 38.2,
+  "ioCalls": 7617,
+  "ioMB": 476,
+  "ioMs": 482.7,
+  "inflateCalls": 739869,
+  "inflateMs": 2438,
+  "inflateMBOut": 131.8,
+  "deltaCalls": 474957,
+  "deltaMs": 885.9,
+  "lookupMs": 646.4,
+  "avgChain": 1.25,
+  "maxChain": 49,
+  "byType": {
+    "commit": 92682,
+    "tree": 1379611,
+    "blob": 0,
+    "tag": 0
+  },
+  "peakRssMB": 562,
+  "peakHeapMB": 180,
+  "peakArrayBuffersMB": 189,
+  "checkpoints": [
+    {
+      "commits": 100,
+      "ms": 108,
+      "coverage": 0.0257,
+      "rssMB": 183
+    },
+    {
+      "commits": 500,
+      "ms": 172,
+      "coverage": 0.0833,
+      "rssMB": 206
+    },
+    {
+      "commits": 1000,
+      "ms": 269,
+      "coverage": 0.1522,
+      "rssMB": 220
+    },
+    {
+      "commits": 2000,
+      "ms": 414,
+      "coverage": 0.333,
+      "rssMB": 257
+    },
+    {
+      "commits": 5000,
+      "ms": 852,
+      "coverage": 0.4706,
+      "rssMB": 328
+    },
+    {
+      "commits": 10000,
+      "ms": 1611,
+      "coverage": 0.668,
+      "rssMB": 378
+    },
+    {
+      "commits": 20000,
+      "ms": 2718,
+      "coverage": 0.8781,
+      "rssMB": 437
+    },
+    {
+      "commits": 50000,
+      "ms": 5295,
+      "coverage": 0.9326,
+      "rssMB": 477
+    }
+  ],
+  "options": "--label flutter-v3 --dump git/out/flutter.files.json"
+}
