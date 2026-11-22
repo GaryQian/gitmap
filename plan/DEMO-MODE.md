@@ -1,6 +1,6 @@
 # Demo mode: plan
 
-Four demos (Flutter, TensorFlow, React and this repo), each shipped as one packaged file that the app itself exports. Opening a demo downloads and unpacks that file; nothing is parsed and no model is called.
+Three demos (this repo, React and TensorFlow; Flutter was dropped from the set), each shipped as one packaged file that the app itself exports. Opening a demo downloads and unpacks that file; nothing is parsed and no model is called.
 
 Status: decisions taken 2026-11-21 (§9); build in progress. Written against commit `2907085`.
 
@@ -34,7 +34,7 @@ Rules:
 - **Not included:** `.git`, commit history, binary files, files over `parser.maxFileBytes`, and files edited since the parse (their bytes no longer match the map).
 - **The file does not say "I am a demo".** A package is a demo when the app opens it from its demo list. The same file dropped on the landing page opens as an ordinary import. One format, two uses.
 
-Expected sizes, from the pack measurements in PLAN.md §6.3.1 (estimates until the first export): React about 8 MB, Flutter about 36 MB, TensorFlow about 110 MB, this repo under 2 MB.
+Expected sizes, from the pack measurements in PLAN.md §6.3.1 (estimates until the first export): React about 8 MB, TensorFlow about 110 MB, this repo about 2 MB.
 
 ## 3. Export: the button in the settings card
 
@@ -59,7 +59,7 @@ Export is refused for a map that is itself a demo or an import with no folder (t
 5. **Any static host works.** Nothing depends on range requests.
 6. **Kept for next time.** The whole package is kept in the browser's cache with the host's validator (ETag, or modified time and size), so reopening is instant and works offline. A rebuilt package replaces the cached one.
 
-In a demo: no AI calls and no consent prompt (everything is already in the file), overlays work from stored values, and Update, the working-tree check and "Load full history" are hidden.
+In a demo: no AI calls for the notes and no consent prompt (everything is already in the file), overlays work from stored values, and Update, the working-tree check and "Load full history" are hidden. The chat is offered in a demo as it is on a local repo with AI on: it is the one thing in a demo that calls a model, and it needs no consent step because the code is published and only the viewer's questions are sent.
 
 ## 5. Labelling
 
@@ -90,7 +90,7 @@ Test for this (the one place it could silently go wrong): open the React demo, g
 | 2 | File collection for export | coordinator call + `src/pipeline` | Committed blobs from the pack, verified by blob id; binaries skipped; licence detection moved out of `build-demo.ts` into shared code |
 | 3 | "Complete the AI" step | `src/pipeline/ai.ts`, `src/ai/client` | One call that generates anything missing and all detail cards, with progress and cancel; test against the canned provider |
 | 4 | Export UI | `src/app/settings` (new row), remove the export from `src/app/repos/RepoInfo.tsx` | Two choices (package, map only), confirmation, progress, incomplete-map warnings, "Export without AI" |
-| 5 | Demo loading from one package | `src/pipeline` (`loadDemo`), `src/content/demo.ts` | Progressive open, progress events, cache keyed by size and modified time; replaces the two-file loader |
+| 5 | Demo loading from one package | `src/pipeline` (`loadDemo`, `session.ts`), `src/content/package.ts` | Progressive open, progress events, cache keyed by size and modified time; replaces the two-file loader |
 | 6 | Labels | `src/app/repos`, `src/app/title` | "Demo" tags, demos sorted in with saved repos, info card fields |
 | 7 | Identity test and import path | `src/app`, `tests/e2e` | The test in §6; dropping a package opens it with its files readable |
 | 8 | Retire the old path | `scripts/build-demo.ts`, PLAN.md §12.1 | Delete the script or cut it down to a thin wrapper over the same writer; update the plan text |
@@ -98,7 +98,15 @@ Test for this (the one place it could silently go wrong): open the React demo, g
 
 Pieces 1–3 are independent and can be built in parallel; 4 needs 1–3; 5 needs 1; 6 and 7 need 5.
 
-## 8. What you run, once the code is in
+## 8. How the demos are made
+
+The three shipped demos were generated headless, one command each, with the provider key from `.env.local`:
+
+```
+node --env-file=.env.local scripts/run.mjs scripts/build-demo.ts <clone> --name <name> --source-url <url> --history-seconds 300 --ai
+```
+
+That parses, clusters, lays out, walks history, writes the AI notes and every detail card, packs the files, reads the package back and checks every file. The same result can be had from the app, by hand:
 
 For each of the four repos, in Chromium, with `ANTHROPIC_API_KEY` set for the local server:
 

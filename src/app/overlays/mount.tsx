@@ -4,10 +4,11 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import type { AppMount } from '../../contracts/app';
 import {
-  OVERLAYS, legendFor, ownershipContributors,
+  OVERLAYS, legendFor, ownershipContributors, ownershipShare,
   type OverlayId, type OverlayInfo, type OverlayLegend, type ReachDirection,
 } from '../../overlays';
-import { setActiveOverlay, useApp, useReplicaVersion, useSession, useThemeMode } from '../store';
+import { unitRef, type NodeRef } from '../../model/types';
+import { setActiveOverlay, useApp, useRender, useReplicaVersion, useSession, useThemeMode } from '../store';
 import { Card, CloseIcon, PillButton, Segmented, Strong, cx, type SegmentedOption } from '../ui';
 import { ContributorPicker } from './ContributorPicker';
 import { accentVariables } from '../theme';
@@ -215,6 +216,23 @@ function Overlays() {
   const chosen = contributors.find((c) => c.id === contributorId) ?? contributors[0] ?? null;
   const { view, seeds } = useOverlayView(active, chosen?.id);
 
+  // Choosing a person flies the camera to everything they changed: in close when that is a few
+  // files together, out when it is spread across the map.
+  const render = useRender();
+  const chooseContributor = (id: number | null) => {
+    setContributor(id);
+    const layer = replica?.layers.get('ownership');
+    if (id === null || !replica || !render || !layer) return;
+    const share = ownershipShare(layer, id, replica);
+    const ids = replica.table('unit').ids;
+    const refs: NodeRef[] = [];
+    for (let slot = 0; slot < share.length; slot++) {
+      const unit = ids[slot];
+      if (share[slot] > 0 && unit != null) refs.push(unitRef(unit));
+    }
+    if (refs.length > 0) void render.flyToFit(refs).catch(() => {});
+  };
+
   // The map's edge takes the overlay's colour while one is on: the most saturated colour in its
   // legend. Set on the root, so the frame (overlays.css) and the active pill can both use it.
   // Dependency reach is always ringed in its red hot end, even before anything is selected.
@@ -247,7 +265,7 @@ function Overlays() {
         <div className="gm-overlay-card-row">
           <Card blur className="gm-overlay-card" role="group" aria-label={`${active.label} overlay`}>
             <div className="gm-ov-title"><Strong>{active.label}</Strong></div>
-            {active.id === 'ownership' && <ContributorPicker contributors={contributors} chosen={chosen} onChoose={setContributor} />}
+            {active.id === 'ownership' && <ContributorPicker contributors={contributors} chosen={chosen} onChoose={chooseContributor} />}
             {active.id === 'reach' && <Segmented label="Direction" value={direction} options={DIRECTIONS} onChange={setDirection} className="gm-ov-direction" />}
             {active.id === 'reach' && <HopSlider />}
             {/* with nothing selected there is no reach to explain, only how to get one */}

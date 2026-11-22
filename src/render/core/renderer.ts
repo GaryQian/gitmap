@@ -412,6 +412,25 @@ export function createSceneRenderer(init: RenderInit): RenderApi {
       return openPromise((done) => { void rig.flyTo({ x: a.x, z: a.z, distance }, flyMs(opts), performance.now()).then(done); });
     },
 
+    flyToFit(refs, opts) {
+      if (disposed) return Promise.resolve();
+      const found = [];
+      for (const ref of refs) { const a = ctx.anchor(ref); if (a) found.push(a); }
+      if (found.length === 0) return Promise.resolve();
+      if (found.length === 1) return api.flyTo(refs.find((r) => ctx.anchor(r)) ?? refs[0], opts);
+      // the ground circle around all of them: centred on their bounding box, reaching past each one's edge
+      let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+      for (const a of found) { minX = Math.min(minX, a.x); maxX = Math.max(maxX, a.x); minZ = Math.min(minZ, a.z); maxZ = Math.max(maxZ, a.z); }
+      const x = (minX + maxX) / 2, z = (minZ + maxZ) / 2;
+      let radius = 0, largest = 0;
+      for (const a of found) { radius = Math.max(radius, Math.hypot(a.x - x, a.z - z) + a.r); largest = Math.max(largest, a.r); }
+      autoFrame = false;
+      // never closer than one of them would be framed on its own
+      const close = Math.max(config.camera.minDistance, largest * RENDER_LOCAL.camera.unitFocusRadii);
+      const distance = opts?.distance ?? Math.min(config.camera.maxDistance, Math.max(close, rig.distanceToFit(radius)));
+      return openPromise((done) => { void rig.flyTo({ x, z, distance }, flyMs(opts), performance.now()).then(done); });
+    },
+
     resetView(opts) {
       if (disposed) return Promise.resolve();
       autoFrame = false;

@@ -4,22 +4,17 @@
 
 /* ---- the pill at the bottom centre ---- */
 
-.gm-pill.gm-chat-button { gap: 8px; }
-
-/* Beside the tour pill instead of under it. The shell lays this region out as a column; while the
-   two pills are both there it becomes three columns, the tour pill in the middle one, so that pill
-   stays exactly where it is with or without the chat. Anything else in the region (the AI prompt,
-   a failure line) keeps a row to itself. With the tour's step card up, or with no tour, the region
-   is the shell's column again and the chat pill sits on the centre line. */
-.gm-region-bottomCenter:has(> .gm-tour-pill):has(> .gm-chat-button) {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  justify-items: center;
-  align-items: center;
+/* The way into the assistant is the largest pill on the map: taller and wider than the "large" size. */
+.gm-pill.gm-chat-button {
+  --gm-pill-h: 56px;
+  gap: 12px;
+  padding: 0 32px;
+  font-size: 18px;
+  letter-spacing: 0.05em;
 }
-.gm-region-bottomCenter:has(> .gm-tour-pill):has(> .gm-chat-button) > * { grid-column: 1 / -1; }
-.gm-region-bottomCenter:has(> .gm-tour-pill):has(> .gm-chat-button) > .gm-tour-pill { grid-column: 2; }
-.gm-region-bottomCenter:has(> .gm-tour-pill):has(> .gm-chat-button) > .gm-chat-button { grid-column: 3; justify-self: start; }
+
+/* Under the tour pill: the shell lays this region out as a column, and the tour pill mounts first
+   (order 10, the chat 11), so "Tour the repo" sits above the chat pill on the centre line. */
 
 /* ---- the tab bar of the side panel ---- */
 

@@ -71,8 +71,9 @@
   "demo": {
     "package": { "maxBytes": 95000000, "minLines": 0 },
     "repos": [
+      { "name": "starmap", "file": "/demo/starmap.starmap.zip", "location": "github.com/GaryQian/gitmap" },
       { "name": "react", "file": "/demo/react.starmap.zip", "location": "github.com/facebook/react" },
-      { "name": "starmap", "file": "/demo/starmap.starmap.zip", "location": "this app" }
+      { "name": "tensorflow", "file": "/demo/tensorflow.starmap.zip", "location": "github.com/tensorflow/tensorflow" }
     ]
   },
   "render": { "ambientEdges": 1500, "edgeBudget": 50000, "maxPills": 150, "patchBudgetMs": 4, "adaptiveDpr": true, "maxDpr": 2 },

@@ -186,7 +186,7 @@ Each is one folder with a `mount.tsx`; region and order are as that file declare
 
 | Folder | Region · order | What it is |
 |---|---|---|
-| `repos/` | `landing` 10; `topLeft` 5 | The landing page's repo pills (saved repos, demos), and on the map the repo info pill under the title pill, with its card and "Export map". |
+| `repos/` | `landing` 10; `topLeft` 5 | The landing page's repo pills (saved repos, demos), and on the map the repo info pill under the title pill, with its card (for a demo: source, commit, licence, export date). Demos are listed from `config.demo.repos`, sorted in with the saved repos by last opened, each with a "Demo" tag. Export lives in the settings card (`settings/ExportRow.tsx`): "Map and files" writes a package, "Map only" the `.starmap.json.gz`. |
 | `search/` | `topLeft` 1 | The search pill, beside the title: widens into a field on focus, "/" or Ctrl/Cmd+K, and lists matching files from `session.search`; choosing one selects it and flies to it. |
 | `overlays/` | `topRight` 100 | One pill per overlay before the settings gear, and under them the active overlay's legend and parameters; builds the `OverlayView` and calls `render.setOverlay`. |
 | `sidebar/` | `rightEdge` 0; `topRight` 1100 | The opaque sidebar editor for `openFile`, read (and saved) through `session.content`, and the small button that brings it back while it is closed. |

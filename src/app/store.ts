@@ -13,7 +13,15 @@ import {
 import { applyTheme } from './theme';
 
 export type Phase = 'landing' | 'waiting' | 'map';
-export interface Settings { particles: boolean }
+export interface Settings {
+  particles: boolean;
+  /** The always-on connection ribbons between cities, districts and files (hover and selection edges stay). */
+  ribbons: boolean;
+  /** Point-of-interest beams and their label pills. */
+  poiBeams: boolean;
+  /** District name pills in the scene (city pills stay). */
+  districtTitles: boolean;
+}
 export interface ProgressEntry { done: number; total: number; label?: string }
 /** The one thing a line offers to do: "Reload", "Choose the folder". */
 export interface LineAction { label: string; run(): void | Promise<void> }
@@ -77,14 +85,13 @@ const media = (query: string): MediaQueryList | null =>
 const motionQuery = media('(prefers-reduced-motion: reduce)');
 
 function loadSettings(): Settings {
-  const defaults: Settings = { particles: config.settings.particles };
+  const defaults: Settings = { particles: config.settings.particles, ribbons: true, poiBeams: true, districtTitles: true };
   try {
     const saved: unknown = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? 'null');
     if (typeof saved !== 'object' || saved === null) return defaults;
-    const { particles } = saved as Partial<Settings>;
-    return {
-      particles: typeof particles === 'boolean' ? particles : defaults.particles,
-    };
+    const s = saved as Partial<Settings>;
+    const pick = <K extends keyof Settings>(key: K): Settings[K] => (typeof s[key] === 'boolean' ? s[key] as Settings[K] : defaults[key]);
+    return { particles: pick('particles'), ribbons: pick('ribbons'), poiBeams: pick('poiBeams'), districtTitles: pick('districtTitles') };
   } catch {
     return defaults; // no storage, or something else wrote the key
   }
@@ -135,6 +142,9 @@ function setSettings(patch: Partial<Settings>): void {
   });
 }
 export function setParticles(particles: boolean): void { setSettings({ particles }); }
+export function setRibbons(ribbons: boolean): void { setSettings({ ribbons }); }
+export function setPoiBeams(poiBeams: boolean): void { setSettings({ poiBeams }); }
+export function setDistrictTitles(districtTitles: boolean): void { setSettings({ districtTitles }); }
 
 /** Selection changes go through the pure transitions in selectionState.ts. */
 function select(change: (state: SelectionState) => SelectionState): void {

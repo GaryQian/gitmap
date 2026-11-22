@@ -801,7 +801,7 @@ interface Tour { id; steps: { parent: UnitRef; frame: 'file' | 'district' | 'cit
 
 - **Consent:** AI is the only path by which code excerpts leave the machine. The app asks once per repo, then generates summaries, POIs and the tour automatically; detail buttons call the model on click. `ai.enabled` in config turns the feature off entirely. The prompt says only what it adds ("Adds city summaries, points of interest and a guided tour.") and does not name the provider. **It can be turned off again per repo:** the settings card has an "AI notes" switch for the open map; Off cancels anything in flight and no further AI request is made for that repo until it is switched on, while notes already written stay on the map. **While AI is not enabled for a repo there is always a prompt at the bottom centre to enable it:** the full question the first time, and after "Not now" (or when switched off) a compact "Add AI notes" pill in the same place. If AI is allowed but a run could not write notes, the pill stays as "Write AI notes" so there is always a way to try again.
 - **Abuse:** rate limits only. The `/api/ai/*` routes get a per-IP request limit (a Vercel Firewall rule or a small Redis-backed limiter), a hard cap on input tokens per request, and a cap on detail calls per repo digest. A spend limit on the provider account is the backstop. The provider interface leaves room for a passcode or bring-your-own-key later.
-- Demo snapshots ship with AI annotations pre-generated, including every point of interest's detail cards, so demo mode needs no key and makes no model calls.
+- Demo snapshots ship with AI annotations pre-generated, including every point of interest's detail cards, so a demo's notes need no key and no model calls. The chat (§11.5) is offered in a demo too, with no consent step, since the code is published and only the viewer's questions are sent; that is the one thing in a demo that calls a model.
 
 ### 11.5 Chat assistant (decided 2026-11-21)
 
@@ -832,7 +832,7 @@ Once AI is enabled for a repo, a **Chat** pill appears at the bottom centre. It 
 - **Registry:** IndexedDB records `{ id, name, remoteUrl, directoryHandle, headOid, indexChecksum, schema, lastOpened }`. `name` and `remoteUrl` are what the landing page's repo pills show (§17.7). `navigator.storage.persist()` is requested.
 - **Return visit:** the snapshot loads and renders immediately, untouched. Folder permission is requested in the background; if `indexChecksum` differs, the top bar offers "N files changed · Update" (§6.8).
 - **Export / import:** from the settings card, in two forms. "Map and files" writes a package, `<name>.starmap.zip`: the map and the text of its files (§12.1). "Map only" writes the `.starmap.json.gz` file, which holds no file contents. Either can be dropped onto the landing page.
-- **Demo mode:** Flutter, TensorFlow, React and this app's own repo, each shipped as one package that the app itself exported (§12.1, and `plan/DEMO-MODE.md` for the full design).
+- **Demo mode:** this app's own repo, React and TensorFlow, each shipped as one package with its AI notes written ahead of time (§12.1, and `plan/DEMO-MODE.md` for the full design).
 - Bumping `schema` or `parserVersion` invalidates snapshots cleanly.
 
 ### 12.1 Packages and demo mode: the map plus the real files, no history
@@ -863,7 +863,7 @@ A package is one file, `<name>.starmap.zip`, written by the app's own Export but
 - Recency, Ownership and Knowledge risk are stored in the map as finished per-file values. Those are aggregates; no commits, trees or diffs are shipped.
 - Contributor email addresses are stripped from every exported package. Names are kept so the Ownership picker works.
 - Unavailable in a demo, and hidden rather than shown disabled: blame for one file, "N files changed · Update", the working-tree check.
-- A demo makes no model calls: its summaries, points of interest, tour and detail cards are in the package.
+- A demo's notes make no model calls: its summaries, points of interest, tour and detail cards are in the package. The chat is available in a demo and is the one thing there that calls a model.
 
 **A demo never blocks the same repo opened locally.** A demo's id is `demo:<name>`, taken from the demo list and never from the repo it is of, so it shares no saved map, registry record or AI consent with a local clone. The landing page lists both, each as its own pill; the demo's carries a "Demo" tag, as does the title pill of an open demo.
 
@@ -885,7 +885,7 @@ The sidebar and the AI detail buttons ask a `ContentSource` and never know which
 3. Settings → Export → "Map and files". The export writes the remaining detail cards, packs the files and saves the package, and prints the line to add to `config.demo.repos`.
 4. Put the file in `public/demo/`.
 
-`scripts/build-demo.ts` runs the same pipeline and the same writer in Node, without the AI step: for test fixtures, and as the fallback for a repo too large to export from a tab.
+`scripts/build-demo.ts` does the same in Node, with the same pipeline and the same writer, and is how the shipped demos are built: `node --env-file=.env.local scripts/run.mjs scripts/build-demo.ts <clone> --name <name> --ai`. With `--ai` it writes the summaries, points of interest, tour and every detail card through the same handlers as the `/api/ai` routes, and refuses to write a package whose notes are incomplete. Without it the package has no notes (a test fixture).
 
 The demo shows its source, commit and licence in the repo info card opened from the title pill.
 

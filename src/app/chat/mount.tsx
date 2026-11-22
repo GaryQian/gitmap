@@ -15,18 +15,19 @@ function ChatButton() {
   return (
     <PillButton
       blur
+      size="large"
       className="gm-chat-button"
       active={open}
       aria-expanded={open}
       title={open ? 'Go to the chat' : 'Ask the assistant about this repo'}
       onClick={() => showChatTab('composer')}
     >
-      <SpeechIcon size={15} />
+      <SpeechIcon size={21} />
       Chat
     </PillButton>
   );
 }
 
-// After the tour pill (10), so that the two can share a row (chat.css).
+// After the tour pill (10): the region is a column, so "Tour the repo" sits above the chat pill.
 const mount: AppMount = { region: 'bottomCenter', order: 11, Component: ChatButton };
 export default mount;

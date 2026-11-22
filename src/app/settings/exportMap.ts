@@ -105,6 +105,7 @@ export function resultLines(result: ExportResult): string[] {
   const { report } = result;
   const lines = [`${result.fileName} · ${formatBytes(report.bytes)} · ${countLabel(report.packedFiles, 'file', 'files')}`];
   if (report.trimmedFiles > 0) lines.push(`${countLabel(report.trimmedFiles, 'file', 'files')} left out for size`);
+  if (report.skippedFiles > 0) lines.push(`${countLabel(report.skippedFiles, 'binary or very large file', 'binary or very large files')} left out`);
   if (report.unreadableFiles > 0) lines.push(`${count(report.unreadableFiles)} could not be read`);
   if (result.aiFailure) lines.push(`AI notes are incomplete: ${result.aiFailure}`);
   else if (report.manifest.ai === 'none') lines.push('Exported without AI notes');
@@ -309,6 +310,8 @@ export async function exportPackage(opts: ExportOptions): Promise<ExportResult> 
       sink: target.sink,
       maxBytes,
       minLines,
+      // the same ceiling the parser reads to: a larger file is not text worth shipping
+      maxFileBytes: session.config.parser.maxFileBytes,
       onProgress: (done, total, bytes) => opts.onStatus(packingLine(done, total, bytes)),
       signal,
     });

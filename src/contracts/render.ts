@@ -89,6 +89,11 @@ export interface RenderApi {
   /** Hide units below this line count (glowing units exempt). Layout does not change. */
   setMinBytes(n: number): void;
   flyTo(ref: NodeRef, opts?: FlyOpts): Promise<void>;
+  /**
+   * Fly so that every one of these nodes is in view, as close as that allows: a few files near one
+   * another bring the camera in close, files spread across the map take it out. Unknown refs are ignored.
+   */
+  flyToFit(refs: readonly NodeRef[], opts?: FlyOpts): Promise<void>;
   /** Fly to the default framing: the whole map in view at the default tilt. */
   resetView(opts?: FlyOpts): Promise<void>;
   /**

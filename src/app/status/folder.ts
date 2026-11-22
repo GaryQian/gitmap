@@ -51,7 +51,7 @@ export interface FolderNeed {
 
 /**
  * What the open map lacks to read files, or null when it lacks nothing or never had a folder to
- * lack: a demo reads its own content pack, a synthetic map has no files, a folder that is being
+ * lack: a demo reads the files in its own package, a synthetic map has no files, a folder that is being
  * parsed is right there.
  */
 export function folderNeed(session: Pick<Session, 'source' | 'content'> | null, meta: Pick<RepoMeta, 'source'> | null): FolderNeed | null {
