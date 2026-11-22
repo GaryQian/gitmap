@@ -17,7 +17,7 @@ interface AiServerModule {
   createDeps(env: Record<string, string | undefined>): unknown;
 }
 
-const AI_ROUTE = /^\/api\/ai\/(summaries|pois|tour|detail)\/?(?:\?.*)?$/;
+const AI_ROUTE = /^\/api\/ai\/(summaries|pois|tour|detail|chat)\/?(?:\?.*)?$/;
 
 /** A Node request as the Web Request the handlers take. The body is read whole: the handlers cap its size themselves. */
 async function toWebRequest(req: IncomingMessage, res: ServerResponse): Promise<Request> {
@@ -104,8 +104,9 @@ export default defineConfig({
   // Left to discovery, the dev server finds them one at a time as workers load, re-bundles in the
   // middle of a session, and a tab that is already open then asks for modules that no longer exist:
   // its coordinator and compute workers fail to load with no message at all.
+  // The list is explicit on purpose: scanning the worker entry points instead means crawling every
+  // task module at each start, which made the first response take most of a minute under load.
   optimizeDeps: {
-    entries: ['index.html', 'dev.html', 'src/compute/worker.ts', 'src/physics/worker.ts', 'src/pipeline/coordinator.worker.ts'],
     include: [
       'react', 'react-dom', 'react-dom/client', 'react/jsx-runtime', 'react/jsx-dev-runtime', 'zustand', 'three',
       'd3-force', 'd3-delaunay', 'fflate', 'graphology', 'graphology-communities-louvain', 'picomatch',
