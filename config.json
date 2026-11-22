@@ -37,7 +37,7 @@
   "clustering": {
     "citiesPerDecade": 3.5, "cityOffset": -2.2, "minCities": 1, "maxCities": 20,
     "districtsPerDecade": 3.5, "districtOffset": -2.2, "minDistrictSize": 5, "sizeBias": 0.5, "splitModularity": 0.3, "mergeCoupling": 0.4,
-    "resolution": 1.0, "seed": 1, "directoryAffinity": 0.1, "pathBias": 0, "mergePathBias": 0, "hubDamping": true,
+    "resolution": 1.0, "seed": 1, "directoryAffinity": 0.3, "pathBias": 0, "mergePathBias": 0, "hubDamping": true,
     "countSlack": 1.5, "incrementalMaxNew": 0.2
   },
   "importance": { "damping": 0.85, "maxIterations": 100, "tolerance": 1e-9 },
@@ -58,7 +58,7 @@
     "languageColors": {
       "ts": "#3178c6", "js": "#e8c53a", "python": "#3fa672", "c": "#7d8fa6", "cpp": "#d9486e", "objc": "#5aa9e6",
       "java": "#e0803a", "kotlin": "#a97bff", "scala": "#d73a4a", "csharp": "#2fb37c", "go": "#00add8", "rust": "#dea584",
-      "dart": "#2bb7f6", "swift": "#f05138", "php": "#8892bf", "ruby": "#cc342d", "vue": "#41b883", "svelte": "#ff5d2a",
+      "dart": "#2bb7f6", "swift": "#f05138", "php": "#8892bf", "ruby": "#cc342d", "lua": "#5b6ee1", "luau": "#00a2ff","vue": "#41b883", "svelte": "#ff5d2a",
       "astro": "#b845ed", "css": "#c6538c", "html": "#e34c26", "other": "#8a9099"
     },
     "grid": { "cell": 50, "opacity": 0.06 },
@@ -67,7 +67,10 @@
     "edgePulse": { "speed": 120, "tailLength": 30, "restSeconds": [0.5, 2.4], "flickerHz": 10, "traceOpacity": 0.16 }
   },
   "legend": { "minBytesDefault": 0 },
-  "demo": { "repos": [] },
+  "demo": { "repos": [
+    { "name": "emerge", "path": "/demo/emerge/", "location": "github.com/glato/emerge" },
+    { "name": "react", "path": "/demo/react/", "location": "github.com/facebook/react" }
+  ] },
   "render": { "ambientEdges": 1500, "edgeBudget": 50000, "maxPills": 150, "patchBudgetMs": 4, "adaptiveDpr": true, "maxDpr": 2 },
   "interaction": { "jiggleMax": 0.35, "jiggleSettleMs": 800, "hoverDelayMs": 80 },
   "camera": { "minDistance": 10, "maxDistance": 5000, "flyMs": 900, "defaultTilt": 0.55 },
@@ -78,8 +81,8 @@
   },
   "ai": {
     "enabled": true, "provider": "anthropic",
-    "models": { "synthesis": "claude-opus-5-5", "tour": "claude-sonnet-5-5", "bulk": "claude-haiku-5-5" },
-    "openaiModels": { "synthesis": "gpt-6.2-astra", "tour": "gpt-6.1-terra", "bulk": "gpt-6-luna" },
+    "models": { "synthesis": "claude-opus-5-5", "tour": "claude-sonnet-5-5", "chat": "claude-sonnet-5-5", "bulk": "claude-haiku-5-5" },
+    "openaiModels": { "synthesis": "gpt-6.2-astra", "tour": "gpt-6.1-terra", "chat": "gpt-6.1-terra", "bulk": "gpt-6-luna" },
     "excludePaths": [
       "**/.env*", "**/*.pem", "**/*.key", "**/id_rsa*", "**/id_dsa*", "**/id_ecdsa*", "**/id_ed25519*",
       "**/*.p12", "**/*.pfx", "**/*.jks", "**/*.keystore", "**/.npmrc", "**/.netrc", "**/.pypirc",
