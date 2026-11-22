@@ -14,7 +14,7 @@ import {
   type InstanceBuffers,
 } from './instances';
 import { OVERLAY_ITEMS, OverlayFade, RAMP_ROWS } from '../overlay/fade';
-import { RAMP_WIDTH } from './overlay';
+import { OVERLAY_HIDDEN, RAMP_WIDTH } from './overlay';
 import { BODY_FRAG, GLOW_FRAG, POOL_FRAG, POOL_VERT, STAR_VERT } from './shaders';
 
 /** What other modules get from `ctx.service<SpheresApi>('spheres')`. */
@@ -90,8 +90,8 @@ export function createSpheres(): SceneModule {
   let counts: { rev: number; minBytes: number; map: Map<NodeRef, { visible: number; total: number }> } | null = null;
 
   const own = {
-    uGrow: { value: 1 }, uMinBytes: { value: 0 }, uSelScale: { value: 1 }, uBreathe: { value: 1.5 }, uSpikesFrom: { value: 0.75 },
-    uOverlayMix: { value: 0 }, uOverlayBlend: { value: 1 }, uMinPx: { value: S.minPixelRadius },
+    uGrow: { value: 1 }, uMinBytes: { value: 0 }, uSelScale: { value: 1 }, uBreathe: { value: 1.5 }, uSpikesFrom: { value: 0.75 }, uGlowCurve: { value: 1 },
+    uOverlayMix: { value: 0 }, uOverlayGlow: { value: 0 }, uOverlayBlend: { value: 1 }, uMinPx: { value: S.minPixelRadius },
     uUnknown: { value: new THREE.Vector3(0.5, 0.5, 0.5) }, uUnknownFrom: { value: new THREE.Vector3(0.5, 0.5, 0.5) },
     uEmphasis: { value: new THREE.Vector4(S.breatheScale, S.hoverScale, S.selectedGlow, S.highlightGlow) }, uHoverGlow: { value: S.hoverGlow },
     uLangDim: { value: null as THREE.DataTexture | null }, uRamp: { value: null as THREE.DataTexture | null },
@@ -172,6 +172,7 @@ export function createSpheres(): SceneModule {
     if (fade.rampDirty) { rampTex.needsUpdate = true; fade.rampDirty = false; }
     own.uOverlayMix.value = fade.mix;
     own.uOverlayBlend.value = fade.blend;
+    own.uOverlayGlow.value = fade.glow;
     own.uUnknown.value.set(...fade.unknown);
     own.uUnknownFrom.value.set(...fade.unknownFrom);
   }
@@ -206,6 +207,7 @@ export function createSpheres(): SceneModule {
     own.uBreathe.value = Math.max(0.05, star.breatheMs / 1000);
     // spikes start at an importance percentile; the instance carries glow (0 at glowFromPct, 1 at the top)
     own.uSpikesFrom.value = Math.min(0.999, Math.max(0, (star.spikesFromPct - config.visual.glowFromPct) / Math.max(1e-6, 1 - config.visual.glowFromPct)));
+    own.uGlowCurve.value = Math.max(0.01, star.glowCurve);
     own.uCoreGain.value.set(star.coreGain[0], star.coreGain[1]);
     own.uCoreTight.value.set(star.coreTightness[0], star.coreTightness[1]);
     own.uLimb.value = star.limbDarkening;
@@ -280,7 +282,9 @@ export function createSpheres(): SceneModule {
         if (stateData[slot * STATE_ITEMS + 1] > ctx.now()) return false;
         const h = slot * SHAPE_ITEMS;
         const selected = (stateData[slot * STATE_ITEMS] & FLAG_SELECTED) !== 0;
-        return selected || !(buffers.shape[h + 2] < ctx.state.minBytes && buffers.shape[h + 1] <= 0);
+        if (selected) return true;
+        if (fade.mix > 0.5 && fade.data[slot * OVERLAY_ITEMS + 1] <= OVERLAY_HIDDEN) return false; // left out by the overlay's filter
+        return !(buffers.shape[h + 2] < ctx.state.minBytes && buffers.shape[h + 1] <= 0);
       },
       overlayMix: () => fade.mix,
     };

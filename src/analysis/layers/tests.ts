@@ -3,6 +3,7 @@
 import picomatch from 'picomatch';
 import { config as defaultConfig, type Config } from '../../config';
 import { LAYER_DEFS, TESTS } from '../../overlays';
+import { IMAGE_LANG } from '../../shared';
 import type { LayerPatch } from './history';
 import { unitIndex, type StructureSource } from './structure';
 
@@ -14,7 +15,7 @@ export function testMatcher(patterns: readonly string[]): (path: string) => bool
 /**
  * One category per unit: TESTS.test for a unit with a file matching the patterns, TESTS.covered
  * for a source unit some test unit has an edge to (imports, calls, references), TESTS.uncovered
- * for the rest. Units that are not code (language 'other') stay NaN.
+ * for the rest. Units that are not code (language 'other', and images) stay NaN.
  */
 export function testsValues(source: StructureSource, patterns: readonly string[]): { unitIds: string[]; values: number[] } {
   const units = unitIndex(source);
@@ -32,7 +33,8 @@ export function testsValues(source: StructureSource, patterns: readonly string[]
   }
   const values = new Array<number>(n);
   for (let u = 0; u < n; u++) {
-    values[u] = units.unitLang[u] === 'other' ? NaN : isTest[u] ? TESTS.test : referenced[u] ? TESTS.covered : TESTS.uncovered;
+    const lang = units.unitLang[u];
+    values[u] = lang === 'other' || lang === IMAGE_LANG ? NaN : isTest[u] ? TESTS.test : referenced[u] ? TESTS.covered : TESTS.uncovered;
   }
   return { unitIds: units.unitIds.slice(), values };
 }

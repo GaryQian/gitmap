@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { config } from '../config';
 import { createModelStore, edgeId, type Layer, type StructureTables } from '../model';
 import { tablesToOps } from '../testing/synthetic';
-import { LAYER_DEFS, OVERLAYS, RECENCY_OLDER, buildAdjacency, computeReach, legendFor, overlayFact, overlayView, ownershipShare, type OverlayId, type OwnershipExtra } from './index';
+import { LAYER_DEFS, OVERLAYS, RECENCY_OLDER, buildAdjacency, computeReach, legendFor, overlayFact, overlayView, ownershipShare, recencyCutoffAt, recencyPositionOf, type OverlayId, type OwnershipExtra } from './index';
 
 /** Units a..f in one district with the given dependency edges (src depends on dst). */
 function model(ids: string[], edges: [string, string][]) {
@@ -126,6 +126,51 @@ describe('overlayView', () => {
     expect(overlayFact(span, hovered, units.slotOf('c'), NOW)).toBe('Age not yet known');
   });
 
+  it('recency leaves out files older than the age filter and ends the scale there', () => {
+    const values = [NOW, NOW - 2 * DAY, NOW - 40 * DAY, RECENCY_OLDER];
+    const layer = layerOf('recency', values);
+    const all = overlayView('recency', { replica, mode: 'dark', layer, now: NOW });
+    expect(all.recency).toEqual({ spanSeconds: 40 * DAY, hidden: 0 });
+
+    const cut = overlayView('recency', { replica, mode: 'dark', layer, now: NOW, maxAgeSeconds: 10 * DAY });
+    expect(at(cut.values, 'a')).toBeCloseTo(1, 5);
+    expect(at(cut.values, 'c')).toBe(-Infinity);          // 40 days behind the newest: off the map
+    expect(at(cut.values, 'd')).toBe(-Infinity);          // older than the history walked: off too
+    expect(cut.recency).toEqual({ spanSeconds: 40 * DAY, hidden: 2 });
+    // the scale now ends at the cut-off: a file is placed by its age against ten days, not forty
+    expect(at(cut.values, 'b')).toBeCloseTo(1 - Math.log1p((2 * DAY) / 60) / Math.log1p((10 * DAY) / 60), 5);
+    expect(cut.labels.low).toBe('Oldest shown, 10 days ago');
+    // and the narrower the window, the greener the ramp starts: the oldest file shown is no longer grey
+    const grey = all.stops[0].color;
+    const narrow = overlayView('recency', { replica, mode: 'dark', layer, now: NOW, maxAgeSeconds: 3 * DAY });
+    expect(all.stops).toHaveLength(3);
+    expect(cut.stops[0].color).not.toBe(grey);
+    expect(narrow.stops[0].color).not.toBe(cut.stops[0].color);
+    expect(cut.stops[cut.stops.length - 1].color.toLowerCase()).toBe(all.stops[2].color.toLowerCase());
+    const green = (hex: string) => parseInt(hex.slice(3, 5), 16) - parseInt(hex.slice(1, 3), 16);
+    expect(green(cut.stops[0].color)).toBeGreaterThan(green(grey));
+    expect(green(narrow.stops[0].color)).toBeGreaterThan(green(cut.stops[0].color));
+    // a cut-off beyond the oldest file changes nothing
+    const wide = overlayView('recency', { replica, mode: 'dark', layer, now: NOW, maxAgeSeconds: 400 * DAY });
+    expect(Array.from(wide.values)).toEqual(Array.from(all.values));
+    expect(wide.labels.low).toBe(all.labels.low);
+  });
+
+  it('spreads the age slider over the logarithm of the age', () => {
+    const span = 1000 * DAY;
+    expect(recencyCutoffAt(0, span)).toBeCloseTo(DAY, 6);
+    expect(recencyCutoffAt(1, span)).toBe(Infinity);
+    // a third of the slider is the first ten days, two thirds the first hundred
+    expect(recencyCutoffAt(1 / 3, span)).toBeCloseTo(10 * DAY, 3);
+    expect(recencyCutoffAt(2 / 3, span)).toBeCloseTo(100 * DAY, 2);
+    for (const p of [0, 0.2, 0.5, 0.9]) expect(recencyPositionOf(recencyCutoffAt(p, span), span)).toBeCloseTo(p, 9);
+    expect(recencyPositionOf(Infinity, span)).toBe(1);
+    expect(recencyPositionOf(span * 2, span)).toBe(1);
+    // a map whose files all changed within a day has nothing to cut
+    expect(recencyCutoffAt(0.5, DAY / 2)).toBe(Infinity);
+    expect(recencyPositionOf(3600, DAY / 2)).toBe(1);
+  });
+
   it('ownership shows the chosen contributor, the top one by default', () => {
     const extra: OwnershipExtra = {
       unitIds: ['a', 'b'], offsets: [0, 2, 3], authorIds: [1, 2, 2], authorCommits: [1, 3, 4],
@@ -147,12 +192,24 @@ describe('overlayView', () => {
   });
 
   it('tests is discrete with one stop per category; reach puts the seed at the hot end', () => {
-    const tests = overlayView('tests', { replica, mode: 'dark', layer: layerOf('tests', [0, 1, 2, NaN]) });
+    // a is a test and b the file it references; c and d are uncovered in the layer. The overlay
+    // splits those by the unit graph: d, which b depends on, is one hop from a tested file.
+    const linked = model(['a', 'b', 'c', 'd'], [['a', 'b'], ['b', 'd']]).replica;
+    const slotIn = (id: string) => linked.table('unit').slotOf(id);
+    const tests = overlayView('tests', { replica: linked, mode: 'dark', layer: layerOf('tests', [0, 1, 2, 2]) });
     expect(tests.discrete).toBe(true);
-    expect(tests.stops.map((s) => s.t)).toEqual([0, 0.5, 1]);
-    expect(tests.domain).toEqual([0, 2]);
+    expect(tests.stops.map((s) => s.t)).toEqual([0, 1 / 3, 2 / 3, 1]);
+    expect(tests.domain).toEqual([0, 3]);
+    expect(['a', 'b', 'c', 'd'].map((id) => tests.values[slotIn(id)])).toEqual([0, 1, 3, 2]);
     expect(legendFor(tests).categories.map((c) => c.color)).toEqual(tests.stops.map((s) => s.color));
-    expect(overlayFact(tests, replica, units.slotOf('c'))).toBe('Not referenced by any test');
+    expect(overlayFact(tests, linked, slotIn('b'))).toBe('Referenced by a test');
+    expect(overlayFact(tests, linked, slotIn('c'))).toBe('No tested file within a hop');
+    expect(overlayFact(tests, linked, slotIn('d'))).toBe('One hop from a tested file');
+    // the link counts in either direction, and a unit that is not code stays unknown
+    const uses = model(['a', 'b', 'c', 'd'], [['a', 'b'], ['c', 'b']]).replica;
+    const other = overlayView('tests', { replica: uses, mode: 'dark', layer: layerOf('tests', [0, 1, 2, NaN]) });
+    expect(other.values[uses.table('unit').slotOf('c')]).toBe(2);
+    expect(other.values[uses.table('unit').slotOf('d')]).toBeNaN();
     const risk = overlayView('knowledgeRisk', { replica, mode: 'dark', layer: layerOf('knowledgeRisk', [0.82, NaN, NaN, NaN]) });
     expect(overlayFact(risk, replica, units.slotOf('a'))).toBe('Top author made 82% of commits');
 

@@ -115,9 +115,10 @@ export function syntheticTables(opts: SyntheticOptions): StructureTables {
       units.cols.fanIn![j]++;
     }
   }
-  // importance: percentile of fan-in (a stand-in for PageRank)
-  const order = Array.from({ length: n }, (_, i) => i).sort((a, b) => units.cols.fanIn![a] - units.cols.fanIn![b] || a - b);
-  order.forEach((u, rank) => { units.cols.importancePct![u] = n > 1 ? rank / (n - 1) : 1; });
+  // importance: percentile of fan-in among the units that have any (a stand-in for PageRank); 0 for the rest
+  const order = Array.from({ length: n }, (_, i) => i).filter((u) => units.cols.fanIn![u] > 0)
+    .sort((a, b) => units.cols.fanIn![a] - units.cols.fanIn![b] || a - b);
+  order.forEach((u, rank) => { units.cols.importancePct![u] = (rank + 1) / order.length; });
 
   return { city: cities, district: districts, unit: units, file: files, edge: edges };
 }

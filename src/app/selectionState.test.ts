@@ -41,4 +41,16 @@ describe('selection transitions', () => {
     expect(replaceSelection(three, [a, b])).toEqual({ selection: [a, b], focus: b });
     expect(clearSelection(three)).toEqual(EMPTY_SELECTION);
   });
+
+  it('a city or a district is selected without ever being the focus', () => {
+    const city: NodeRef = 'c:1', district: NodeRef = 'd:4';
+    expect(clickSelect({ selection: [a], focus: a }, city)).toEqual({ selection: [city], focus: null });
+    // added to a selection, it leaves the open detail card alone
+    const mixed = shiftClickSelect({ selection: [a], focus: a }, district);
+    expect(mixed).toEqual({ selection: [a, district], focus: a });
+    expect(focusSelected(mixed, district)).toBe(mixed);
+    expect(replaceSelection(mixed, [city])).toEqual({ selection: [city], focus: null });
+    // the focus goes to the most recent file left, not to an area
+    expect(removeSelected({ selection: [a, b, city], focus: b }, b)).toEqual({ selection: [a, city], focus: a });
+  });
 });

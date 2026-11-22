@@ -58,7 +58,7 @@ export default tseslint.config(
   {
     ignores: [
       'dist/**', 'node_modules/**', 'spikes/**', '.worktrees/**', '.claude/**', '.fixtures/**', 'public/**',
-      'fixtures/**', 'out/**', 'playwright-report/**', 'test-results/**',
+      'fixtures/**', 'out/**', 'playwright-report/**', 'test-results/**', 'api/_lib/server.mjs',
     ],
   },
   ...tseslint.configs.recommended,

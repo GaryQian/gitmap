@@ -130,4 +130,16 @@ describe('poolSize', () => {
       expect(n + config.scheduler.busyAppThreads + config.scheduler.reserveCores <= physical || n === 1).toBe(true);
     }
   });
+
+  it('does not halve the cores when they are already physical (smt: false)', () => {
+    // an 18-core Apple Silicon machine: round(18 × workerShare) = 9, not 6
+    expect(poolSize(config, 18, undefined, false)).toBe(9);
+    expect(poolSize(config, 8, undefined, false)).toBe(4);
+    // never more than with SMT assumed away entirely, and the other caps still hold
+    for (const cores of [1, 2, 4, 8, 16, 32, 64]) {
+      const n = poolSize(config, cores, undefined, false);
+      expect(n).toBeGreaterThanOrEqual(poolSize(config, cores));
+      expect(n).toBeLessThanOrEqual(config.scheduler.maxWorkers);
+    }
+  });
 });

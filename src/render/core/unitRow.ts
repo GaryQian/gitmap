@@ -2,7 +2,7 @@
 import type { Config } from '../../config';
 import type { ModelReplica } from '../../contracts/store';
 import type { PatchBatch } from '../../model/types';
-import { glowAmount, unitRadius } from '../../shared';
+import { glowAmount, unitRadiusAt } from '../../shared';
 
 export interface UnitRow {
   radius: number;
@@ -30,7 +30,7 @@ export function unitReader(replica: ModelReplica, visual: Config['visual']): Uni
     const city = district >= 0 ? (districts.refSlots.city[district] ?? -1) : -1;
     const loc = units.cols.loc[slot];
     const pct = units.cols.importancePct[slot];
-    return { radius: unitRadius(loc, pct, visual), glow: glowAmount(pct, visual), loc, bytes: units.cols.bytes[slot], lang: units.cols.lang[slot], district, city };
+    return { radius: unitRadiusAt(units.cols, slot, visual), glow: glowAmount(pct, visual), loc, bytes: units.cols.bytes[slot], lang: units.cols.lang[slot], district, city };
   };
 }
 

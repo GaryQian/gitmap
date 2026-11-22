@@ -268,7 +268,7 @@ The invariant: applying batches one at a time must produce exactly the buffers t
 
 - **Chromium-first.** `showDirectoryPicker()`; the directory handle is stored in IndexedDB so a return visit needs one permission click.
 - Firefox/Safari: drag-and-drop a folder or `<input webkitdirectory>`. Parsing and demo mode work; the folder cannot be remembered and must be re-supplied to read file contents.
-- **Desktop only.** Mouse and keyboard; no touch or phone layout.
+- **Desktop first.** Mouse and keyboard. A touch screen can pan, pinch to zoom, orbit with two fingers, tap and double-tap. On a phone (a small viewport on a touch device; a desktop window or a tablet is never one) the chrome is folded behind a menu button in the top left corner: only what is in use stays on the map (work in progress and notices, the selection, the overlays that are on, a search being typed, "Reset view" once the view has moved, the running tour, AI prompts), and the button brings back the rest.
 
 ### 6.2 Manifest
 
@@ -476,12 +476,17 @@ Measured with imports and call edges, plain rule → current:
 
 React's largest city is the compiler package with its fixtures, 43% of the repo; it stays one city because that is where those files belong, and it divides into 25 districts. At full strength the largest districts were about 560 files on both repos, at the cost of the misplacement above. An incremental Update after dropping 1% of the files keeps every remaining file in its district (a full re-clustering keeps 70–82%).
 
-**Names.** Most distinctive shared path segment (TF-IDF over path tokens). An AI summary may later override the label through an annotation.
+**Names.** Most distinctive shared path segment (TF-IDF over path tokens). Once a city has an AI summary, the summary's title ("Map rendering") replaces the derived name ("render") wherever the city is named to the user: its pill, the detail and summary cards, and the chat. This is a display rule (`src/shared/cityTitles.ts`), not a change to the model: the city keeps its derived name there, since the notes were written against it and renaming it would mark them out of date. Saved maps and demos therefore show the titles from the summaries they already hold, with nothing regenerated. The summary card of a titled city carries no name of its own: it is the summary alone, under the pill that names it. Two cities given the same title each carry their derived name after it ("API documentation · g3doc").
 
 ### 6.7 Importance
 
 - PageRank over the directed unit graph (rank flows from a file to the files it depends on), weighted by edge weight × confidence. It counts indirect dependents, so a file used by ten core modules outranks one used by ten leaf scripts.
-- Converted to a **percentile across the whole repo** (`importancePct`, 0–1). The percentile is what sphere size and glow consume (§8.1), so "compared to peers across the repo" is literal.
+- Converted to a **percentile among the files that have at least one dependent** (`importancePct`, 0–1). The percentile is what sphere size and glow consume (§8.1).
+  - Files nothing depends on are not ranked and get 0. In most repos they are the majority; ranked with the rest they filled the bottom of the scale, so any file with a dependent or two landed above the 90th percentile and the most depended-on files were squeezed into the last few points.
+  - Among the `k` ranked files the percentile is the file's position in ascending order over `k`: 1/k for the lowest, 1 for the top. A ranked file is therefore always above 0.
+  - Ties share the lowest position of their group, so a tie never lifts a file into the glow.
+  - No file has dependents: every file is 0 and nothing glows. Exactly one has: it gets 1.
+  - A dependent is another file with an edge of positive weight × confidence to this one, the same edges PageRank uses.
 - Also computed: fan-in and fan-out per file, for tooltips and the detail card.
 
 ### 6.8 The reveal: when the map appears
@@ -579,13 +584,13 @@ Spheres are camera-facing quads shaded in the fragment shader, in three instance
 
 ```
 r_size = clamp(k · lines^(1/3), rMin, rMax)     // volume ∝ lines of code
-boost  = importancePct ^ curve                  // 0 for the least important file, 1 for the most
+boost  = importancePct ^ curve                  // 0 for a file nothing depends on, 1 for the most depended on
 radius = r_size · (1 + 0.5 · boost)
 ```
 
 File size is the main contributor, and importance only ever scales it. With the defaults (`k = 0.8`, `rMin = 0.8`, `rMax = 12`, `curve = 2`):
 
-| File | Least important | Median importance | Most important |
+| File | No dependents | Median of the files with dependents | Most important |
 |---|---|---|---|
 | 10 lines | 1.7 | 1.9 | 2.6 |
 | 500 lines | 6.3 | 7.1 | 9.5 |
@@ -596,7 +601,7 @@ File size is the main contributor, and importance only ever scales it. With the 
 - The maximum boost, the curve and the scale are `visual.importanceBoost`, `visual.importanceCurve` and `visual.sizeScale` in config.
 - The earlier rule mixed a file-size radius and an importance radius 70/30. Because importance percentiles spread evenly while most files are of similar length, importance ended up moving the radius about twice as much as size did. This rule replaces it.
 
-**Glow marks importance.** Every sphere is drawn as a small star with a lit core (§8.6). What importance adds is the light that leaves the sphere: the outer corona and the pool of coloured light on the ground. That outward glow depends on importance alone: only about the top 10% of files glow. It starts faintly at the 90th percentile and reaches full brightness at the top (`visual.glowFromPct`). Large important files glow too, so the most depended-on file is never dim beside a glowing small helper. The outward glow fades while an overlay is active.
+**Glow marks importance.** Every sphere is drawn as a small star with a lit core (§8.6). What importance adds is the light that leaves the sphere: the outer corona and the pool of coloured light on the ground. That outward glow depends on importance alone: only about the top 10% of the files that have dependents glow, which is a smaller share of all files. It starts at the 90th percentile (`visual.glowFromPct`) and rises on a power curve (`visual.star.glowCurve`, 2.5) to full brightness at the top, so the contrast is strong: a file halfway up the glowing band sheds under a fifth of the light of the most important file. A file below the band keeps only a thin halo at its edge and a faint pool of ground light. Large important files glow too, so the most depended-on file is never dim beside a glowing small helper. The outward glow fades while an overlay is active.
 
 **Minimum-size filter.** The legend's slider sets a minimum line count. It is one shader uniform compared against each sphere's line count: spheres below it, and their lines, are not drawn. The layout does not change, so nothing shifts as the slider moves. Glowing files are exempt, so the slider only removes files that are both small and unimportant.
 
@@ -653,7 +658,7 @@ A sphere is drawn as a self-lit ball of gas. The first version read as a glossy 
 - **Rejected in the design pass as cartoon-like:** a starburst drawn in the centre, striped rays, expanding rings, and a rim brighter than the body.
 - Three instanced draws: opaque bodies with depth; glows with no depth write, additive in dark mode; flat ground-light quads. Bodies sort by centre depth, so no per-pixel depth is written.
 - Light mode runs the same shaders with normal blending. It renders correctly but has not had its own tuning pass; dark mode is the tuned default.
-- Under an overlay the body takes the overlay colour, the core stays neutral white, and glow and ground light fade out.
+- Under an overlay the body takes the overlay colour and the core stays neutral white. The importance glow fades out and the overlay takes its place: a star glows by how strong its overlay colour is, on a steep curve, so the bright end of the ramp (a fresh change under Recency, a high share under Ownership) gets a brighter body, a hot core, a wide corona and ground light, and the faded bulk gets none. A categorical overlay (Tests) has no bright end and adds no glow, and Dependency reach adds none either: it is read from the colour alone.
 - A dimmed sphere (filtered out by the legend) loses its core light and drops to a pale grey body.
 - Selected spheres scale ×1.3 and their core, glow and scale breathe together on a ~1.5 s cycle.
 
@@ -693,10 +698,15 @@ A sphere is drawn as a self-lit ball of gas. The first version read as a glossy 
 | Left-drag on empty space | Pan; the grabbed ground point stays under the cursor |
 | Middle-drag or Space+drag | Orbit around the ground point under the pointer (ray → plane) |
 | Wheel | Zoom toward the cursor |
+| One finger (touch) | Pan, as left-drag; a tap is a click and a double tap a double-click |
+| Two fingers (touch) | Pinch to zoom; the ground point grabbed midway between the fingers stays there, so moving both fingers pans |
+| Two-finger twist (touch) | Orbit: turns the view around the point between the fingers, once the twist passes about 9°, so a plain pinch never turns it |
+| Two fingers sliding up or down together (touch) | Orbit: tilts the view; down toward top-down, up toward the horizon |
 | Hover | Jiggle + tooltip + draw that sphere's connections |
 | Click | Select and focus; detail card |
 | Double-click | Open file in the sidebar reader |
 | Shift+click | Add/remove from selection |
+| Click a city or district pill | Select the city or district and fly to it (Shift+click adds or removes it and leaves the camera; a click on the one thing selected lets go). It is listed with the selected files, its pill takes the selection colour, and a city's summary card stays pinned while it is selected |
 | Shift+drag | Marquee select |
 | Drag a pill | Move the city or district in the simulation (district clamped to its city) |
 | "Reset view" pill, or Home key | Fly the camera back to the default framing and return every city and district to its settled position |
@@ -730,11 +740,11 @@ All overlays are layers in the model. The history-based ones are computed on the
 
 | Overlay | Colour | Source | Notes |
 |---|---|---|---|
-| **Recency** (specified) | bright green → faded grey | history | Falls off fast, so only what changed recently reads as green: brightness halves every two weeks of age (exponential decay) and is all but gone after about three months. Age is measured from the latest change on the map, so a dormant repo or a demo still shows its most recent burst of work. |
+| **Recency** (specified) | bright green → faded grey | history | Falls off fast, so only what changed recently reads as green: brightness halves every two weeks of age (exponential decay) and is all but gone after about three months. An age slider in the legend takes files older than its value off the map and ends the scale there; the narrower the window, the further from grey the scale starts, so the map as a whole turns greener as the slider moves toward recent. The slider starts at the left with every file and is logarithmic, from the whole span down to one day, so the last few days have as much travel as the last few years. Age is measured from the latest change on the map, so a dormant repo or a demo still shows its most recent burst of work. |
 | **Ownership** (specified) | bright purple → grey | history | Commit share per author. Contributor picker with fuzzy search, sorted by commits. |
 | **Dependency reach** (specified) | hop-count ramp | unit graph | BFS from the selection on demand; toggle "depends on" vs "depended on by" |
 | **Knowledge risk** | amber → grey | history | The top author's share of commits to the file. Brightest where one person made nearly all of them. Files with fewer than `overlays.knowledgeRisk.minCommits` commits stay neutral, since a share of two commits means little. |
-| **Tests** | three-tone | path patterns + edges | Test files in one colour, source files that a test file imports or calls in a second, and source files no test references highlighted. Test files are recognised by configurable path patterns (`tests/`, `__tests__/`, `*_test.*`, `*.test.*`, `*.spec.*`, `*Test.java`, `test_*.py`). |
+| **Tests** | four-tone | path patterns + edges | Test files in one colour, source files that a test file imports or calls in a second, source files one hop from such a file (linked to it in either direction) in yellow, and source files with no tested file within a hop highlighted. Test files are recognised by configurable path patterns (`tests/`, `__tests__/`, `*_test.*`, `*.test.*`, `*.spec.*`, `*Test.java`, `test_*.py`). |
 | *Later:* Misplaced | highlight | cluster vs directory | Files whose community differs from their folder siblings' |
 
 First release: Recency, Ownership, Reach, Knowledge risk, Tests. Removed from the plan: Hotspots, Cycles and Hidden coupling. A "load-bearing" overlay is not needed: importance is always visible through size and glow.
@@ -755,7 +765,7 @@ First release: Recency, Ownership, Reach, Knowledge risk, Tests. Removed from th
 
 Pipeline. **It starts only when the parse has finished** (both passes complete) and consent has been given. If the escape hatch fired, AI waits for the slow pass and never runs on a provisional structure. It does not wait for Apply: its output attaches to files, so it is valid whichever clustering is on screen.
 
-1. **Map:** one bulk-model call per city (parallel) → a short neutral summary of what that city does: its job in the system first, then the main things inside it that do that job (about 30 words, plus a name for the job of at most three words). The summary is shown to the user when the pointer rests on the city's pill (§17.6), and it is also context for the reduce step.
+1. **Map:** one bulk-model call per city (parallel) → a short neutral summary of what that city does: its job in the system first, then the main things inside it that do that job (about 30 words, plus a name for the job of at most three words). The name for the job becomes the name on the city's pill. The summary is shown to the user when the pointer rests on the city's pill (§17.6), and it is also context for the reduce step.
 2. **Reduce, two calls in parallel:** POIs and Tour, both given the repo digest plus the city summaries. The shared digest prefix is prompt-cached.
 3. **On demand:** POI detail buttons ("Role in the system", "Who uses this", "Key entry points", "Walk me through it") send a focused context: that file's skeleton or content plus its neighbours' signatures.
 
@@ -817,6 +827,7 @@ Once AI is enabled for a repo, a **Chat** pill appears at the bottom centre. It 
 | Look things up | `get_repo_overview`, `list_area`, `search_files`, `get_file`, `get_dependencies`, `read_file`, `get_notes`, `get_view_state` |
 | Drive the map | `set_overlay`, `select`, `clear_selection`, `focus_on`, `open_file`, `set_filters`, `reset_view` |
 
+- **The assistant knows what is selected.** Every question is sent with a short note in front of it listing the cities, districts and files selected on the map at that moment (a `<map_selection>` block the app adds; the transcript shows the person's own words). "This", "here" and "these files" then mean the selection, with no look-up needed. A line over the composer says what the next question is about ("Asking about Rendering and 3 files"). `get_view_state` still has the rest of the view.
 - **The map follows the answer.** When an answer points at a file, the view zooms to it: the assistant is told to fly there (or to select and frame a small group), and if it did not, the panel does it from the file paths the answer mentions. One file is selected and framed; several are selected together and framed as a group. The view is left alone when the user moved it themselves in the meantime.
 - **What the assistant does is always visible.** Each action on the map is a one-line entry in the transcript ("Turned on the Recency overlay", "Selected 14 files in Rendering"); look-ups show a quiet progress line. File paths in an answer are buttons that select the file and fly to it.
 - **Limits.** A bounded number of tool steps per message, a size budget per tool result, the same per-IP rate limit and input cap as the other routes, and a Stop button. The conversation lasts for the visit and is not saved.
@@ -922,7 +933,7 @@ One file, typed and validated at build, imported by client and server. Secrets a
                   "file":     { "pad": 0.5, "sizeVsConnectivity": 0.5, "baseStrength": 0.1 } },
   "visual":     { "radiusMin": 0.8, "radiusMax": 12, "sizeScale": 0.8, "importanceBoost": 0.5, "importanceCurve": 2,
                   "glowFromPct": 0.9, "selectedScale": 1.3, "languageColors": { "ts": "#3178c6" }, "grid": {}, "background": {},
-                  "star":      { "coreGain": [2.4, 5.0], "coreTightness": [13, 8], "limbDarkening": 0.62, "flicker": 0.07, "glowFalloff": [8, 2.2], "spikesFromPct": 0.975, "breatheMs": 1500 },
+                  "star":      { "coreGain": [2.4, 5.0], "coreTightness": [13, 8], "limbDarkening": 0.62, "flicker": 0.07, "glowFalloff": [16, 1.4], "glowCurve": 2.5, "spikesFromPct": 0.975, "breatheMs": 1500 },
                   "particles": { "ambient": 4000, "voidDustShare": 0.2, "selectBurst": 40, "openBurst": 150 },
                   "edgePulse": { "speed": 120, "tailLength": 30, "restSeconds": [0.5, 2.4], "flickerHz": 10, "traceOpacity": 0.16 } },
   "legend":     { "minLinesDefault": 0 },
@@ -974,7 +985,17 @@ Targets are goals. M0 measured several of them on one desktop machine (§15); no
 | Physics | Pass with the spatial-hash collide (0.7 s at 10k); stock d3 collide misses the budget |
 | Pack-first reads (added) | 5–10× faster than opening files, in Node (§6.3.1) |
 
-No part needs Rust or WASM at S and M. Still unmeasured: the browser read paths (they need a person to pick a folder: `spikes/fsa` and `spikes/git/browser/frs-bench.html`), integrated graphics, a 4-core laptop, a real 100k-file repo, and the Vercel headers.
+No part needs Rust or WASM at S and M.
+
+**Measured in a browser since** (2026-11-21, `npm run bench:browser`, headless Chromium on the test machine: 16 logical cores, RTX 2080 Ti, with other work running on it at the time):
+
+| What | Result |
+|---|---|
+| Render, synthetic maps through the real session | 60 fps (the display cap) at rest and while zooming and panning at 1k, 10k, 50k and 100k files, at full quality. Worst single frame while moving: 17 ms up to 50k, 50 ms at 100k. Time to a settled map: 2.3 s, 4.3 s, 14.8 s, 19.8 s |
+| Browser read paths, react (7,156 files, parsed fresh) | Reading stage 0.54–0.59 s through a `FileSystemDirectoryHandle` and the same through a dropped-files list; folder to revealed map in 8.5–9.2 s either way (structure, which includes the slow pass, is 5.6–6.2 s of it) |
+| Browser read paths, emerge (142 files) | About 2 s to the reveal, either way |
+
+The directory handle in that benchmark is in the origin private file system: the same API calls the app makes on a picked folder, without a real disk under them, so a cold disk is still not covered. Still unmeasured: a folder picked by a person on a cold disk (`spikes/fsa`), integrated graphics (the test machine has none; the benchmark prints the adapter it ran on, so it can be run on a laptop), a 4-core laptop, a real 100k-file repo, and the Vercel headers.
 
 The build order, work packages and test policy for M1–M6 are in [IMPLEMENTATION.md](IMPLEMENTATION.md). The summaries below say what each milestone delivers.
 
@@ -1015,8 +1036,8 @@ The build order, work packages and test policy for M1–M6 are in [IMPLEMENTATIO
 | Physics | Three tiers; nodes interact only with siblings. |
 | Height | All spheres rest on the plane. Height is sphere size. |
 | Sphere size | Set by lines of code (volume-proportional). Importance enlarges it by up to 50%, on a curve that favours the most important files. |
-| Importance | PageRank over the dependency graph, as a percentile across the repo. |
-| Glow | By importance alone; about the top 10% of files glow (from the 90th percentile). Fades under overlays. |
+| Importance | PageRank over the dependency graph, as a percentile among the files that have dependents; 0 for a file nothing depends on. |
+| Glow | By importance alone; about the top 10% of the files that have dependents glow (from the 90th percentile). Fades under overlays. |
 | Sphere look | Small stars: file-type colour dominates, lit core on every sphere, corona and ground light by importance. Ambient stellar-wind particles; bursts on single and double click (§8.6). |
 | Edges | Stored in full; ribbons when zoomed out (one band per pair, two-way pulses); spheres always individual at S and M. Pulses of energy travel from the dependent file to the file it depends on. |
 | When the map appears | At the stable point (both passes, clustered, settled), or after 30 s with imports plus partial call edges. Waiting screen is the wisp background with a progress pill, no grid. |
@@ -1147,6 +1168,7 @@ What was called the "top bar" elsewhere in this plan is a top row of separate fl
 - Centred. The title, one button, and below it the repo pills. Nothing else: no navigation, tagline, footer or settings.
 - **The whole page is the drop target.** Dragging a folder over it brightens the wisps slightly; there is no drop-zone box.
 - **Repo pills** list saved repos by most recently opened, then demos. Each shows the repo name and its location, and clicking one opens it.
+- **Repo search.** First among the pills is a small "Search" pill. Clicking it, or typing in it, opens the search: the pill widens into a field and moves to the middle on a line of its own, and every repo pill goes away. The repos that match what is typed appear beneath it as pills: a fuzzy match on the name first, then on where the repo is from. It looks through every saved repo, not only the few shown on the page. Enter opens the best match. Clicking anywhere else, or Escape, closes the search and the pills come back. The rest of the page does not move while it is open.
 - **The title** comes from `app.title` in `config.json` (default "Starmap") and is also the document title and the title pill in the map view.
 - Messages appear only when needed, as one quiet line under the button: an unsupported browser, or a folder that could not be read.
 

@@ -13,6 +13,7 @@ import { PointerRouter, type PointerHandler, type PointerInfo } from './pointer'
 import { PositionTextures } from './positions';
 import { RefreshEstimator, pump, type Steps } from './staged';
 import { RENDER_LOCAL } from './tunables';
+import { TwoFingerGesture } from './twoFinger';
 import type { FrameState, QualityState, RevealInfo, SceneContext, SceneEvents, SceneModule, SharedUniforms, ViewState } from './types';
 import { UnitLookup } from './unitLookup';
 import { touchedUnits, unitReader } from './unitRow';
@@ -62,6 +63,8 @@ export function createSceneRenderer(init: RenderInit): RenderApi {
   const state: ViewState = {
     revealed: false, selection: [], highlights: [], typeFilter: [], minBytes: config.legend.minBytesDefault, overlay: null,
     particles: init.particles ?? config.settings.particles,
+    ribbons: true,
+    poiBeams: true,
   };
   const counters = { edgesDrawn: 0, quality: 0 };
   const quality: QualityState = { edgeScale: 1, maxPixelRatio: Infinity };
@@ -100,6 +103,7 @@ export function createSceneRenderer(init: RenderInit): RenderApi {
   // ---- camera input: the lowest-priority pointer handler ----
   let drag: 'pan' | 'orbit' | null = null;
   let last: PointerInfo | null = null;
+  let fingers: TwoFingerGesture | null = null;
   const cameraHandler: PointerHandler = {
     name: 'camera',
     priority: 0,
@@ -122,6 +126,18 @@ export function createSceneRenderer(init: RenderInit): RenderApi {
       const travel = Math.max(-300, Math.min(300, w.deltaY)) * (w.ctrl ? 4 : 1);
       rig.zoomAt(w.x, w.y, Math.exp(travel * RENDER_LOCAL.camera.zoomSpeed), performance.now());
       autoFrame = false;
+      return true;
+    },
+    pinch(g) {
+      if (g.phase === 'start') { drag = null; last = null; fingers = new TwoFingerGesture(g); rig.pinchStart(g.x, g.y); }
+      else if (g.phase === 'move') {
+        // tilt, or zoom + turn + pan: core/twoFinger.ts decides which once the fingers have moved a little
+        const step = fingers?.move(g);
+        if (step?.kind === 'tilt') rig.pinchTilt(step.dy);
+        else if (step) rig.pinchMove(step.x, step.y, step.factor, step.turn);
+        if (step) autoFrame = false;
+      } else { fingers = null; rig.dragEnd(); }
+      dirty = true;
       return true;
     },
   };
@@ -397,6 +413,8 @@ export function createSceneRenderer(init: RenderInit): RenderApi {
     },
 
     setParticles(on) { setState('particles', on); },
+    setRibbons(on) { setState('ribbons', on); },
+    setPoiBeams(on) { setState('poiBeams', on); },
     setOverlay(overlay) { setState('overlay', overlay); },
     setSelection(refs) { setState('selection', refs.slice()); },
     setHighlights(refs) { setState('highlights', refs.slice()); },

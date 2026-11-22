@@ -26,6 +26,9 @@ function packageContent(opening: () => Promise<OpenedPackage>): ContentSource {
 
 const megabytes = (bytes: number): string => (bytes / 1e6).toFixed(1);
 
+/** How long a closed map's coordinator may take to write its last snapshot before it is terminated. */
+const CLOSE_GRACE_MS = 4000;
+
 export function createBrowserSession(source: RepoSource, config: Config): Session {
   const events = new Emitter<PipelineEvents>();
   const replica = createReplica();
@@ -81,6 +84,9 @@ export function createBrowserSession(source: RepoSource, config: Config): Sessio
   const onVisibility = () => { if (document.visibilityState === 'hidden') send({ type: 'hidden' }); };
 
   const send = (m: ToCoordinator) => worker?.postMessage(m);
+  /** While a closed map's coordinator finishes its last snapshot write: that worker, and how to end it. */
+  let closing: Worker | null = null;
+  let finishClosing: (() => void) | null = null;
   /** Counts ai.cancel() calls, so a detail request whose file read straddles a cancel is dropped. */
   let aiCancels = 0;
   let nextId = 1;
@@ -155,8 +161,22 @@ export function createBrowserSession(source: RepoSource, config: Config): Sessio
           reject(new Error(message));
         };
         worker.onmessage = (ev: MessageEvent<FromCoordinator>) => {
-          if (disposed) return;
           const msg = ev.data;
+          if (disposed) {
+            // Closing: the coordinator may still ask for the layout to write the last snapshot, and
+            // says when it has finished. Everything else is for a map that is no longer shown.
+            if (msg.type === 'closed') finishClosing?.();
+            else if (msg.type === 'request' && closing) {
+              const to = closing;
+              Promise.resolve()
+                .then(() => (mainCalls[msg.method] as (...a: unknown[]) => unknown)(...msg.args))
+                .then(
+                  (value) => to.postMessage({ type: 'reply', id: msg.id, ok: true, value } satisfies ToCoordinator),
+                  (err) => to.postMessage({ type: 'reply', id: msg.id, ok: false, error: String(err?.message ?? err) } satisfies ToCoordinator),
+                );
+            }
+            return;
+          }
           switch (msg.type) {
             case 'event':
               if (msg.evt === 'batch') onBatch(msg.payload);
@@ -257,14 +277,28 @@ export function createBrowserSession(source: RepoSource, config: Config): Sessio
     dispose() {
       disposed = true;
       if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisibility);
-      worker?.terminate();
-      worker = null;
       for (const p of pending.values()) p.reject(new Error('closed'));
       pending.clear();
       render?.dispose();
-      physics.dispose();
       events.clear();
       content = null;
+      // The coordinator gets a moment to write a snapshot that is still waiting out its debounce
+      // (it needs the layout from the physics worker for that), then both workers go.
+      const leaving = worker;
+      worker = null;
+      if (!leaving) { physics.dispose(); return; }
+      closing = leaving;
+      let done = false;
+      finishClosing = () => {
+        if (done) return;
+        done = true;
+        closing = null;
+        finishClosing = null;
+        leaving.terminate();
+        physics.dispose();
+      };
+      setTimeout(finishClosing, CLOSE_GRACE_MS);
+      leaving.postMessage({ type: 'close' } satisfies ToCoordinator);
     },
   };
   return session;

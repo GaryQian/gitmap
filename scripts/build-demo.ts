@@ -13,7 +13,11 @@
 //
 // Usage: node scripts/run.mjs scripts/build-demo.ts <local clone> [--name react] [--out public/demo]
 //          [--source-url URL] [--max-bytes N] [--min-lines N] [--no-history] [--history-seconds N]
-//          [--ai] [--allow-partial-ai]
+//          [--allow-partial-history] [--ai] [--allow-partial-ai]
+//
+// History is walked to the first commit, however long that takes: a demo's Recency, Ownership and
+// Risk overlays cover every file. --history-seconds caps the walk; a package with part of the
+// history is then written only with --allow-partial-history.
 import { closeSync, mkdirSync, openSync, readFileSync, statSync, unlinkSync, writeSync } from 'node:fs';
 import path from 'node:path';
 import { createAiClient } from '../src/ai';
@@ -37,15 +41,16 @@ interface Args {
   maxBytes: number;
   minLines: number;
   history: boolean;
-  /** Walk history for this long instead of the app's default budget, with no commit cap. */
+  /** Stop the history walk after this long; null walks all of it. There is no commit cap either way. */
   historySeconds: number | null;
+  allowPartialHistory: boolean;
   ai: boolean;
   allowPartialAi: boolean;
 }
 
-const USAGE = 'usage: node scripts/run.mjs scripts/build-demo.ts <local clone> [--name react] [--out public/demo] [--source-url URL] [--max-bytes N] [--min-lines N] [--no-history] [--history-seconds N] [--ai] [--allow-partial-ai]';
+const USAGE = 'usage: node scripts/run.mjs scripts/build-demo.ts <local clone> [--name react] [--out public/demo] [--source-url URL] [--max-bytes N] [--min-lines N] [--no-history] [--history-seconds N] [--allow-partial-history] [--ai] [--allow-partial-ai]';
 const VALUE_FLAGS = new Set(['--name', '--out', '--source-url', '--max-bytes', '--min-lines', '--history-seconds']);
-const BOOLEAN_FLAGS = new Set(['--no-history', '--ai', '--allow-partial-ai']);
+const BOOLEAN_FLAGS = new Set(['--no-history', '--allow-partial-history', '--ai', '--allow-partial-ai']);
 
 function parseArgs(argv: string[]): Args {
   const values = new Map<string, string>();
@@ -81,6 +86,7 @@ function parseArgs(argv: string[]): Args {
     minLines: count('--min-lines', baseConfig.demo.package.minLines),
     history: !flags.has('--no-history'),
     historySeconds: values.has('--history-seconds') ? count('--history-seconds', 0) : null,
+    allowPartialHistory: flags.has('--allow-partial-history'),
     ai: flags.has('--ai'),
     allowPartialAi: flags.has('--allow-partial-ai'),
   };
@@ -165,8 +171,8 @@ const count = (n: number): string => n.toLocaleString('en-US');
 
 export default async function main(argv: string[]): Promise<void> {
   const args = parseArgs(argv);
-  const config = args.historySeconds === null ? baseConfig
-    : withConfig({ history: { timeBudgetSeconds: args.historySeconds, maxCommits: 1_000_000_000 } });
+  // a week stands for "no limit": the walk ends at the first commit
+  const config = withConfig({ history: { timeBudgetSeconds: args.historySeconds ?? 7 * 24 * 3600, maxCommits: 1_000_000_000 } });
   const t0 = performance.now();
   const at = (): string => `[${((performance.now() - t0) / 1000).toFixed(1)}s]`;
 
@@ -183,6 +189,14 @@ export default async function main(argv: string[]): Promise<void> {
   });
 
   try {
+    // before any model call is paid for: a demo with part of its history has overlays that stop short
+    if (args.history) {
+      const history = result.model.meta.history;
+      console.log(`${at()} history: ${count(history?.commitsWalked ?? 0)} commits, ${history?.complete ? 'complete' : 'NOT complete'}`);
+      if (!history?.complete && !args.allowPartialHistory) {
+        throw new Error('The history walk did not reach the first commit. Nothing was written; run again without --history-seconds (or with a longer one), or pass --allow-partial-history to package what there is.');
+      }
+    }
     const openRepo = async (locator: RepoLocator) => {
       if (locator.kind !== 'node') throw new Error(`cannot open a '${locator.kind}' locator here`);
       return openNodeRepoAccess(locator.rootPath);

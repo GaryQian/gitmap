@@ -21,12 +21,17 @@ export interface ColorStop { t: number; color: string }
 /** What the renderer needs to draw an overlay: values per unit slot and how to colour them. */
 export interface OverlayView {
   id: string;
-  /** One value per unit slot; NaN = not yet known (drawn in the neutral "unknown" style). */
+  /** One value per unit slot; NaN = not yet known (drawn in the neutral "unknown" style); −Infinity = filtered out by the overlay (not drawn). */
   values: Float32Array;
   domain: [number, number];
   /** Sorted by t. With `discrete`, values snap to the nearest stop instead of interpolating. */
   stops: ColorStop[];
   discrete?: boolean;
+  /**
+   * The stars at the strong end of the ramp glow (a brighter body, a wide corona, ground light).
+   * Default: true for a continuous ramp, false for a discrete one.
+   */
+  glow?: boolean;
   /** Colour for unknown values. */
   unknown: string;
 }
@@ -80,6 +85,10 @@ export interface RenderApi {
   reveal(opts?: { instant?: boolean }): Promise<void>;
   setTheme(mode: ThemeMode): void;
   setParticles(on: boolean): void;
+  /** Show the always-on connection ribbons; hover and selection edges are drawn either way. */
+  setRibbons(on: boolean): void;
+  /** Show the point-of-interest beams. */
+  setPoiBeams(on: boolean): void;
   setOverlay(overlay: OverlayView | null): void;
   setSelection(refs: NodeRef[]): void;
   /** Extra emphasis without selection (tour highlights). */

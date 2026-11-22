@@ -53,6 +53,12 @@ describe('the title of the card', () => {
   });
 
   it('is dropped when the label is missing or merely repeats the name on the pill', () => {
+    // the pill shows the AI title: the card is the summary alone, with no name of its own
+    const note = [summary('s9', 'c:api', 'Handles requests.', 'Request handling')];
+    expect(cardContent(note, 'c:api', 'Request handling', false, { title: 'Request handling', derived: 'api', titled: true }))
+      .toEqual({ kind: 'summary', title: null, text: 'Handles requests.' });
+    expect(cardContent(note, 'c:api', 'Request handling · api', false, { title: 'Request handling · api', derived: 'api', titled: true }))
+      .toEqual({ kind: 'summary', title: null, text: 'Handles requests.' });
     expect(titleFor(undefined, 'api')).toBeNull();
     expect(titleFor('  ', 'api')).toBeNull();
     expect(titleFor('API', 'api')).toBeNull();

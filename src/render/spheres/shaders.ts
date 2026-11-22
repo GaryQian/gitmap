@@ -21,8 +21,8 @@ varying float vScale; varying float vPhase; varying float vDim; varying float vB
  */
 const STAR_PRELUDE = GLSL_POSITIONS + GLSL_HASH + /* glsl */ `
 uniform float uTime; uniform float uPixelWorld;
-uniform float uGrow; uniform float uMinBytes; uniform float uSelScale; uniform float uBreathe; uniform float uSpikesFrom;
-uniform float uOverlayMix; uniform float uMinPx;
+uniform float uGrow; uniform float uMinBytes; uniform float uSelScale; uniform float uBreathe; uniform float uSpikesFrom; uniform float uGlowCurve;
+uniform float uOverlayMix; uniform float uOverlayGlow; uniform float uMinPx;
 uniform float uMotion;    // 0 under reduced motion: nothing below moves with time
 uniform vec4 uEmphasis;   // breathe scale, hover scale, selected glow, highlight glow
 uniform float uHoverGlow;
@@ -36,6 +36,8 @@ bool gmStar(out vec3 center, out float r) {
   float sel = float(flags & 1), hi = float((flags >> 1) & 1), hov = float((flags >> 2) & 1);
   float age = (uTime - aState.y) / max(uGrow, 1e-3);
   if (aShape.w < 0.5 || age <= 0.0 || aSlot.y < 0.0 || aSlot.z < 0.0) return false;
+  // an overlay's own filter (Recency's age slider): the units it leaves out are not drawn while it is on
+  if (uOverlayMix * mix(step(aOverlay.x, -1.5), step(aOverlay.y, -1.5), uOverlayBlend) > 0.5 && sel < 0.5) return false;
   // the size slider: small files go, glowing and selected ones stay
   if (aShape.z < uMinBytes && g <= 0.0 && sel < 0.5) return false;
   float k = clamp(age, 0.0, 1.0);
@@ -46,14 +48,22 @@ bool gmStar(out vec3 center, out float r) {
   r = aShape.x * grow * mix(1.0, uSelScale, sel) * (1.0 + uEmphasis.x * breath) * mix(1.0, uEmphasis.y, hov);
   vec2 ground = gmGround(aSlot) + aNudge.xz;
   center = vec3(ground.x, r + aNudge.y, ground.y);
-  // importance glow: about the top 10% of files; it fades while an overlay is active
-  float shaped = g * g * (3.0 - 2.0 * g);
+  // importance glow: about the top 10% of the files that have dependents; it fades while an overlay is active
+  // A power curve keeps the light for the top: with curve 2.5 a file halfway up the glowing band
+  // sheds under a fifth of what the most important file does (config.visual.star.glowCurve).
+  float shaped = pow(g, uGlowCurve);
   float emphasis = max(sel * (uEmphasis.z + 0.15 * breath), max(hi * uEmphasis.w, hov * uHoverGlow));
-  vGlow = max(shaped * (1.0 - uOverlayMix), emphasis) * (1.0 - dim);
+  // Under an overlay the glow follows the overlay instead of importance: a star glows by how strong
+  // its overlay colour is (../overlay/glsl.ts), squared so that only the bright end of the ramp (a
+  // fresh change, a high share) gets the wide corona, the hot core and the ground light, and the
+  // faded bulk gets none. uOverlayGlow is how much of the full glow the very brightest get (0 for an
+  // overlay that adds none, OverlayView.glow).
+  gmOverlay();
+  float heat = gmOverlayHeat(vOvCol);
+  vGlow = max(mix(shaped, heat * heat * vOvKnown * uOverlayGlow, uOverlayMix), emphasis) * (1.0 - dim);
   // the top few percent flare like a supernova
   vSuper = smoothstep(uSpikesFrom, 1.0, g) * (1.0 - uOverlayMix) * (1.0 - dim);
   vCol = aColor.rgb;
-  gmOverlay();
   vPhase = hash11(aSlot.x) * 6.2831;
   vDim = dim;
   vBoost = (1.0 - k) * 1.5 + breath * 0.6;   // a flash as it ignites; the core breathes when selected
@@ -67,7 +77,7 @@ void main() {
   vec3 c; float r;
   if (!gmStar(c, r)) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
   #ifdef CORONA
-    vScale = 1.35 + 1.7 * vGlow + 2.4 * vSuper;
+    vScale = 1.35 + 2.6 * vGlow + 2.4 * vSuper;
   #else
     vScale = 1.0;
   #endif
@@ -135,7 +145,7 @@ void main() {
 
   // Under an overlay the body takes the overlay colour and the core stays neutral white; a star
   // whose value is not yet known is drawn unlit (../overlay/glsl.ts).
-  col = mix(col, gmOverlayBody(vOvCol, vOvKnown, d2, limbDark * surface, burn, uVoid), uOverlayMix);
+  col = mix(col, gmOverlayBody(vOvCol, vOvKnown, d2, limbDark * surface, burn, clamp(vGlow, 0.0, 1.0), uVoid), uOverlayMix);
 
   // A sphere dimmed by the legend loses its core light and drops to a pale grey body.
   col = mix(col, uDustCool * mix(1.12, 0.82, d2), vDim);
@@ -158,7 +168,7 @@ void main() {
   // outline, then falls away in a long soft tail. Smooth everywhere: no drawn rays, no rings.
   float s = mix(uGlowFalloff.x, uGlowFalloff.y, vGlow);
   float g = 1.0 / (1.0 + pow(max(d - 0.93, 0.0) * s, 2.0));
-  float a = g * (0.50 + 0.25 * vGlow) * (1.0 + 0.05 * uMotion * sin(t * 0.9 + vPhase));
+  float a = g * (0.50 + 0.50 * vGlow) * (1.0 + 0.05 * uMotion * sin(t * 0.9 + vPhase));
   if (vSuper > 0.0) {
     // thin, faint diffraction spikes on the very brightest only, as a telescope would show them
     float cs = cos(0.35), sn = sin(0.35); vec2 u = vec2(cs * vUv.x - sn * vUv.y, sn * vUv.x + cs * vUv.y);
@@ -181,7 +191,7 @@ varying vec2 vQ;
 void main() {
   vec3 c; float r;
   if (!gmStar(c, r)) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
-  float R = r * (2.0 + 3.0 * vGlow + 3.0 * vSuper);
+  float R = r * (2.0 + 4.0 * vGlow + 3.0 * vSuper);
   vQ = position.xy; vPx = 0.0; vScale = 1.0; vUv = vec2(0.0);
   gl_Position = projectionMatrix * viewMatrix * vec4(c.x + position.x * R, 0.05, c.z + position.y * R, 1.0);
 }`;
@@ -192,8 +202,9 @@ uniform float uDark; uniform float uOverlayMix;
 varying vec2 vQ;
 void main() {
   float d2 = dot(vQ, vQ); if (d2 > 1.0) discard;
-  float w = exp(-d2 * 4.0) * (1.0 - d2) * (1.0 - vDim) * (1.0 - 0.7 * uOverlayMix) * gmOverlayLight(vOvKnown, uOverlayMix, vOvCol);
+  // under an overlay the ground light dims for the bulk and stays for the stars that glow
+  float w = exp(-d2 * 4.0) * (1.0 - d2) * (1.0 - vDim) * (1.0 - 0.7 * uOverlayMix * (1.0 - vGlow)) * gmOverlayLight(vOvKnown, uOverlayMix, vOvCol);
   vec3 col = mix(vCol, vOvCol, uOverlayMix);
-  if (uDark > 0.5) gl_FragColor = vec4(col, w * (0.16 + 0.55 * vGlow));
-  else gl_FragColor = vec4(mix(vec3(0.25, 0.27, 0.32), col, 0.35 + 0.65 * vGlow), w * (0.22 + 0.35 * vGlow));
+  if (uDark > 0.5) gl_FragColor = vec4(col, w * (0.07 + 0.83 * vGlow));
+  else gl_FragColor = vec4(mix(vec3(0.25, 0.27, 0.32), col, 0.35 + 0.65 * vGlow), w * (0.10 + 0.60 * vGlow));
 }`;

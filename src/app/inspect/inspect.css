@@ -7,8 +7,11 @@
   left: 0;
   top: 0;
   visibility: hidden;
-  will-change: transform;
+  will-change: translate;
 }
+/* above every pill in the scene (the stacking is listed in pills.css) */
+.gm-detail { z-index: 9; }
+.gm-tooltip { z-index: 10; }
 
 .gm-fact { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 

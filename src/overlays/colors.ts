@@ -16,7 +16,7 @@ export interface OverlayPalette {
   knowledgeRisk: string;
   /** Hot end first: the selection itself, then successive hops. The ramp ends at the faded colour. */
   reach: string[];
-  tests: { test: string; covered: string; uncovered: string };
+  tests: { test: string; covered: string; near: string; uncovered: string };
 }
 
 /** Bright-end colours per mode: lighter on the dark void, deeper on the light one. */
@@ -26,14 +26,14 @@ export const OVERLAY_COLORS: Record<ThemeMode, OverlayPalette> = {
     ownership: '#A64DFF',
     knowledgeRisk: '#FFB02E',
     reach: ['#FFF2B8', '#FFA13D', '#F0503C'],
-    tests: { test: '#5BB4FF', covered: '#3C9B78', uncovered: '#FF6A45' },
+    tests: { test: '#5BB4FF', covered: '#3C9B78', near: '#F2C94C', uncovered: '#FF6A45' },
   },
   light: {
     recency: '#0E9F4E',
     ownership: '#7A2FE0',
     knowledgeRisk: '#D98200',
     reach: ['#C81E3A', '#EE7A1B', '#EDB73C'],
-    tests: { test: '#2A7FD9', covered: '#5DAE8E', uncovered: '#E2462B' },
+    tests: { test: '#2A7FD9', covered: '#5DAE8E', near: '#C99A0B', uncovered: '#E2462B' },
   },
 };
 
@@ -47,6 +47,12 @@ export const OVERLAY_RAMP = {
    * log(1 + age / unit) / log(1 + span / unit). A smaller unit makes the first hours fall off faster.
    */
   recencyLogUnitSeconds: 60,
+  /**
+   * Recency's age slider: how far up the ramp the oldest file still shown sits when the slider is at
+   * its most recent end (0 = grey as ever, 1 = full green). It rises with the slider's travel, so the
+   * map as a whole turns greener as the window narrows.
+   */
+  recencyFocusFloor: 0.6,
   /** Recency: an age within this many seconds of the present reads "now". */
   recencyNowSlackSeconds: 2 * 86400,
   /**
@@ -86,6 +92,17 @@ export function fadedToBright(faded: string, bright: string): ColorStop[] {
     { t: 0.5, color: mixHex(faded, bright, OVERLAY_RAMP.midBright) },
     { t: 1, color: bright },
   ];
+}
+
+/**
+ * The upper part of the fadedToBright ramp, from `floor` (0..1 along it) to its bright end, as a
+ * ramp of its own: t = 0 is the colour the full ramp has at `floor`.
+ */
+export function fadedToBrightFrom(faded: string, bright: string, floor: number): ColorStop[] {
+  if (!(floor > 0)) return fadedToBright(faded, bright);
+  const mid = OVERLAY_RAMP.midBright;
+  const share = (u: number) => (u < 0.5 ? 2 * u * mid : mid + (2 * u - 1) * (1 - mid));
+  return [0, 0.25, 0.5, 0.75, 1].map((t) => ({ t, color: mixHex(faded, bright, share(Math.min(1, floor + (1 - floor) * t))) }));
 }
 
 /**

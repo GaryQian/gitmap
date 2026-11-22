@@ -4,8 +4,10 @@ import { config } from '../config';
 import { Background } from './Background';
 import { Landing } from './landing/Landing';
 import { Region } from './mounts';
+import { usePhone } from './phone';
 import { attachCanvas } from './session';
 import { setContextLost, useApp, usePhase, useReducedMotion, useRepoName, useSession } from './store';
+import { CloseIcon, PillButton } from './ui';
 import { Waiting } from './waiting/Waiting';
 
 /** How long the map canvas takes to fade in over the background at the reveal; matches shell.css. */
@@ -79,8 +81,14 @@ export function App() {
     };
   }, []);
 
+  // On a phone the chrome is folded away: only what is in use stays on the map, and the menu button
+  // brings the rest back (shell.css). Each map starts folded.
+  const phone = usePhone();
+  const [menuOpen, setMenuOpen] = useState(false);
+  useEffect(() => { if (phase !== 'map') setMenuOpen(false); }, [phase]);
+
   return (
-    <div className="gm-app" data-phase={phase}>
+    <div className="gm-app" data-phase={phase} data-phone={phone ? '' : undefined} data-menu={phone ? (menuOpen ? 'open' : 'closed') : undefined}>
       <Background live={!covered} />
       <MapCanvas />
       <Region name="scene" />
@@ -101,6 +109,25 @@ export function App() {
         </div>
         <Region name="rightEdge" />
       </div>
+      {phone && phase === 'map' && (
+        <PillButton
+          blur
+          round
+          size="small"
+          className="gm-menu-button"
+          active={menuOpen}
+          aria-expanded={menuOpen}
+          aria-label={menuOpen ? 'Close the menu' : 'Open the menu'}
+          title={menuOpen ? 'Close the menu' : 'Open the menu'}
+          onClick={() => setMenuOpen((open) => !open)}
+        >
+          {menuOpen ? <CloseIcon size={14} /> : (
+            <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" aria-hidden="true" focusable="false">
+              <path d="M4 7h16M4 12h16M4 17h16" />
+            </svg>
+          )}
+        </PillButton>
+      )}
       <Region name="overlay" />
     </div>
   );

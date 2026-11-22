@@ -12,6 +12,9 @@ import { unreadReason } from './manifest';
  * Entry indices grouped into batches of about `batchBytes`: packed entries in pack-offset order, so
  * each batch is a contiguous stretch of the packfile, then working-tree entries in path order.
  */
+/** What a file counts for in a pass's progress: its bytes, plus a fixed part for opening it. */
+export function progressWeight(entry: ManifestEntry): number { return entry.bytes + 512; }
+
 export function makeBatches(entries: readonly ManifestEntry[], indices: readonly number[], batchBytes: number): number[][] {
   const packed: number[] = [], tree: number[] = [];
   for (const i of indices) (entries[i].read === 'pack' ? packed : tree).push(i);
@@ -62,6 +65,10 @@ export async function runFastPass(manifest: Manifest, pool: ComputePool, config:
   for (let i = 0; i < total; i++) {
     if (entries[i].read === 'none') { out[i] = skippedFacts(entries[i], unreadReason(entries[i], config)); done++; } else todo.push(i);
   }
+  // Progress by weight: a file costs its bytes plus a fixed part for opening it.
+  let weightTotal = 0, weightDone = 0;
+  for (const i of todo) weightTotal += progressWeight(entries[i]);
+  const report = () => opts.onProgress?.(done, total, weightTotal > 0 ? Math.min(1, weightDone / weightTotal) : 1);
 
   // Read nothing that is already known (PLAN.md §6.3.1, item 3). The cache is best-effort.
   if (cache && todo.length) {
@@ -74,10 +81,11 @@ export async function runFastPass(manifest: Manifest, pool: ComputePool, config:
       if (!hit) return true;
       out[i] = hit;
       done++;
+      weightDone += progressWeight(entries[i]);
       return false;
     });
   }
-  opts.onProgress?.(done, total);
+  report();
 
   const batches = makeBatches(entries, todo, config.parser.batchBytes);
   if (batches.length === 0) return out;
@@ -98,7 +106,8 @@ export async function runFastPass(manifest: Manifest, pool: ComputePool, config:
       out[i] = f;
     });
     done += batch.length;
-    opts.onProgress?.(done, total);
+    for (const i of batch) weightDone += progressWeight(entries[i]);
+    report();
     if (cache && fresh.length) { try { await cache.putFacts(fresh); } catch { /* best-effort */ } }
   }));
 

@@ -8,6 +8,7 @@ import type { FrameInfo } from '../../contracts/render';
 import { groundToPixels } from '../anchor';
 import { LAYER, useDismissable } from '../keys';
 import { setFocus, useApp, useRender, useReplica, useSession } from '../store';
+import { onUiScale, shownSize } from '../uiScale';
 import { PillButton, cx } from '../ui';
 import { placeCard, placePills, type PillRequest, type Rect, type Size } from './layout';
 import { PoiCard } from './PoiCard';
@@ -21,8 +22,8 @@ const CARD_ID = 'gm-poi-card';
 
 /** Write a position only when it changed, so an idle frame touches no style. */
 function moveTo(el: HTMLElement, x: number, y: number): void {
-  const transform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0)`;
-  if (el.style.transform !== transform) el.style.transform = transform;
+  const transform = `${Math.round(x)}px ${Math.round(y)}px`;
+  if (el.style.translate !== transform) el.style.translate = transform;
   if (!el.hasAttribute('data-placed')) el.setAttribute('data-placed', '');
 }
 
@@ -53,7 +54,7 @@ function PointsOfInterest() {
     if (!render) { update.current = () => {}; return; }
     const sizeOf = (el: HTMLElement): Size => {
       let size = sizes.current.get(el);
-      if (!size) { size = { width: el.offsetWidth, height: el.offsetHeight }; sizes.current.set(el, size); }
+      if (!size) { size = shownSize(el); sizes.current.set(el, size); }
       return size;
     };
     /** CSS pixels that one world unit covers at camera distance 1; 0 until a frame has measured it. */
@@ -128,6 +129,9 @@ function PointsOfInterest() {
     if (focusCard.current && card.current) { focusCard.current = false; card.current.focus(); }
   });
 
+  // another scale (uiScale.ts) gives every pill and card another size on screen
+  useEffect(() => onUiScale(() => { sizes.current.clear(); update.current(); }), []);
+
   // fonts arriving, or an answer filling the card, change sizes without a render of this component
   useEffect(() => {
     if (typeof ResizeObserver === 'undefined') return;
@@ -142,6 +146,9 @@ function PointsOfInterest() {
 
   // ---- the open card ----
   useEffect(() => closePoi, [session]);
+  // the legend's "POI beams" switch takes the label pills (and an open card) with the beams
+  const beamsOn = useApp((s) => s.settings.poiBeams);
+  useEffect(() => { if (!beamsOn) closePoi(); }, [beamsOn]);
   useEffect(() => { if (openId !== null && replica && !open) closePoi(); }, [openId, open, replica]);
 
   useEffect(() => {
@@ -193,7 +200,7 @@ function PointsOfInterest() {
     shown[(at + step + shown.length) % shown.length]!.focus();
   };
 
-  if (!render || pois.length === 0) return null;
+  if (!render || pois.length === 0 || !beamsOn) return null;
   return (
     <div className="gm-poi-layer" ref={host}>
       <div role="group" aria-label="Points of interest" aria-description="Arrow keys move between them. Enter opens one." onKeyDown={onGroupKey}>

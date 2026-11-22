@@ -229,6 +229,8 @@ useApp.subscribe((s, prev) => {
     const first = r !== prev.render;
     if (first || s.mode !== prev.mode) attempt('setTheme', () => r.setTheme(s.mode));
     if (first || s.settings.particles !== prev.settings.particles) attempt('setParticles', () => r.setParticles(s.settings.particles));
+    if (first || s.settings.ribbons !== prev.settings.ribbons) attempt('setRibbons', () => r.setRibbons(s.settings.ribbons));
+    if (first || s.settings.poiBeams !== prev.settings.poiBeams) attempt('setPoiBeams', () => r.setPoiBeams(s.settings.poiBeams));
     if (first || s.selection !== prev.selection) attempt('setSelection', () => r.setSelection(s.selection));
     if (first || s.typeFilter !== prev.typeFilter) attempt('setTypeFilter', () => r.setTypeFilter(s.typeFilter));
     if (first || s.minBytes !== prev.minBytes) attempt('setMinBytes', () => r.setMinBytes(s.minBytes));

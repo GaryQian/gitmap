@@ -8,11 +8,11 @@
 //   colors.ts     OVERLAY_COLORS, OVERLAY_RAMP      the tunable colours
 //   view.ts       overlayView, legendFor, OVERLAYS  what RenderApi.setOverlay and the overlay UI take
 export type { FileHistory, HistoryContributor, HistoryInput, OverlayId, OwnershipExtra } from './types';
-export { LAYER_DEFS, RECENCY_OLDER, TESTS } from './types';
+export { LAYER_DEFS, RECENCY_OLDER, TESTS, TESTS_SHOWN } from './types';
 export { buildAdjacency, computeReach, type Adjacency, type ReachDirection } from './adjacency';
 export { ownershipContributors, ownershipExtra, ownershipShare } from './ownership';
 export { OVERLAY_COLORS, OVERLAY_RAMP, fadedColor, mixHex, unknownColor, type OverlayPalette } from './colors';
 export {
-  OVERLAYS, formatAge, legendFor, overlayFact, overlayView,
+  OVERLAYS, RECENCY_MIN_CUTOFF_SECONDS, formatAge, legendFor, overlayFact, overlayView, recencyCutoffAt, recencyPositionOf,
   type OverlayContext, type OverlayInfo, type OverlayLegend, type OverlayViewInfo,
 } from './view';

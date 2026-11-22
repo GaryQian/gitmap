@@ -48,6 +48,7 @@ export function validateConfig(c: Config): Config {
   num('visual.radiusMax', c.visual.radiusMax, c.visual.radiusMin);
   num('visual.glowFromPct', c.visual.glowFromPct, 0, 1);
   num('visual.sizeScale', c.visual.sizeScale, 0);
+  num('visual.imageBytesPerLine', c.visual.imageBytesPerLine, 1);
   num('visual.importanceBoost', c.visual.importanceBoost, 0);
   num('visual.importanceCurve', c.visual.importanceCurve, 0);
   num('scheduler.workerShare', c.scheduler.workerShare, 0, 1);

@@ -4,6 +4,7 @@ import { useLayoutEffect, type RefObject } from 'react';
 import type { RenderApi, ScreenPoint } from '../contracts/render';
 import type { NodeRef } from '../model/types';
 import { useRender } from './store';
+import { shownSize } from './uiScale';
 
 /** How far the probes that measure the ground's scale on screen are from the anchor, CSS pixels. */
 const PROBE_PX = 12;
@@ -52,7 +53,7 @@ export const sceneObstacles = new Set<Placement & Box>();
 export function followAnchor(render: RenderApi, target: NodeRef, element: HTMLElement, place: Place, obstacle = false): () => void {
   const view = (element.offsetParent as HTMLElement | null) ?? element.parentElement;
   // measured once: the caller re-anchors when the element's content changes
-  const box = { x: 0, y: 0, width: element.offsetWidth, height: element.offsetHeight };
+  const box = { x: 0, y: 0, ...shownSize(element) };
   let size = { width: view?.clientWidth ?? 0, height: view?.clientHeight ?? 0 };
   let x = NaN, y = NaN, showing: boolean | null = null;
   const update = () => {
@@ -68,9 +69,15 @@ export function followAnchor(render: RenderApi, target: NodeRef, element: HTMLEl
     if (rx === x && ry === y) return;
     box.x = x = rx;
     box.y = y = ry;
-    element.style.transform = `translate3d(${rx}px, ${ry}px, 0)`;
+    element.style.translate = `${rx}px ${ry}px`;
   };
-  const resize = view ? new ResizeObserver(() => { size = { width: view.clientWidth, height: view.clientHeight }; update(); }) : null;
+  const resize = view ? new ResizeObserver(() => {
+    size = { width: view.clientWidth, height: view.clientHeight };
+    // a new window size can bring a new scale (uiScale.ts)
+    Object.assign(box, shownSize(element));
+    x = NaN;
+    update();
+  }) : null;
   if (view) resize!.observe(view);
   update();
   const off = render.on('frame', update);

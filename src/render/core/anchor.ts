@@ -3,7 +3,7 @@ import type { Config } from '../../config';
 import type { PositionBuffers } from '../../contracts/physics';
 import type { ModelReplica } from '../../contracts/store';
 import { parseRef, type NodeRef } from '../../model/types';
-import { unitRadius } from '../../shared';
+import { unitRadiusAt } from '../../shared';
 
 /** A node's anchor: a unit's centre (y = r), or a district's or city's centre on the ground (r = territory radius). */
 export interface Anchor { x: number; y: number; z: number; r: number }
@@ -42,7 +42,7 @@ export function anchorOf(ref: NodeRef, replica: ModelReplica, pos: PositionBuffe
     const g = unitGround(slot, replica, pos);
     if (!g) return null;
     const units = replica.table('unit');
-    const r = unitRadius(units.cols.loc[slot], units.cols.importancePct[slot], visual);
+    const r = unitRadiusAt(units.cols, slot, visual);
     return { x: g.x, y: r, z: g.z, r };
   }
   if (parsed.kind === 'district') {

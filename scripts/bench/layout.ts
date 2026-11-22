@@ -23,7 +23,7 @@ import { createModelStore, decodeModel, encodeModel } from '../../src/model';
 import type { EdgeKind, StructureTables } from '../../src/model/types';
 import { createPhysicsEngine } from '../../src/physics';
 import { settleCap } from '../../src/pipeline/core';
-import { unitRadius } from '../../src/shared';
+import { unitRadiusAt } from '../../src/shared';
 import { tablesToOps } from '../../src/testing/synthetic';
 
 const pct = (xs: number[], p: number) => { if (!xs.length) return 0; const s = xs.slice().sort((a, b) => a - b); return s[Math.min(s.length - 1, Math.floor(p * s.length))]; };
@@ -116,7 +116,7 @@ export default async function main(args: string[]): Promise<void> {
   const P = physics.positions;
   const byDistrict = new Map<number, number[]>();
   for (const u of U.slots()) { const d = U.refSlots.district[u]; let a = byDistrict.get(d); if (!a) byDistrict.set(d, (a = [])); a.push(u); }
-  const radius = (u: number) => unitRadius(U.cols.loc[u], U.cols.importancePct[u], config.visual);
+  const radius = (u: number) => unitRadiusAt(U.cols, u, config.visual);
   let overlapPairs = 0, deepPairs = 0, checked = 0;
   const fills: number[] = [], haloShare: number[] = [];
   for (const [d, us] of byDistrict) {

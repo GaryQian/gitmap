@@ -1,12 +1,14 @@
-/* The legend card: file-type rows over the minimum-lines slider (PLAN.md §17.6). */
+/* The legend card: file-type rows, the minimum-size slider, and the layer switches (PLAN.md §17.6). */
 
 .gm-legend { width: 212px; padding: 8px 8px 12px; }
 
 /* ---- file-type rows ---- */
 
 .gm-legend-rows {
-  /* about eight rows, fewer in a short window (or a zoomed one), then the list scrolls inside the card */
-  max-height: min(216px, 28vh);
+  /* Eight rows (216 px) when the window is tall enough. In a shorter (or zoomed) window the whole card
+     keeps to about 45% of its height: the slider and the toggles take about 150 px, the rows get the
+     rest, never fewer than three (81 px). Beyond that the list scrolls inside the card. */
+  max-height: clamp(81px, calc(45vh - 150px), 216px);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -110,3 +112,39 @@
 /* the focus ring goes on the thumb, the part that moves */
 .gm-slider:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--gm-halo); outline-offset: 2px; }
 .gm-slider:focus-visible::-moz-range-thumb { outline: 2px solid var(--gm-halo); outline-offset: 2px; }
+
+/* ---- layer toggles: connections, POI beams, district titles ---- */
+
+/* One row of small chips under the slider: on is filled, off is a dim outline (like a filtered-out type). */
+.gm-legend-layers {
+  display: flex;
+  gap: 4px;
+  margin: 10px 0 0;
+  padding: 9px 1px 0;
+  border-top: 1px solid var(--gm-hairline);
+}
+.gm-legend-chip {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--gm-hairline);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--gm-text-dim);
+  font: inherit;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition: background-color 140ms var(--gm-ease), color 140ms var(--gm-ease), border-color 140ms var(--gm-ease);
+}
+.gm-legend-chip:hover { color: var(--gm-text); border-color: color-mix(in srgb, var(--gm-text) 34%, transparent); }
+.gm-legend-chip.is-on {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--gm-text) 14%, transparent);
+  color: var(--gm-text);
+}
+.gm-legend-chip.is-on:hover { background: color-mix(in srgb, var(--gm-text) 20%, transparent); }

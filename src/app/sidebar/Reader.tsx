@@ -5,11 +5,12 @@ import { createContext, useContext, useEffect, useId, useRef, useState, type Key
 import type { ContentSource } from '../../contracts/git';
 import type { Session } from '../../contracts/pipeline';
 import { fileRef, type NodeRef, type RepoMeta } from '../../model/types';
+import { sizedByBytes } from '../../shared';
 import { LAYER, useDismissable } from '../keys';
 import { setOpenFile } from '../store';
 import { CloseIcon, PillButton, cx } from '../ui';
 import { CodeView } from './CodeView';
-import { countLines, decodeContent, encodeContent, formatBytes, type Decoded } from './content';
+import { countLines, decodeFile, encodeContent, formatBytes, type Decoded } from './content';
 import { discardDraft, isDirty, setBase, setDraft, setEmptyOpen, useEdits } from './drafts';
 import { isMarkdown, type ReaderFile, type ReaderTarget } from './files';
 import { MarkdownPreview } from './MarkdownPreview';
@@ -43,7 +44,7 @@ function useFileContent(session: Session | null, path: string): ReadState {
     let reading: Promise<Uint8Array>;
     try { reading = from.read(fileRef(path)); } catch (err) { reading = Promise.reject(err); }
     reading.then(
-      (bytes) => settle({ status: 'done', content: decodeContent(bytes, T.maxTextBytes, T.binarySniffBytes) }),
+      (bytes) => settle({ status: 'done', content: decodeFile(path, bytes, T.maxTextBytes, T.binarySniffBytes) }),
       // told apart by name: the error may come from another copy of the module, or across a worker
       (err: unknown) => settle({ status: 'failed', notInPackage: (err as { name?: unknown } | null)?.name === 'NotInPackageError' }),
     );
@@ -53,6 +54,23 @@ function useFileContent(session: Session | null, path: string): ReadState {
   if (!available) return { status: 'no-source' };
   if (!result || result.session !== session || result.path !== path) return { status: 'loading' };
   return result.state;
+}
+
+function ImageView({ content, name }: { content: Extract<Decoded, { kind: 'image' }>; name: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [broken, setBroken] = useState(false);
+  useEffect(() => {
+    const made = URL.createObjectURL(new Blob([content.bytes as Uint8Array<ArrayBuffer>], { type: content.mime }));
+    setUrl(made);
+    return () => URL.revokeObjectURL(made);
+  }, [content]);
+  if (broken) return <p className="gm-reader-note">This image could not be shown</p>;
+  if (!url) return null;
+  return (
+    <div className="gm-reader-image">
+      <img src={url} alt={name} onError={() => setBroken(true)} />
+    </div>
+  );
 }
 
 /**
@@ -327,7 +345,11 @@ export function Reader({ openFile, target, session, meta }: ReaderProps) {
     ?? (markdown ? 'Markdown' : null);
   // the real count once the text is here; the model's count until then, and for a file cut short
   const lines = text && !text.truncated ? countLines(current) : file.loc;
-  const facts = [lines > 0 ? lineLabel(lines) : null, language, text && readOnly ? 'Read-only' : null].filter(Boolean).join(' · ');
+  // images and files no plug-in claims are measured in bytes, as their spheres are sized
+  const bytes = read.status === 'done' && read.content.kind === 'image' ? read.content.bytes.length
+    : text ? (dirty ? encodeContent(current, text.bom).length : text.totalBytes) : file.bytes;
+  const size = sizedByBytes(file.lang) ? (bytes > 0 ? formatBytes(bytes) : null) : lines > 0 ? lineLabel(lines) : null;
+  const facts = [size, language, text && readOnly ? 'Read-only' : null].filter(Boolean).join(' · ');
 
   const view: MarkdownView = markdown ? prefs.markdown : 'source';
 
@@ -380,6 +402,7 @@ export function Reader({ openFile, target, session, meta }: ReaderProps) {
       </p>
     );
   }
+  else if (read.content.kind === 'image') body = <ImageView key={file.path} content={read.content} name={file.name} />;
   else if (!text) body = <p className="gm-reader-note">This file is not text</p>;
   else {
     const source = (

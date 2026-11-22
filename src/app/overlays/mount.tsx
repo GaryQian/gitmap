@@ -4,7 +4,7 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import type { AppMount } from '../../contracts/app';
 import {
-  OVERLAYS, legendFor, ownershipContributors, ownershipShare,
+  OVERLAYS, RECENCY_MIN_CUTOFF_SECONDS, formatAge, legendFor, ownershipContributors, ownershipShare, recencyCutoffAt, recencyPositionOf,
   type OverlayId, type OverlayInfo, type OverlayLegend, type ReachDirection,
 } from '../../overlays';
 import { unitRef, type NodeRef } from '../../model/types';
@@ -13,7 +13,7 @@ import { Card, CloseIcon, PillButton, Segmented, Strong, cx, type SegmentedOptio
 import { ContributorPicker } from './ContributorPicker';
 import { accentVariables } from '../theme';
 import { announcedPercent, historyUnavailable, overlayAccent, pillState, type PillState } from './logic';
-import { setContributor, setDirection, setMaxHops, useOverlayParams } from './state';
+import { setContributor, setDirection, setMaxAge, setMaxHops, useOverlayParams } from './state';
 import { OVERLAY_UI } from './tunables';
 import { useOverlayView } from './useOverlayView';
 import './overlays.css';
@@ -152,6 +152,44 @@ function HopSlider() {
   );
 }
 
+/**
+ * Recency: how far back to show. Files that changed longer before the newest one are taken off the
+ * map, the scale ends at the slider's value, and what is left is drawn greener the narrower the
+ * window. The slider is logarithmic in age, so the last few days get as much of its travel as the
+ * last few years; it starts at the left with every file.
+ */
+function AgeSlider({ spanSeconds, hidden }: { spanSeconds: number; hidden: number }) {
+  const maxAge = useOverlayParams((s) => s.maxAgeSeconds);
+  const id = useId();
+  const steps = OVERLAY_UI.ageSliderSteps;
+  // the slider starts at the left with every file and narrows toward the most recent as it moves right
+  const step = steps - Math.round(recencyPositionOf(maxAge, spanSeconds) * steps);
+  const all = step <= 0;
+  const cutoff = recencyCutoffAt(1 - step / steps, spanSeconds);
+  const text = all ? 'All' : `Last ${formatAge(cutoff)}`;
+  return (
+    <div className="gm-ov-hops">
+      <div className="gm-ov-hops-head">
+        <label htmlFor={id}>Changed within</label>
+        <Strong>{text}</Strong>
+      </div>
+      <input
+        id={id}
+        className="gm-slider gm-slider-tail"
+        type="range"
+        min={0}
+        max={steps}
+        step={1}
+        value={step}
+        style={{ '--gm-slider-fill': `${(step / steps) * 100}%` } as CSSProperties}
+        aria-valuetext={all ? 'Every file' : `${formatAge(cutoff)} before the newest file`}
+        onChange={(e) => setMaxAge(recencyCutoffAt(1 - Number(e.target.value) / steps, spanSeconds))}
+      />
+      {hidden > 0 && <p className="gm-ov-line">{hidden.toLocaleString()} older {hidden === 1 ? 'file' : 'files'} hidden</p>}
+    </div>
+  );
+}
+
 function Swatch({ color, label }: { color: string; label: string }) {
   return (
     <li className="gm-ov-swatch-row">
@@ -268,6 +306,7 @@ function Overlays() {
             {active.id === 'ownership' && <ContributorPicker contributors={contributors} chosen={chosen} onChoose={chooseContributor} />}
             {active.id === 'reach' && <Segmented label="Direction" value={direction} options={DIRECTIONS} onChange={setDirection} className="gm-ov-direction" />}
             {active.id === 'reach' && <HopSlider />}
+            {active.id === 'recency' && view.recency && view.recency.spanSeconds > RECENCY_MIN_CUTOFF_SECONDS && <AgeSlider spanSeconds={view.recency.spanSeconds} hidden={view.recency.hidden} />}
             {/* with nothing selected there is no reach to explain, only how to get one */}
             {active.id === 'reach' && seeds.length === 0
               ? <p className="gm-ov-line gm-ov-hint" role="status">Select a file to see its reach</p>

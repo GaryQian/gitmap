@@ -14,7 +14,9 @@ export type ToCoordinator =
   | { type: 'selectedOverlay'; layer: string | null }
   | { type: 'frame'; frameMs: number; interacting: boolean }
   /** The page was hidden: write a pending snapshot now, the tab may not come back. */
-  | { type: 'hidden' };
+  | { type: 'hidden' }
+  /** The map is being closed: stop taking work, write a pending snapshot, then answer `closed`. */
+  | { type: 'close' };
 
 /** Calls the main thread makes into the coordinator, each answered with a `result`. */
 export interface CoordinatorCalls {
@@ -53,4 +55,6 @@ export type FromCoordinator =
   | { type: 'result'; id: number; ok: true; value: unknown }
   | { type: 'result'; id: number; ok: false; error: string }
   | { type: 'started' }
+  /** Answer to `close`: nothing is waiting to be written, the worker may be terminated. */
+  | { type: 'closed' }
   | { type: 'failed'; message: string };

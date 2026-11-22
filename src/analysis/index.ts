@@ -6,7 +6,7 @@
 //   link/          SyntaxFacts          → RawEdge[]   (file → file, kinds 'call' / 'reference' / 'inherit')
 //   ../bridges     FileFacts.bridge     → RawEdge[]   (file → file, kind 'bridge': JNI, Protobuf stubs)
 //   edges.ts       RawEdge[], UnitTable → UnitEdges   (one edge per ordered unit pair, fan-in/out)
-//   importance.ts  UnitEdges            → Importance  (PageRank, then percentile)
+//   importance.ts  UnitEdges            → Importance  (PageRank, then percentile among units with dependents)
 //   cluster/       UnitTable, UnitEdges → ClusterResult (cities and districts)
 //   assemble.ts    all of the above     → StructureTables
 // Beside it, ./layers turns structure and history facts into overlay `layer` operations.

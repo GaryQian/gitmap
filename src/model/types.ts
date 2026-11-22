@@ -39,7 +39,7 @@ export interface EntityColumns {
     loc: number[];         // sum over its files
     bytes: number[];
     lang: string[];        // LangId of the primary file
-    importancePct: number[]; // 0..1 percentile across the repo
+    importancePct: number[]; // percentile among the units that have dependents, up to 1; 0: no dependents
     fanIn: number[];
     fanOut: number[];
     district: string[];    // → district

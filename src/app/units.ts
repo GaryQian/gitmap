@@ -1,5 +1,6 @@
 // Reading units out of the replica for the chrome: names, languages, neighbours. Pure, no React.
 import type { ModelReplica } from '../contracts/store';
+import { cityTitle } from './cityNames';
 import { parseRef, unitRef, type NodeRef, type RepoMeta } from '../model/types';
 import { basename } from '../shared';
 
@@ -29,6 +30,7 @@ export interface UnitSummary {
   lang: string;
   langName: string;
   loc: number;
+  bytes: number;
   importancePct: number;
   fanIn: number;
   fanOut: number;
@@ -44,7 +46,7 @@ export function unitSummary(replica: ModelReplica, ref: NodeRef): UnitSummary | 
   const lang = c.lang[slot] ?? 'other';
   return {
     ref, slot, path, name: basename(path), lang, langName: languageName(replica.meta, lang),
-    loc: c.loc[slot] ?? 0, importancePct: c.importancePct[slot] ?? 0, fanIn: c.fanIn[slot] ?? 0, fanOut: c.fanOut[slot] ?? 0,
+    loc: c.loc[slot] ?? 0, bytes: c.bytes[slot] ?? 0, importancePct: c.importancePct[slot] ?? 0, fanIn: c.fanIn[slot] ?? 0, fanOut: c.fanOut[slot] ?? 0,
     fileCount: c.fileCount[slot] ?? 1,
   };
 }
@@ -107,7 +109,7 @@ export function unitDetails(replica: ModelReplica, ref: NodeRef, namesShown: num
   return {
     ...summary, files,
     district: d < 0 ? '' : (districts.cols.name[d] ?? ''),
-    city: c < 0 ? '' : (cities.cols.name[c] ?? ''),
+    city: c < 0 ? '' : cityTitle(replica, cities.ids[c]),
     dependents: top(incoming),
     // the columns are right before the edges have arrived, and the edges are right once they have
     dependentCount: Math.max(incoming.length, edges.count === 0 ? summary.fanIn : 0),
@@ -123,8 +125,12 @@ export function ordinal(n: number): string {
   return `${n}${suffix}`;
 }
 
-/** An importance percentile (0..1) as words: "97th percentile". */
+/**
+ * An importance percentile (0..1) as words: "97th percentile". The percentile is among the files
+ * that have dependents; 0 marks a file that has none, which is not ranked.
+ */
 export function percentileLabel(importancePct: number): string {
+  if (!(importancePct > 0)) return 'Unranked: no dependents';
   const pct = Math.min(99, Math.max(1, Math.round(importancePct * 100)));
   return `${ordinal(pct)} percentile`;
 }

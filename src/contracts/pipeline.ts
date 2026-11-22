@@ -31,7 +31,23 @@ export type Stage =
   | 'idle' | 'manifest' | 'reading' | 'structure' | 'layout' | 'revealed' | 'failed';
 
 /** Human-readable stage line for the waiting screen, for example "Reading files 6,214 / 10,000". */
-export interface StageInfo { stage: Stage; label: string; done?: number; total?: number }
+export interface StageInfo {
+  stage: Stage;
+  label: string;
+  done?: number;
+  total?: number;
+  /**
+   * How far the whole wait before the reveal has come, 0–1: one figure across every stage, so the
+   * waiting screen's line never starts again. Absent when the wait cannot be measured.
+   */
+  overall?: number;
+  /**
+   * For a stretch that reports nothing while it runs (the analysis, the layout): where `overall`
+   * will be when it ends, and about how long it takes. The waiting screen moves towards it by time.
+   */
+  creepTo?: number;
+  creepMs?: number;
+}
 
 export type Notice =
   /** The slow pass finished after an imports-only reveal: offer "Refined structure ready · Apply". */

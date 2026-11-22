@@ -5,7 +5,7 @@ import { useId, useMemo, useState, type CSSProperties, type MouseEvent } from 'r
 import { config } from '../../config';
 import type { AppMount } from '../../contracts/app';
 import { languageColor } from '../../shared';
-import { setMinBytes, setTypeFilter, useApp, useReplica, useReplicaVersion } from '../store';
+import { setDistrictTitles, setMinBytes, setPoiBeams, setRibbons, setTypeFilter, useApp, useReplica, useReplicaVersion, type Settings } from '../store';
 import { APP_LOCAL } from '../tunables';
 import { Card, Strong, cx } from '../ui';
 import { countLabel, formatBytes, languageName } from '../units';
@@ -109,6 +109,37 @@ function MinBytes() {
   );
 }
 
+/** What the map draws besides the stars: one toggle each, remembered in the browser like the other settings. */
+const LAYERS: { key: keyof Pick<Settings, 'ribbons' | 'poiBeams' | 'districtTitles'>; label: string; full: string; set(on: boolean): void }[] = [
+  { key: 'ribbons', label: 'Links', full: 'Connections', set: setRibbons },
+  { key: 'poiBeams', label: 'POIs', full: 'POI beams', set: setPoiBeams },
+  { key: 'districtTitles', label: 'Districts', full: 'District titles', set: setDistrictTitles },
+];
+
+function LayerToggles() {
+  const settings = useApp((s) => s.settings);
+  return (
+    <div className="gm-legend-layers" role="group" aria-label="Show on the map">
+      {LAYERS.map(({ key, label, full, set }) => {
+        const on = settings[key];
+        return (
+          <button
+            key={key}
+            type="button"
+            aria-pressed={on}
+            aria-label={full}
+            title={`${on ? 'Hide' : 'Show'} ${full.toLowerCase()}`}
+            className={cx('gm-legend-chip', on && 'is-on')}
+            onClick={() => set(!on)}
+          >
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function Legend() {
   const replica = useReplica();
   if (!replica || replica.table('unit').count === 0) return null;
@@ -116,6 +147,7 @@ function Legend() {
     <Card blur className="gm-legend" role="group" aria-label="File types and size filter">
       <TypeRows />
       <MinBytes />
+      <LayerToggles />
     </Card>
   );
 }

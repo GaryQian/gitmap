@@ -9,6 +9,7 @@ import { createReplica, decodeModel, encodeModel, edgeId } from '../model';
 import { createModelStore } from '../model';
 import type { RepoModel } from '../model/types';
 import { TESTS } from '../overlays';
+import { IMAGE_LANG } from '../shared';
 import { buildFixtureRepo, fixtureExpected, git, projectRoot } from '../testing/fixture';
 import { settleDetails } from './ai';
 import { memoryPersistence, runHeadless } from './node';
@@ -78,7 +79,10 @@ describe('headless pipeline on fixtures/three-lang', () => {
       const tests = model.layers.tests;
       expect(tests.status).toBe('complete');
       expect(tests.values.length).toBe(model.tables.unit.ids.length);
-      model.tables.unit.cols.lang!.forEach((lang, u) => { if (lang !== 'other') expect(tests.values[u], model.tables.unit.ids[u]).not.toBeNull(); });
+      model.tables.unit.cols.lang!.forEach((lang, u) => { if (lang !== 'other' && lang !== IMAGE_LANG) expect(tests.values[u], model.tables.unit.ids[u]).not.toBeNull(); });
+      const logo = model.tables.unit.ids.indexOf('web/logo.png');
+      expect(model.tables.unit.cols.lang![logo]).toBe(IMAGE_LANG);
+      expect(tests.values[logo]).toBeNull();
       expect(layerValue(model, 'tests', 'service/tests/test_models.py')).toBe(TESTS.test);
       expect(layerValue(model, 'tests', 'service/models.py')).toBe(TESTS.covered);
 

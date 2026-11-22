@@ -95,3 +95,28 @@ test('a demo does not block a local repo of the same name', async ({ page }) => 
   expect(demo.source).toBe('demo');
   expect(demo.units).toBeGreaterThan(100);
 });
+
+test('an exported archive opens from the file button on the landing page', async ({ page }) => {
+  await page.goto('/');
+  const button = page.getByRole('button', { name: 'Choose an exported archive' });
+  await expect(button).toBeVisible();
+  // the same package the demo ships as: opened from a file, it is an import, not that demo
+  await page.locator('input[type=file][accept]').setInputFiles('public/demo/starmap.starmap.zip');
+  await waitForMap(page);
+  const info = await page.evaluate(async () => {
+    const { session } = (window as any).__starmapApp.store.getState();
+    const bytes: Uint8Array = await session.content.read('f:package.json');
+    return {
+      id: session.replica.meta.id,
+      source: session.replica.meta.source,
+      units: session.replica.table('unit').count,
+      pois: session.replica.annotations.filter((a: any) => a.type === 'poi').length,
+      packageJson: new TextDecoder().decode(bytes).slice(0, 400),
+    };
+  });
+  expect(info.source).toBe('import');
+  expect(info.id).not.toBe(`demo:${DEMO}`);
+  expect(info.units).toBeGreaterThan(100);
+  expect(info.pois).toBeGreaterThan(0);
+  expect(info.packageJson).toContain('"vite"');
+});

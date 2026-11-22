@@ -184,6 +184,9 @@
 /* the ring is drawn inside the tab, so the tab turns opaque behind it: the halo then has its contrast whatever the map shows */
 .gm-reader-handle:focus-visible { outline-offset: -3px; background: var(--gm-surface); }
 .gm-reader-handle-dot { position: absolute; top: 10px; right: 10px; width: 7px; height: 7px; }
+/* While the tab shows, the bottom-right chrome (the legend) keeps clear of it: the tab is 44 px wide
+   and the chrome sits 16 px in from the edge, so it steps 34 px further left. */
+.gm-app:has(.gm-reader-handle) .gm-region-bottomRight { margin-right: 34px; }
 
 .gm-reader-meta {
   display: flex;
@@ -251,6 +254,16 @@
   line-height: 1.5;
   color: var(--gm-text-dim);
 }
+.gm-reader-image {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  padding: 18px var(--gm-reader-pad);
+  overflow: auto;
+}
+.gm-reader-image img { max-width: 100%; max-height: 100%; object-fit: contain; }
 /* A read from disk is usually done before anyone could read the word. */
 .gm-reader-wait { animation: gm-reader-wait 160ms 180ms var(--gm-ease) both; }
 @keyframes gm-reader-wait { from { opacity: 0; } }

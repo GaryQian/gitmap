@@ -7,6 +7,7 @@
 // same model gives the same text byte for byte. Details come through the tools.
 import type { ModelReplica } from '../../contracts/store';
 import { cityRef, districtRef } from '../../model/types';
+import { cityTitles } from '../../shared/cityTitles';
 import { CHARS_PER_TOKEN, estimateTokens } from '../tokens';
 import { CHAT_TUNABLES } from './tunables';
 
@@ -16,7 +17,8 @@ export interface ChatContextOptions {
 }
 
 interface Area { id: string; name: string; files: number; loc: number }
-interface City extends Area { districts: Area[]; label: string; summary: string }
+/** `name` is what the map calls the city; `derived` is its folder-derived name when AI notes replaced it. */
+interface City extends Area { districts: Area[]; derived: string; summary: string }
 
 /** Detail levels tried in order until the text fits: districts named per city, characters of a summary. */
 const LEVELS: readonly (readonly [districts: number, summaryChars: number])[] = [
@@ -46,7 +48,7 @@ function readCities(replica: ModelReplica): { cities: City[]; districts: number 
   const cities = new Map<string, City>();
   for (const slot of cityTable.slots()) {
     const id = cityTable.ids[slot]!;
-    cities.set(id, { id, name: oneLine(cityTable.cols.name[slot] ?? ''), files: 0, loc: 0, districts: [], label: '', summary: '' });
+    cities.set(id, { id, name: oneLine(cityTable.cols.name[slot] ?? ''), files: 0, loc: 0, districts: [], derived: '', summary: '' });
   }
   const districts = new Map<string, Area & { city: string }>();
   for (const slot of districtTable.slots()) {
@@ -65,9 +67,15 @@ function readCities(replica: ModelReplica): { cities: City[]; districts: number 
   }
   for (const d of districts.values()) cities.get(d.city)?.districts.push(d);
   const byRef = new Map([...cities.values()].map((c) => [cityRef(c.id) as string, c]));
+  const labels = new Map<string, string | undefined>();
   for (const a of replica.annotations) {
     const city = a.type === 'summary' ? byRef.get(a.parent) : undefined;
-    if (city && a.type === 'summary') { city.label = oneLine(a.label ?? ''); city.summary = oneLine(a.text); }
+    if (city && a.type === 'summary') { labels.set(city.id, a.label); city.summary = oneLine(a.text); }
+  }
+  // a city goes by the title its summary gave it, as it does on the map
+  for (const [id, named] of cityTitles([...cities.values()], labels)) {
+    const city = cities.get(id)!;
+    if (named.titled) { city.derived = city.name; city.name = oneLine(named.title); }
   }
   const list = [...cities.values()].sort(bySize);
   for (const c of list) c.districts.sort(bySize);
@@ -108,9 +116,9 @@ function languageLine(replica: ModelReplica): string {
 function render(header: string[], cities: City[], maxDistricts: number, summaryChars: number): string {
   const lines = [...header];
   for (const city of cities) {
-    lines.push(`${cityRef(city.id)} | ${city.name || '(unnamed)'} | ${plural(city.files, 'file')} | ${plural(city.loc, 'line')}`);
+    lines.push(`${cityRef(city.id)} | ${city.name || '(unnamed)'}${city.derived ? ` (${city.derived})` : ''} | ${plural(city.files, 'file')} | ${plural(city.loc, 'line')}`);
     if (summaryChars > 0 && city.summary) {
-      lines.push(`  summary${city.label ? ` (${city.label})` : ''}: ${clip(city.summary, summaryChars)}`);
+      lines.push(`  summary: ${clip(city.summary, summaryChars)}`);
     }
     if (maxDistricts > 0 && city.districts.length > 0) {
       const shown = city.districts.slice(0, maxDistricts)
@@ -153,7 +161,7 @@ export function buildChatContext(replica: ModelReplica, options: ChatContextOpti
   header.push(
     '',
     'Cities, largest first, as "ref | name | files | lines". A city is a group of districts; a district is a group of related files (its file count is in brackets).'
-    + ' Summaries were written earlier by an AI model from the code.',
+    + ' Summaries were written earlier by an AI model from the code. A city with a summary is named by the title the summary gave it, which is the name on its label on the map; the name in brackets after it is the one taken from its folders.',
   );
 
   let text = '';

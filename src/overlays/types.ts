@@ -37,6 +37,12 @@ export const RECENCY_OLDER = 0;
 
 /** Tests layer categories. */
 export const TESTS = { test: 0, covered: 1, uncovered: 2 } as const;
+/**
+ * What the Tests overlay shows, from tested to untested. The layer stores the three TESTS values;
+ * the overlay splits "uncovered" in two with the unit graph: `near` for a unit one hop from a
+ * covered one. Worked out when the overlay is drawn, so saved maps and demos show it too.
+ */
+export const TESTS_SHOWN = { test: 0, covered: 1, near: 2, uncovered: 3 } as const;
 
 /**
  * Ownership side data (`Layer.extra`): per-unit author counts in CSR form. Unit r of `unitIds` has

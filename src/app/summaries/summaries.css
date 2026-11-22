@@ -5,8 +5,8 @@
 .gm-summary-layer {
   position: absolute;
   inset: 0;
-  /* over the hovered or focused pill of another city, which pills.css raises to 1 */
-  z-index: 1;
+  /* over every pill, a hovered city pill included (the scene's stacking is listed in pills.css) */
+  z-index: 8;
   pointer-events: none;
 }
 
@@ -26,7 +26,7 @@
   background: color-mix(in srgb, var(--gm-surface) 90%, transparent);
   /* it describes the pill and must never catch the pointer: the pill stays draggable and clickable */
   pointer-events: none;
-  will-change: transform;
+  will-change: translate;
   font-size: 14px;
   line-height: 1.5;
   letter-spacing: 0.015em;

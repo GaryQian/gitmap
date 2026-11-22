@@ -14,6 +14,8 @@ export interface ReaderFile {
   lang: string;
   /** Line count from the model; 0 when unknown. */
   loc: number;
+  /** Size on disk from the model; 0 when unknown. */
+  bytes: number;
 }
 
 export interface ReaderTarget {
@@ -68,6 +70,7 @@ export function resolveTarget(replica: ModelReplica | null, ref: NodeRef): Reade
         path, name: basename(path), dir: dirname(path),
         lang: f >= 0 ? (files?.cols.lang[f] ?? 'other') : 'other',
         loc: f >= 0 ? (files?.cols.loc[f] ?? 0) : 0,
+        bytes: f >= 0 ? (files?.cols.bytes[f] ?? 0) : 0,
       };
     }),
     active: ordered.indexOf(asked),

@@ -18,7 +18,7 @@ import { syntheticMeta, syntheticTables, tablesToFullBatch } from './synthetic';
 export function createNoopRenderer(_init?: Partial<RenderInit>): RenderApi {
   const emitter = new Emitter<RenderEvents>();
   return {
-    applyBatch() {}, setPositions() {}, async reveal() {}, setTheme() {}, setParticles() {}, setOverlay() {},
+    applyBatch() {}, setPositions() {}, async reveal() {}, setTheme() {}, setParticles() {}, setRibbons() {}, setPoiBeams() {}, setOverlay() {},
     setSelection() {}, setHighlights() {}, setTypeFilter() {}, setMinBytes() {},
     async flyTo() {}, async flyToFit() {}, async resetView() {}, isDefaultView: () => true, setViewInset() {},
     project: () => null, screenToGround: () => null, visibleCounts: () => new Map(), burst() {},

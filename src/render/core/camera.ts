@@ -95,6 +95,8 @@ export class CameraRig {
   private flight: Flight | null = null;
   private pan: Vec2 | null = null;
   private orbit: { pivot: Vec2; sx: number; sy: number } | null = null;
+  /** A two-finger gesture is in progress; the ground point grabbed between the fingers, when the ray hit the plane. */
+  private pinch: { anchor: Vec2 | null; sx: number; sy: number } | null = null;
   private lastWheel = -Infinity;
   private scratch = new THREE.Vector3();
   /**
@@ -224,9 +226,41 @@ export class CameraRig {
     this.pinGround(this.orbit.pivot, this.orbit.sx, this.orbit.sy);
   }
 
+  /** Two fingers came down, midway at (x, y). */
+  pinchStart(x: number, y: number): void {
+    this.cancelFlight();
+    this.pan = null;
+    this.orbit = null;
+    this.pinch = { anchor: this.groundAt(x, y), sx: x, sy: y };
+  }
+  /**
+   * The fingers moved: zoom by `factor` (below 1 = closer), turn the map by `turn` radians
+   * (clockwise on screen, as the fingers twist) and keep the grabbed ground point midway between
+   * them, so spreading zooms, twisting turns and moving both fingers pans.
+   */
+  pinchMove(x: number, y: number, factor: number, turn = 0): void {
+    if (!this.pinch) return;
+    this.view.distance *= factor;
+    this.view.azimuth -= turn;
+    this.apply();
+    this.pinch.anchor ??= this.groundAt(x, y);
+    if (this.pinch.anchor) this.pinGround(this.pinch.anchor, x, y);
+  }
+  /**
+   * Both fingers slid `dy` pixels down (negative: up): raise the camera toward a top-down view, or
+   * lower it toward the horizon, about the ground point that was between the fingers at the start.
+   */
+  pinchTilt(dy: number): void {
+    if (!this.pinch) return;
+    this.view.elevation = clamp(this.view.elevation + dy * L.orbitSpeed, L.minElevation, L.maxElevation);
+    this.apply();
+    if (this.pinch.anchor) this.pinGround(this.pinch.anchor, this.pinch.sx, this.pinch.sy);
+  }
+
   dragEnd(): void {
     this.pan = null;
     this.orbit = null;
+    this.pinch = null;
   }
 
   /** Zoom by `factor` (below 1 = closer) toward the ground point under (x, y). */
@@ -292,9 +326,9 @@ export class CameraRig {
     f.resolve();
   }
 
-  /** True while a drag, a flight or a wheel gesture is in progress. */
+  /** True while a drag, a pinch, a flight or a wheel gesture is in progress. */
   isMoving(nowMs: number): boolean {
-    return !!this.flight || !!this.pan || !!this.orbit || nowMs - this.lastWheel < L.wheelSettleMs;
+    return !!this.flight || !!this.pan || !!this.orbit || !!this.pinch || nowMs - this.lastWheel < L.wheelSettleMs;
   }
 
   /** Advance a flight. Call once per frame. */

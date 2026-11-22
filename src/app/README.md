@@ -90,7 +90,7 @@ View state resets when a map is opened or closed.
 - `useReplicaVersion()` returns the replica's revision and re-renders the caller after the replica applies a batch, at most once per frame.
 - `useReplica()` returns `session.replica` with the same re-rendering.
 
-**Selection actions** (each is one transition from `selectionState.ts`, so `focus` can never point outside `selection`): `selectOnly(ref | null)` (click: replace and focus; null clears), `toggleSelection(ref)` (Shift+click), `addToSelection(refs)` (marquee), `removeFromSelection(ref)`, `clearSelection()`, `setFocus(ref | null)` (open or close the detail card), and `setSelection(refs)` (replace; a single node is also focused, which is what search and the tour want).
+**Selection actions** (each is one transition from `selectionState.ts`, so `focus` can never point outside `selection`): `selectOnly(ref | null)` (click: replace and focus; null clears), `toggleSelection(ref)` (Shift+click), `addToSelection(refs)` (marquee), `removeFromSelection(ref)`, `clearSelection()`, `setFocus(ref | null)` (open or close the detail card), and `setSelection(refs)` (replace; a single node is also focused, which is what search and the tour want). A selection may hold cities and districts (`c:…`, `d:…`) beside files; only a file has a detail card, so an area is never the `focus` (`isAreaRef`).
 
 **Other actions:** `setHover`, `setActiveOverlay`, `setTypeFilter`, `setMinBytes`, `setOpenFile`, `setParticles`, `setMessage`, `pushNotice`, `dismissNotice` (from `store.ts`); `openSource(source)`, `closeSession(message?)` (from `session.ts`).
 
@@ -160,9 +160,9 @@ Rules from PLAN.md §17 that the primitives already follow, and yours should too
 
 | Folder | Region | What it is |
 |---|---|---|
-| `pills/` | `scene` | City pills (name and file count, "visible / total" when the size slider hides some) and smaller district pills for cities near the camera. `layer.ts` is the pooled, imperative DOM layer; `place.ts` holds the pure rules (priority, overlap, distance fade, when districts show). |
+| `pills/` | `scene` | City pills (name and file count, "visible / total" when the size slider hides some) and smaller district pills for cities near the camera. A click selects the city or district and flies to it; Shift+click adds it to the selection or takes it out without moving the camera; a click on the one thing selected lets go. A selected pill wears the warm selection colour and stays on screen. `layer.ts` is the pooled, imperative DOM layer; `place.ts` holds the pure rules (priority, overlap, distance fade, when districts show). |
 | `inspect/` | `scene` | The tooltip for `hover` and the detail card for `focus`, both anchored to their sphere. |
-| `selected/` | `topLeft` | One removable pill per selected file, "+N more", "Clear all". Escape clears. |
+| `selected/` | `topLeft` | One removable pill per selected file, city or district, "+N more", "Clear all". Escape clears. |
 | `legend/` | `bottomRight` | File-type rows (click isolates, Shift+click for several) and the minimum-file-size slider. `slider.ts` is the pure part: the logarithmic mapping (bytes), the hidden count with the glow exemption, the filter transitions. |
 | `controls/` | `bottomLeft` | The controls key (opens on hover or focus) and "Reset view" (also the Home key). |
 
@@ -174,7 +174,7 @@ Rules from PLAN.md §17 that the primitives already follow, and yours should too
 - A pill sits just above the far edge of its territory, so it does not cover the stars inside. Pills fade with distance; a dropped pill fades out where it is before its element returns to the pool.
 - Pills stay out from under the fixed chrome and the open detail card: the layer reads the chrome's rectangles (`.gm-frame .gm-pill, .gm-card`) every `APP_LOCAL.pills.chromeReadMs`, and anchored cards register their box in `sceneObstacles` (`anchor.ts`) with `useAnchor(…, true)`.
 - Pointer: press and drag moves the city or district (`session.physics.drag(ref, x, z)` with the ground point under the pill's anchor from `render.screenToGround`, then `release(ref)`); a press without a drag is a click and calls `render.flyTo(ref)`. The pills are DOM elements above the canvas, so the canvas never sees these events and does not pan; the wheel is forwarded to the canvas so zooming works over a pill.
-- Keyboard: the layer is one tab stop (roving `tabindex`); arrow keys move between pills, Enter flies to one. A focused or dragged pill is never dropped.
+- Keyboard: the layer is one tab stop (roving `tabindex`); arrow keys move between pills, Enter selects one and flies to it. A focused or dragged pill is never dropped.
 
 **Counts are units.** One sphere is one unit (a header + implementation pair is a single unit), so the legend's counts, the slider's "Hiding N of M files" and the city pills all count units and call them files. Language names come from `replica.meta.languages` (the id is shown when the model has none, as on the synthetic map); nothing in the app imports `src/lang`.
 

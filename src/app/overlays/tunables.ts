@@ -7,4 +7,6 @@ export const OVERLAY_UI = {
   contributorsShown: 60,
   /** Dependency reach: the hop slider runs 1..this; one step further is "All". */
   reachSliderMax: 10,
+  /** Recency: steps of the age slider; the last one is "every file". */
+  ageSliderSteps: 100,
 } as const;

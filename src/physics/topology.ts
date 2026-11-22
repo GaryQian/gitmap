@@ -18,7 +18,7 @@
 // so moving a unit or a district re-homes its edges. The replica is read twice to find the affected
 // simulations: before the batch is applied (where things were) and after (where they are now).
 import type { PatchBatch } from '../model/types';
-import { unitRadius } from '../shared';
+import { unitRadiusAt } from '../shared';
 import { clampIntoCell } from './cells';
 import { createDistrictSim, estimateCityRadius, type DistrictSim } from './districtTier';
 import { createFileSim, estimateDistrictRadius, fitInflate, rankTargets } from './fileTier';
@@ -233,7 +233,7 @@ function reconcile(w: World, dirty: Dirty): void {
     }
     if (id === null) continue;
     const d = units.refSlots.district[s] >= 0 ? units.refSlots.district[s] : -1;
-    const r = unitRadius(units.cols.loc[s], units.cols.importancePct[s], t.visual);
+    const r = unitRadiusAt(units.cols, s, t.visual);
     if (!n) {
       w.unitNodes[s] = n = newNode(s, id, d, r);
       if (d >= 0) { push(fileAdds, d, n); fileNodesDirty.add(d); }

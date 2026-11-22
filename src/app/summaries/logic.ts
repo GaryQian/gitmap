@@ -1,6 +1,7 @@
 // The pure rules of the summary card: which summary a pill gets, what the card says, and where it
 // goes. No DOM in here.
 import type { Annotation, NodeRef, Summary } from '../../model/types';
+import type { CityName } from '../../shared/cityTitles';
 
 export interface Size { width: number; height: number }
 export interface Rect extends Size { x: number; y: number }
@@ -39,17 +40,22 @@ export type CardContent =
 /**
  * What the card of the node `ref`, named `name` on its pill, says; null when there is nothing to
  * show. Only cities are summarised, so only a city is ever "on its way"; a district shows its summary
- * if one exists.
+ * if one exists. `cityName` is given for a city: when its pill shows the summary's title, the card
+ * has no title of its own and is the summary alone.
  */
-export function cardContent(annotations: readonly Annotation[], ref: NodeRef, name: string, generating: boolean): CardContent | null {
+export function cardContent(annotations: readonly Annotation[], ref: NodeRef, name: string, generating: boolean, cityName?: CityName): CardContent | null {
   const summary = summaryFor(annotations, ref);
-  if (summary) return { kind: 'summary', title: titleFor(summary.label, name), text: summary.text.trim() };
+  if (summary) {
+    const title = cityName?.titled ? null : titleFor(summary.label, name);
+    return { kind: 'summary', title, text: summary.text.trim() };
+  }
   return generating && ref.startsWith('c:') ? { kind: 'pending' } : null;
 }
 
 /**
  * The city whose card is pinned by the selection: the most recently selected city (the selection is
- * kept in the order things were selected). Files and districts in the selection pin nothing.
+ * kept in the order things were selected; a click on a city's pill selects it). Files and districts
+ * in the selection pin nothing.
  */
 export function pinnedCity(selection: readonly NodeRef[]): NodeRef | null {
   for (let i = selection.length - 1; i >= 0; i--) {

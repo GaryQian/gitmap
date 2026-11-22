@@ -3,6 +3,12 @@
 
 .gm-scene-pills { position: absolute; inset: 0; }
 
+/* Stacking in the scene. The pill layers set no z-index of their own, so every pill and card below
+   shares one stacking order, whatever layer it is in:
+     POI pills 1–2 (poi.css)  <  district pills 3–4  <  city pills 5–6  <  a dragged pill 7
+     <  summary cards 8 (summaries.css)  <  POI card, detail card 9  <  tooltip 10 (poi.css, inspect.css)
+   The second number of each pair is the hovered or focused pill, which rises within its own tier only. */
+
 .gm-scene-pill {
   position: absolute;
   left: 0;
@@ -31,7 +37,7 @@
   cursor: grab;
   user-select: none;
   touch-action: none;
-  will-change: transform;
+  will-change: translate;
   transition: opacity 160ms var(--gm-ease), background-color 140ms var(--gm-ease), border-color 140ms var(--gm-ease);
   /* an element leaving the pool starts from nothing; the fade out is the opacity transition above */
   animation: gm-scene-pill-in 160ms var(--gm-ease);
@@ -49,6 +55,7 @@
   font-weight: 650;
   letter-spacing: 0.015em;
   background: var(--gm-surface);
+  z-index: 5;
 }
 .gm-scene-pill-city:hover,
 .gm-scene-pill-city:focus-visible,
@@ -62,6 +69,7 @@
   padding: 0 9px;
   font-size: 12px;
   font-weight: 400;
+  z-index: 3;
 }
 
 .gm-scene-pill:hover,
@@ -69,7 +77,18 @@
 .gm-scene-pill.is-dragging {
   background: var(--gm-surface);
   border-color: color-mix(in srgb, var(--gm-text) 34%, transparent);
-  z-index: 1;
 }
-.gm-scene-pill.is-dragging { cursor: grabbing; border-color: var(--gm-halo); }
+.gm-scene-pill-district:hover, .gm-scene-pill-district:focus-visible { z-index: 4; }
+.gm-scene-pill-city:hover, .gm-scene-pill-city:focus-visible { z-index: 6; }
+.gm-scene-pill.is-dragging { z-index: 7; cursor: grabbing; border-color: var(--gm-halo); }
 :root[data-theme='dark'] .gm-scene-pill.is-dragging { box-shadow: 0 0 16px color-mix(in srgb, var(--gm-halo) 16%, transparent); }
+
+/* A selected city or district: the warm selection colour on its edge, and it keeps its place on
+   screen like a focused pill (layer.ts). Warm is the selection's colour everywhere in the chrome. */
+.gm-scene-pill.is-selected {
+  background: var(--gm-surface);
+  border-color: var(--gm-warm);
+  box-shadow: 0 0 0 1px var(--gm-warm);
+}
+.gm-scene-pill-district.is-selected { z-index: 4; }
+.gm-scene-pill-city.is-selected { z-index: 6; }

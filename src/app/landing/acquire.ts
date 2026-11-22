@@ -124,6 +124,21 @@ export async function sourceFromPackageFile(file: File): Promise<RepoSource> {
 }
 
 /**
+ * A file chosen with the landing page's archive button: a package (`.starmap.zip`) or a saved map
+ * (`.starmap.json.gz`). They are told apart by what the file holds, so a renamed export still opens.
+ */
+export async function sourceFromArchiveFile(file: File): Promise<RepoSource> {
+  let head: Uint8Array;
+  try {
+    head = new Uint8Array(await file.slice(0, 2).arrayBuffer());
+  } catch {
+    throw new AcquireError('saved-map-unreadable');
+  }
+  const zip = head[0] === 0x50 && head[1] === 0x4b; // "PK": every zip starts with it
+  return zip || isPackageFileName(file.name) ? sourceFromPackageFile(file) : sourceFromSnapshotFile(file);
+}
+
+/**
  * The folder input, for browsers without the folder dialog, made on demand so it also works away
  * from the landing page. Must be called from a click. Resolves null when nothing was chosen.
  */

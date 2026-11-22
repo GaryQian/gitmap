@@ -23,6 +23,7 @@ export function createPoiBeams(): SceneModule {
   let beams: Beam[] = [];
   /** When each beam started to rise, by point-of-interest id, so a re-projection never restarts one. */
   let births = new Map<string, number>();
+  let offBus: (() => void) | null = null;
 
   const blendingFor = (mode: ThemeMode) => (mode === 'dark' ? THREE.AdditiveBlending : THREE.NormalBlending);
 
@@ -94,9 +95,14 @@ export function createPoiBeams(): SceneModule {
     mesh = new THREE.Mesh(undefined, material);
     mesh.frustumCulled = false;
     mesh.renderOrder = P.renderOrder;
-    mesh.visible = ctx.state.revealed;
+    mesh.visible = ctx.state.revealed && ctx.state.poiBeams;
     allocate(0);
     ctx.scene.add(mesh);
+    // the viewer's switch (ViewState.poiBeams): beams appear and go at once
+    offBus = ctx.bus.on('poiBeams', (on) => {
+      if (mesh) mesh.visible = ctx.state.revealed && on;
+      ctx.invalidate();
+    });
   }
 
   function applyBatch(batch: PatchBatch, info: BatchInfo): void {
@@ -104,7 +110,7 @@ export function createPoiBeams(): SceneModule {
   }
 
   function reveal(info: RevealInfo): void {
-    if (mesh) mesh.visible = true;
+    if (mesh) mesh.visible = ctx.state.poiBeams;
     // the beams rise as the map finishes growing in, a moment apart
     for (const b of beams) {
       births.set(b.id, info.instant ? SHOWN : info.at + (info.durationMs / 1000) * P.revealAfter + b.seed * P.revealSpread);
@@ -119,6 +125,8 @@ export function createPoiBeams(): SceneModule {
   }
 
   function dispose(): void {
+    offBus?.();
+    offBus = null;
     if (mesh) ctx.scene.remove(mesh);
     geometry?.dispose();
     material?.dispose();

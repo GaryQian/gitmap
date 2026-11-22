@@ -118,6 +118,8 @@ export interface ViewState {
   minBytes: number;
   overlay: OverlayView | null;
   particles: boolean;
+  ribbons: boolean;
+  poiBeams: boolean;
 }
 
 /** Internal events on `ctx.bus`: each fires after the matching field of `ctx.state` changed. */
@@ -129,6 +131,8 @@ export interface SceneEvents {
   minBytes: number;
   overlay: OverlayView | null;
   particles: boolean;
+  ribbons: boolean;
+  poiBeams: boolean;
   theme: ThemeMode;
   /** RenderApi.burst(): a particles module draws it. */
   burst: { ref: NodeRef; kind: 'select' | 'open' };

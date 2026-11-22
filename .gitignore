@@ -12,3 +12,7 @@ out/
 *.log
 CHANGES.md
 public/grammars/
+.vercel
+.env*
+api/_lib/server.mjs
+transcripts/

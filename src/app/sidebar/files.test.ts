@@ -42,7 +42,7 @@ describe('resolveTarget', () => {
 
   it('still opens a path the model does not know, and refuses what is not a file', () => {
     const unknown = resolveTarget(replica(), 'f:docs/gone.md')!;
-    expect(unknown.files).toEqual([{ path: 'docs/gone.md', name: 'gone.md', dir: 'docs', lang: 'other', loc: 0 }]);
+    expect(unknown.files).toEqual([{ path: 'docs/gone.md', name: 'gone.md', dir: 'docs', lang: 'other', loc: 0, bytes: 0 }]);
     expect(unknown.active).toBe(0);
     expect(resolveTarget(null, 'u:a.ts')!.files.map((f) => f.path)).toEqual(['a.ts']);
     expect(resolveTarget(replica(), 'd:district-1')).toBeNull();

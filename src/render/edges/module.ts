@@ -74,6 +74,8 @@ export function createEdges(): SceneModule {
   let novaSlot = -1, novaUntil = 0;
   let revealAt = Infinity, revealMix = 0;
   let focusDim = 1;
+  /** 0..1: the viewer's ribbons switch (ViewState.ribbons), eased so the always-on levels fade rather than blink. */
+  let ribbonMix = 1;
   /** What the focus set holds: a selection dims the ambient levels more than a hover. */
   let focusKind: 'none' | 'hovered' | 'selected' = 'none';
   let stamp = new Uint32Array(0), stampGen = 0;
@@ -397,6 +399,7 @@ export function createEdges(): SceneModule {
       ctx.bus.on('hover', (h) => setHover(h.slot)),
       ctx.bus.on('typeFilter', markModelDirty),
       ctx.bus.on('minBytes', (n) => { shared.uMinBytes.value = n; markModelDirty(); }),
+      ctx.bus.on('ribbons', () => ctx.invalidate()),
       ctx.bus.on('burst', ({ ref, kind }) => {
         if (kind !== 'open' || ctx.reducedMotion) return;
         const slot = unitSlotOf(ref, ctx.replica);
@@ -415,6 +418,7 @@ export function createEdges(): SceneModule {
     };
     ctx.provide('edges', api);
     if (ctx.state.revealed) { revealAt = LONG_AGO; revealMix = 1; }
+    ribbonMix = ctx.state.ribbons ? 1 : 0;
     modelDirty = true;
   }
 
@@ -475,6 +479,9 @@ export function createEdges(): SceneModule {
     // a selection hides the ambient levels outright, even when the selected sphere has no edges
     const dimTarget = focusKind === 'selected' ? EDGE_LOCAL.focusDim.selected : hasFocus && focusKind === 'hovered' ? EDGE_LOCAL.focusDim.hovered : 1;
     if (focusDim !== dimTarget) { focusDim = dimTarget > focusDim ? Math.min(dimTarget, focusDim + step) : Math.max(dimTarget, focusDim - step); ctx.invalidate(); }
+    // switched off: the ambient levels fade out; hover and selection edges (the focus level) still draw
+    const ribbonTarget = ctx.state.ribbons ? 1 : 0;
+    if (ribbonMix !== ribbonTarget) { ribbonMix = ribbonTarget > ribbonMix ? Math.min(1, ribbonMix + step) : Math.max(0, ribbonMix - step); ctx.invalidate(); }
     levels.city.target = mix.city; levels.district.target = mix.district; levels.file.target = mix.file; levels.focus.target = 1;
     let drawn = 0;
     for (const level of all) {
@@ -483,7 +490,7 @@ export function createEdges(): SceneModule {
         ctx.invalidate();
       }
       const ambient = level.name !== 'focus';
-      level.uniforms.uAlpha.value = level.alpha * revealMix * (ambient ? focusDim : 1);
+      level.uniforms.uAlpha.value = level.alpha * revealMix * (ambient ? focusDim * ribbonMix : 1);
       level.mesh.visible = level.buffer.count > 0 && level.uniforms.uAlpha.value > 0.003;
       if (level.mesh.visible) drawn += level.buffer.count;
     }

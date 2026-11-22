@@ -104,12 +104,13 @@ Emitted light is additive in dark mode and normal-blended in light mode. Switch 
 - `move(p, false)` — hover moves, offered to every handler until one returns `true`.
 - `click(p)` / `dblclick(p)` — a press and release without a drag (movement under `pointer.clickSlopPx` in `core/tunables.ts`), offered until one returns `true`. Sent whichever handler captured the press, so picking can sit above the camera without stealing its drags.
 - `wheel(w)`, `leave()`.
+- `pinch(g)` — two fingers on the canvas (`PinchInfo`: phase, the point midway between them, the change in their separation and how far they have twisted since the previous event, and both finger positions). The start is offered until a handler returns `true`; it then gets the moves and the end. A gesture the first finger began is cancelled first (`up` with `cancelled`), and a pinch never ends in a click. The finger left down when the other lifts is ignored until it lifts too.
 
 `PointerInfo` has canvas-relative `x`, `y`, the button, modifier keys and `space` (Space held). The camera leaves Shift+left-drag unhandled, for the marquee.
 
 ## Camera
 
-Left-drag pans (the grabbed ground point stays under the cursor), wheel zooms toward the cursor, middle-drag or Space+drag orbits around the ground point under the pointer. The default framing fits the cities' bounding circle at `camera.defaultTilt` (height over ground distance, as in the spike). The camera follows the default framing until the reveal or the first user input.
+Left-drag pans (the grabbed ground point stays under the cursor), wheel zooms toward the cursor, middle-drag or Space+drag orbits around the ground point under the pointer. On a touch screen one finger pans and two fingers do the rest (`core/twoFinger.ts` tells the gestures apart, once per gesture). Sliding both fingers up or down together tilts the view. Otherwise the ground point grabbed midway between them stays there: spreading zooms, moving both fingers pans, and twisting them turns the view once the twist passes `touch.twistStartRad`, so a plain pinch never turns it. The default framing fits the cities' bounding circle at `camera.defaultTilt` (height over ground distance, as in the spike). The camera follows the default framing until the reveal or the first user input.
 
 ## Notes
 

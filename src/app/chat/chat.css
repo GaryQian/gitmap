@@ -297,6 +297,22 @@
 
 /* ---- the composer ---- */
 
+/* over the composer: what the next question is about. The warm mark is the selection's colour. */
+.gm-chat-context {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0 14px 7px calc(var(--gm-chat-pad) + 15px);
+  font-size: 12.5px;
+  line-height: 1.45;
+  letter-spacing: 0.03em;
+  color: var(--gm-text-dim);
+}
+.gm-chat-context-mark { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--gm-warm); }
+.gm-chat-context-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gm-chat-context .gm-strong { color: var(--gm-text); }
 .gm-chat-composer {
   flex: none;
   display: flex;

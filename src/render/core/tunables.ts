@@ -29,6 +29,15 @@ export const RENDER_LOCAL = {
     /** A press that travels less than this is a click, not a drag. CSS pixels. */
     clickSlopPx: 4,
   },
+  /** Two fingers on the map (core/twoFinger.ts). */
+  touch: {
+    /** How far a finger travels before the gesture is taken as a tilt or as a pinch. CSS pixels. */
+    decidePx: 10,
+    /** A tilt needs each finger to move this many times further vertically than sideways. */
+    tiltSteepness: 2,
+    /** A twist turns the view only after the fingers have turned this far, radians (about 9°), so a plain pinch never does. */
+    twistStartRad: 0.16,
+  },
   loop: {
     /** Frame rate when nothing moves (ambient shimmer only). */
     idleFps: 20,

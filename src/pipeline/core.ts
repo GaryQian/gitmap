@@ -12,7 +12,7 @@ import type { RepoAccess, RepoLocator } from '../contracts/git';
 import type { FactsCache, Manifest } from '../contracts/ingest';
 import type { FileFacts, SyntaxFacts } from '../contracts/lang';
 import type { SettleReport } from '../contracts/physics';
-import type { AnalysisInput, AnalysisResult, PipelineEvents, RepoSource, Stage } from '../contracts/pipeline';
+import type { AnalysisInput, AnalysisResult, PipelineEvents, RepoSource, Stage, StageInfo } from '../contracts/pipeline';
 import type { ModelStore } from '../contracts/store';
 import { buildManifest, runFastPass, runSlowPass } from '../ingest';
 import { pluginById } from '../lang';
@@ -98,6 +98,22 @@ const fmt = (n: number) => n.toLocaleString('en-US');
  * larger one needs longer to come to rest with nothing overlapping, so the cap grows with the number
  * of files, up to a ceiling. Waiting a few more seconds beats revealing a map that is still overlapped.
  */
+/**
+ * The share of the wait before the reveal that each stretch takes, as [from, to] of StageInfo.overall.
+ * Rough shares of the time measured on the test repos: parsing code is most of it.
+ */
+const WAIT = {
+  reading: [0.03, 0.22],
+  parsing: [0.22, 0.8],
+  structure: [0.8, 0.9],
+  layout: [0.9, 1],
+} as const;
+const within = (span: readonly [number, number], share: number): number => span[0] + (span[1] - span[0]) * Math.min(1, Math.max(0, share));
+/** Until the first batch of parsed code comes back, the line moves by time a little way into the stretch. */
+const PARSERS_LOADING = { creepTo: WAIT.parsing[0] + 0.04, creepMs: 1500 } as const;
+/** A stage line is sent at most this often while a pass runs. */
+const PROGRESS_EVERY_MS = 60;
+
 export function settleCap(config: Config, units: number): number {
   const r = config.reveal;
   return Math.min(Math.max(r.settleMaxMs, r.settleCeilingMs), Math.max(r.settleMaxMs, units * r.settleMsPerFile));
@@ -168,7 +184,8 @@ export async function runSource(source: RepoSource, deps: PipelineDeps): Promise
   };
   let t0 = now();
   const lap = (name: string) => { const t = now(); state.timings[name] = t - t0; t0 = t; };
-  const stage = (s: Stage, label: string, done?: number, total?: number) => emit('stage', { stage: s, label, done, total });
+  const stage = (s: Stage, label: string, done?: number, total?: number, overall?: Pick<StageInfo, 'overall' | 'creepTo' | 'creepMs'>) =>
+    emit('stage', { stage: s, label, done, total, ...overall });
 
   if (source.kind === 'synthetic') {
     stage('structure', 'Finding structure');
@@ -216,7 +233,7 @@ export async function runSource(source: RepoSource, deps: PipelineDeps): Promise
   }
 
   // ---- a folder on disk ----
-  stage('manifest', 'Listing files');
+  stage('manifest', 'Listing files', undefined, undefined, { overall: 0, creepTo: WAIT.reading[0], creepMs: 1500 });
   await pool.setRepo(source.locator);
   const repo = (state.repo = await deps.openRepo(source.locator));
   const manifest = (state.manifest = await buildManifest(repo, config));
@@ -272,16 +289,16 @@ export async function runSource(source: RepoSource, deps: PipelineDeps): Promise
   gate.begin();
 
   const total = manifest.entries.length;
-  stage('reading', `Reading files 0 / ${fmt(total)}`, 0, total);
+  stage('reading', `Reading files 0 / ${fmt(total)}`, 0, total, { overall: WAIT.reading[0] });
   let lastEmit = 0;
   state.facts = await runFastPass(manifest, pool, config, {
     cache,
-    onProgress(done, all) {
+    onProgress(done, all, share = all > 0 ? done / all : 1) {
       const t = now();
-      if (t - lastEmit < 100 && done < all) return;
+      if (t - lastEmit < PROGRESS_EVERY_MS && done < all) return;
       lastEmit = t;
       emit('progress', { subsystem: 'fastPass', done, total: all });
-      stage('reading', `Reading files ${fmt(done)} / ${fmt(all)}`, done, all);
+      stage('reading', `Reading files ${fmt(done)} / ${fmt(all)}`, done, all, { overall: within(WAIT.reading, share) });
     },
   });
   gate.fastPassDone();
@@ -289,17 +306,18 @@ export async function runSource(source: RepoSource, deps: PipelineDeps): Promise
 
   // The slow pass is inside the gate, but only until reveal.maxWaitSeconds: past that the map is
   // revealed from imports plus whatever call facts have arrived, and the pass carries on (§6.8).
-  stage('structure', 'Finding structure');
+  // the parsers load before the first batch comes back: about a second with nothing to count
+  stage('structure', 'Reading code', undefined, undefined, { overall: WAIT.parsing[0], ...PARSERS_LOADING });
   let lastSlow = 0;
   state.slowPass = runSlowPass(manifest, pool, config, {
     cache,
     onBatch(batch) { if (!state.syntaxComplete) for (const f of batch) state.syntax.push(f); },
-    onProgress(done, all) {
+    onProgress(done, all, share = all > 0 ? done / all : 1) {
       const t = now();
-      if (t - lastSlow < 100 && done < all) return;
+      if (t - lastSlow < PROGRESS_EVERY_MS && done < all) return;
       lastSlow = t;
       emit('progress', { subsystem: 'slowPass', done, total: all });
-      if (gate.phase === 'parsing') stage('structure', `Finding structure ${fmt(done)} / ${fmt(all)}`, done, all);
+      if (gate.phase === 'parsing') stage('structure', `Reading code ${fmt(done)} / ${fmt(all)}`, done, all, { overall: within(WAIT.parsing, share), ...(share === 0 ? PARSERS_LOADING : null) });
     },
   }).then(
     (all) => { state.syntax = all; state.syntaxComplete = true; },
@@ -308,7 +326,8 @@ export async function runSource(source: RepoSource, deps: PipelineDeps): Promise
 
   await gate.readyToStructure();
   lap('slowPassWait');
-  stage('structure', 'Finding structure');
+  // One task, with nothing to count while it runs: the line moves by time (StageInfo.creepTo).
+  stage('structure', 'Finding structure', undefined, undefined, { overall: WAIT.structure[0], creepTo: WAIT.structure[1], creepMs: 600 + total * 0.25 });
   emit('progress', { subsystem: 'resolve', done: 0, total: 1 });
   const result = await analyzeAndApply(deps, state, { keepIds: false });
   state.structure = result.structure;
@@ -316,9 +335,10 @@ export async function runSource(source: RepoSource, deps: PipelineDeps): Promise
   gate.structureReady();
   lap('structure');
 
-  stage('layout', 'Settling layout');
+  const cap = settleCap(config, store.replica.table('unit').count);
+  stage('layout', 'Settling layout', undefined, undefined, { overall: WAIT.layout[0], creepTo: WAIT.layout[1], creepMs: cap * 0.4 });
   emit('progress', { subsystem: 'layout', done: 0, total: 1 });
-  state.settle = await deps.physics.settle(settleCap(config, store.replica.table('unit').count));
+  state.settle = await deps.physics.settle(cap);
   emit('progress', { subsystem: 'layout', done: 1, total: 1 });
   lap('layout');
 

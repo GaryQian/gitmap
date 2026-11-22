@@ -62,7 +62,7 @@ describe('buildManifest', () => {
       ['src/a.h', 'tree'],
       ['src/z.c', 'pack'],
     ]);
-    expect(m.entries.filter((e) => e.lang).map((e) => e.lang)).toEqual(['js', 'cpp', 'c']);
+    expect(m.entries.filter((e) => e.lang).map((e) => e.lang)).toEqual(['image', 'js', 'cpp', 'c']);
     const z = m.entries.find((e) => e.path === 'src/z.c')!;
     expect(z.oid).toBe(git.oidOf('src/z.c'));
     expect(z.packOffset).toBeGreaterThanOrEqual(0);

@@ -178,5 +178,15 @@ scope.onmessage = (ev: MessageEvent<ToCoordinator>) => {
       // The tab may not come back: write what is waiting instead of sitting out the debounce.
       if (state?.saver?.pending) void state.saver.flush();
       break;
+    case 'close': {
+      // A map closed within the debounce of its reveal would otherwise never be saved: the session
+      // used to terminate this worker at once, and the pending write died with it.
+      pool?.cancel();
+      const saver = state?.saver;
+      Promise.resolve(saver?.pending ? saver.flush() : undefined)
+        .catch(() => { /* storage failed: there is nothing more to do for it now */ })
+        .finally(() => post({ type: 'closed' }));
+      break;
+    }
   }
 };

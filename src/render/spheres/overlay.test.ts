@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { OVERLAY_UNKNOWN, buildRamp, overlayT } from './overlay';
+import { OVERLAY_HIDDEN, OVERLAY_UNKNOWN, buildRamp, overlayT } from './overlay';
 
 const texel = (ramp: Uint8Array, i: number) => Array.from(ramp.subarray(4 * i, 4 * i + 4));
 
@@ -37,6 +37,12 @@ describe('overlay ramp', () => {
 });
 
 describe('overlay value mapping', () => {
+  it('marks a filtered-out value apart from an unknown one', () => {
+    expect(overlayT(-Infinity, [0, 1])).toBe(OVERLAY_HIDDEN);
+    expect(overlayT(NaN, [0, 1])).toBe(OVERLAY_UNKNOWN);
+    expect(OVERLAY_HIDDEN).toBeLessThan(OVERLAY_UNKNOWN);
+  });
+
   it('maps the domain onto 0..1 and clamps', () => {
     expect(overlayT(5, [0, 10])).toBeCloseTo(0.5);
     expect(overlayT(-3, [0, 10])).toBe(0);

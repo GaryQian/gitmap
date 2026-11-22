@@ -31,6 +31,7 @@ export function useOverlayView(active: OverlayInfo | null, contributorId: number
   const selection = useSelection();
   const direction = useOverlayParams((s) => s.direction);
   const maxHops = useOverlayParams((s) => s.maxHops);
+  const maxAge = useOverlayParams((s) => s.maxAgeSeconds);
   /** Counts the rebuilds that data arriving has asked for. */
   const [dataTick, setDataTick] = useState(0);
 
@@ -76,19 +77,22 @@ export function useOverlayView(active: OverlayInfo | null, contributorId: number
     if (!active || !replica) return null;
     const ctx: OverlayContext = { replica, mode };
     if (active.id === 'ownership') ctx.contributorId = contributorId;
-    if (active.id === 'reach') {
+    if (active.id === 'recency') ctx.maxAgeSeconds = maxAge;
+    if (active.id === 'reach' || active.id === 'tests') {
       let g = graph.current;
       if (!g || g.replica !== replica || g.at !== structureRev.current) {
         g = graph.current = { replica, at: structureRev.current, adjacency: buildAdjacency(replica) };
       }
       ctx.adjacency = g.adjacency;
+    }
+    if (active.id === 'reach') {
       ctx.seeds = seeds;
       ctx.direction = direction;
       ctx.maxHops = maxHops;
     }
     return overlayView(active.id, ctx);
     // dataTick stands for the replica's contents, which change in place
-  }, [active, replica, mode, contributorId, direction, maxHops, seeds, dataTick]);
+  }, [active, replica, mode, contributorId, direction, maxHops, maxAge, seeds, dataTick]);
 
   useEffect(() => {
     if (!render) return;

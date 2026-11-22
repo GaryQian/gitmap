@@ -36,7 +36,9 @@ describe('buildChatContext', () => {
     expect(text).toContain('Languages by share of lines:');
     for (const id of tables.city.ids) expect(text).toContain(`c:${id} | `);
     for (const id of tables.district.ids) expect(text).toContain(`d:${id} `);
-    expect(text).toContain('summary (Request handling): Receives requests and routes them.');
+    // a city with a summary goes by the summary's title, as on the map, with its folder name after it
+    expect(text).toContain(`c:${cityId} | Request handling (${tables.city.cols.name![0]}) | `);
+    expect(text).toContain('summary: Receives requests and routes them.');
     expect(estimateTokens(text)).toBeLessThanOrEqual(CHAT_TUNABLES.contextTokens);
   });
 

@@ -48,9 +48,13 @@ export function buildRamp(stops: readonly ColorStop[], discrete = false, width =
   return out;
 }
 
-/** A layer value → ramp position 0..1, or OVERLAY_UNKNOWN for NaN or a missing value. */
+/** Attribute value for a unit the overlay filters out (−Infinity in the view). The shader does not draw it. */
+export const OVERLAY_HIDDEN = -2;
+
+/** A layer value → ramp position 0..1, OVERLAY_UNKNOWN for NaN or a missing value, or OVERLAY_HIDDEN for −Infinity. */
 export function overlayT(value: number | undefined, domain: readonly [number, number]): number {
   if (value === undefined || Number.isNaN(value)) return OVERLAY_UNKNOWN;
+  if (value === -Infinity) return OVERLAY_HIDDEN;
   const span = domain[1] - domain[0];
   if (!(span > 0)) return 0;
   const t = (value - domain[0]) / span;

@@ -14,7 +14,7 @@
     "taskTargetMs": 40, "parseFloorWorkers": 1, "historyChunkCommits": 200, "parkWhenFrameMsOver": 20
   },
   "parser": {
-    "version": "2",
+    "version": "4",
     "source": "pack", "packChunkBytes": 1048576, "batchBytes": 2097152, "maxFileBytes": 1048576, "retainBytes": 268435456,
     "excerptBytes": 4096, "slowBatchBytes": 262144, "signatureChars": 200, "docChars": 300,
     "exclude": [
@@ -24,7 +24,7 @@
       "**/*.generated.*", "**/*.pb.go", "**/*_pb2.py"
     ],
     "binaryExtensions": [
-      "png", "jpg", "jpeg", "gif", "webp", "ico", "bmp", "tiff", "psd", "pdf", "zip", "gz", "tar", "7z", "jar", "war",
+      "png", "jpg", "jpeg", "gif", "webp", "avif", "ico", "bmp", "tiff", "psd", "pdf", "zip", "gz", "tar", "7z", "jar", "war",
       "class", "so", "dll", "dylib", "exe", "bin", "o", "a", "lib", "wasm", "woff", "woff2", "ttf", "otf", "eot",
       "mp3", "mp4", "mov", "wav", "ogg", "webm", "avi", "db", "sqlite", "pyc", "icns", "keystore", "tflite", "pb",
       "npy", "npz", "h5", "onnx"
@@ -54,16 +54,16 @@
     "file": { "pad": 0.5, "gap": 2, "radialExtent": 0.85, "sizeVsConnectivity": 0.5, "baseStrength": 0.1, "fill": 0.72, "pack": 0.72, "spread": 0.08, "spreadTicks": 40, "finishRounds": 60 }
   },
   "visual": {
-    "radiusMin": 0.8, "radiusMax": 12, "sizeScale": 0.8, "importanceBoost": 0.5, "importanceCurve": 2,
+    "radiusMin": 0.8, "radiusMax": 12, "sizeScale": 0.8, "imageBytesPerLine": 400, "importanceBoost": 0.5, "importanceCurve": 2,
     "glowFromPct": 0.9, "selectedScale": 1.3,
     "languageColors": {
       "ts": "#3178c6", "js": "#e8c53a", "python": "#3fa672", "c": "#7d8fa6", "cpp": "#d9486e", "objc": "#5aa9e6",
       "java": "#e0803a", "kotlin": "#a97bff", "scala": "#d73a4a", "csharp": "#2fb37c", "go": "#00add8", "rust": "#dea584",
       "dart": "#2bb7f6", "swift": "#f05138", "php": "#8892bf", "ruby": "#cc342d", "lua": "#5b6ee1", "luau": "#00a2ff","vue": "#41b883", "svelte": "#ff5d2a",
-      "astro": "#b845ed", "css": "#c6538c", "html": "#e34c26", "other": "#8a9099"
+      "astro": "#b845ed", "css": "#c6538c", "html": "#e34c26", "image": "#e6dcc3", "other": "#8a9099"
     },
     "grid": { "cell": 50, "opacity": 0.06 },
-    "star": { "coreGain": [2.4, 5.0], "coreTightness": [13, 8], "limbDarkening": 0.62, "flicker": 0.07, "glowFalloff": [8, 2.2], "spikesFromPct": 0.975, "breatheMs": 1500 },
+    "star": { "coreGain": [2.4, 5.0], "coreTightness": [13, 8], "limbDarkening": 0.62, "flicker": 0.07, "glowFalloff": [16, 1.4], "glowCurve": 2.5, "spikesFromPct": 0.975, "breatheMs": 1500 },
     "particles": { "ambient": 1500, "voidDustShare": 0.2, "selectBurst": 40, "openBurst": 150 },
     "edgePulse": { "speed": 120, "tailLength": 30, "restSeconds": [0.5, 2.4], "flickerHz": 10, "traceOpacity": 0.16 }
   },
@@ -73,7 +73,8 @@
     "repos": [
       { "name": "starmap", "file": "/demo/starmap.starmap.zip", "location": "github.com/GaryQian/gitmap" },
       { "name": "react", "file": "/demo/react.starmap.zip", "location": "github.com/facebook/react" },
-      { "name": "tensorflow", "file": "/demo/tensorflow.starmap.zip", "location": "github.com/tensorflow/tensorflow" }
+      { "name": "tensorflow", "file": "/demo/tensorflow.starmap.zip", "location": "github.com/tensorflow/tensorflow" },
+      { "name": "openclaw", "file": "/demo/openclaw.starmap.zip", "location": "github.com/openclaw/openclaw" }
     ]
   },
   "render": { "ambientEdges": 1500, "edgeBudget": 50000, "maxPills": 150, "patchBudgetMs": 4, "adaptiveDpr": true, "maxDpr": 2 },

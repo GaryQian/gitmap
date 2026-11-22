@@ -1,5 +1,5 @@
-// The landing page (PLAN.md §17.7): the title, one button, and the repo pills other packages mount
-// beneath it. The whole page is the drop target; there is no drop-zone box. Messages appear only when
+// The landing page (PLAN.md §17.7): the title, the "Choose a folder" button with a small icon button
+// beside it for opening an exported archive, and the repo pills other packages mount beneath them. The whole page is the drop target; there is no drop-zone box. Messages appear only when
 // needed, as one quiet line under the button; every sentence is in ../status/messages.ts.
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { config } from '../../config';
@@ -12,9 +12,12 @@ import { say } from '../status/messages';
 import { browserSupport, supportVerdict } from '../status/support';
 import '../status/status.css';
 import { setBackgroundEmphasis, setMessage, useApp } from '../store';
-import { PillButton } from '../ui';
+import { FileIcon, PillButton } from '../ui';
 import { About } from './About';
-import { AcquireError, captureDrop, pickDirectory, sourceFromDrop, sourceFromFileList } from './acquire';
+import { AcquireError, captureDrop, pickDirectory, sourceFromArchiveFile, sourceFromDrop, sourceFromFileList } from './acquire';
+import './landing.css';
+
+const ARCHIVE_LABEL = 'Choose an exported archive';
 
 /** Run one way of getting a source; open it, or put the reason it failed under the button. */
 async function acquire(get: () => Promise<RepoSource | null> | RepoSource | null): Promise<void> {
@@ -49,6 +52,7 @@ export function Landing() {
   // a hint about this browser is said once per visit: until the first map has been opened
   const firstLook = useApp((s) => s.sessionId === 0);
   const input = useRef<HTMLInputElement>(null);
+  const archive = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const support = browserSupport();
   const verdict = supportVerdict(support);
@@ -115,6 +119,13 @@ export function Landing() {
     if (files.length > 0) void acquire(() => sourceFromFileList(files));
   };
 
+  // An exported archive: a package (the map and its files) or a saved map alone.
+  const onArchive = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // so choosing the same file again fires a change
+    if (file) void acquire(() => sourceFromArchiveFile(file));
+  };
+
   const act = async () => {
     if (!action) return;
     setBusy(true);
@@ -135,7 +146,16 @@ export function Landing() {
     <main className="gm-landing">
       <About />
       <h1 className="gm-title">{config.app.title}</h1>
-      {verdict.canChoose && <PillButton size="large" blur onClick={choose}>Choose a folder</PillButton>}
+      {verdict.usable && (
+        <div className="gm-choose">
+          {verdict.canChoose && <PillButton size="large" blur onClick={choose}>Choose a folder</PillButton>}
+          {/* an icon until the pointer or the keyboard is on it; then it says what it opens */}
+          <PillButton size="large" blur className="gm-archive-button" aria-label={ARCHIVE_LABEL} onClick={() => archive.current?.click()}>
+            <FileIcon size={18} />
+            <span className="gm-archive-label" aria-hidden="true">{ARCHIVE_LABEL}</span>
+          </PillButton>
+        </div>
+      )}
       <p className="gm-message" role="status">
         {message ?? hint}
         {message !== null && action && (
@@ -144,6 +164,7 @@ export function Landing() {
       </p>
       {verdict.usable && <Region name="landing" />}
       <input ref={input} className="gm-file-input" type="file" multiple tabIndex={-1} aria-hidden="true" onChange={onPicked} />
+      <input ref={archive} className="gm-file-input" type="file" accept=".zip,.gz,.json" tabIndex={-1} aria-hidden="true" onChange={onArchive} />
     </main>
   );
 }

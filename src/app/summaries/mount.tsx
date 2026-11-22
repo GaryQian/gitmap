@@ -8,9 +8,11 @@ import type { AppMount } from '../../contracts/app';
 import type { ModelReplica } from '../../contracts/store';
 import type { NodeRef } from '../../model/types';
 import { sceneObstacles } from '../anchor';
+import { cityNames } from '../cityNames';
 import { LAYER, isTyping, topDismissable, useDismissable } from '../keys';
 import { useApp, useRender, useReplica, useSession } from '../store';
 import { APP_LOCAL } from '../tunables';
+import { shownSize } from '../uiScale';
 import { Card, cx } from '../ui';
 import { cardContent, effectivePin, inFlight, pinAfter, placeCard, type CardContent, type Rect } from './logic';
 import { watchPinGestures } from './pin';
@@ -21,17 +23,20 @@ import './summaries.css';
 /** The card's id: the pill it describes points here with `aria-describedby`. */
 const CARD_ID = 'gm-summary-card';
 
-/** The name on a city's or district's pill. */
-function nodeName(replica: ModelReplica, ref: NodeRef): string {
-  const kind = ref.startsWith('c:') ? 'city' : ref.startsWith('d:') ? 'district' : null;
-  if (!kind) return '';
-  const table = replica.table(kind);
+/** The name on a district's pill. */
+function districtName(replica: ModelReplica, ref: NodeRef): string {
+  const table = replica.table('district');
   const slot = table.slotOf(ref.slice(2));
   return slot < 0 ? '' : (table.cols.name[slot] ?? '');
 }
 
 function contentOf(replica: ModelReplica | null | undefined, ref: NodeRef, generating: boolean): CardContent | null {
-  return replica ? cardContent(replica.annotations, ref, nodeName(replica, ref), generating) : null;
+  if (!replica) return null;
+  if (ref.startsWith('c:')) {
+    const name = cityNames(replica).get(ref.slice(2));
+    return cardContent(replica.annotations, ref, name?.title ?? '', generating, name);
+  }
+  return cardContent(replica.annotations, ref, ref.startsWith('d:') ? districtName(replica, ref) : '', generating);
 }
 
 /** Whether the node's card has anything in it right now, read straight from the store (for event handlers). */
@@ -91,7 +96,7 @@ function Summaries() {
   const [clicked, setClicked] = useState<NodeRef | null>(null);
   const clickedNow = useRef(clicked);
   clickedNow.current = clicked;
-  /** ... and failing that a selected city, should anything ever select one. */
+  /** ... and failing that a selected city (a click on a pill selects it too, and Shift+click adds one). */
   const pinned = useApp((s) => effectivePin(clicked, s.selection));
   const [target, setTarget] = useState<PillTarget | null>(null);
   const host = useRef<HTMLDivElement>(null);
@@ -160,7 +165,7 @@ function Summaries() {
   useLayoutEffect(() => {
     const box = card.current, view = host.current;
     if (!pill || !box || !view) return;
-    let size = { width: box.offsetWidth, height: box.offsetHeight };
+    let size = shownSize(box);
     let chrome = readChrome(view);
     let written = '';
     const run = () => {
@@ -173,15 +178,15 @@ function Summaries() {
         { gap: SUMMARY_UI.gapPx, margin: SUMMARY_UI.marginPx },
         sceneObstacles.size ? [...chrome.boxes, ...sceneObstacles] : chrome.boxes,
       );
-      const transform = `translate3d(${Math.round(spot.x)}px, ${Math.round(spot.y)}px, 0)`;
-      if (transform !== written) box.style.transform = written = transform;
+      const transform = `${Math.round(spot.x)}px ${Math.round(spot.y)}px`;
+      if (transform !== written) box.style.translate = written = transform;
       if (!box.hasAttribute('data-placed')) box.setAttribute('data-placed', '');
     };
     place.current = run;
     run();
     // the text changing, fonts arriving or the window resizing all change what fits where
     const resize = new ResizeObserver(() => {
-      size = { width: box.offsetWidth, height: box.offsetHeight };
+      size = shownSize(box);
       chrome = readChrome(view);
       run();
     });

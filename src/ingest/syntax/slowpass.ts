@@ -8,7 +8,7 @@ import type { ComputePool } from '../../contracts/compute';
 import type { Manifest, ManifestEntry, PassOptions } from '../../contracts/ingest';
 import type { LanguagePlugin, SyntaxFacts } from '../../contracts/lang';
 import { pluginById, pluginForPath } from '../../lang';
-import { makeBatches } from '../fastpass';
+import { makeBatches, progressWeight } from '../fastpass';
 import { SLOW_PASS_TASK, type SlowPassInput } from './slowpass.task';
 
 /**
@@ -59,6 +59,11 @@ export async function runSlowPass(manifest: Manifest, pool: ComputePool, config:
   for (let i = 0; i < entries.length; i++) if (hasSlowPass(entries[i])) todo.push(i);
   const total = todo.length;
   let done = 0;
+  // Progress by weight (see PassOptions.onProgress): parsing costs by the byte, not by the file.
+  let weightTotal = 0, weightDone = 0;
+  for (const i of todo) weightTotal += progressWeight(entries[i]);
+  const report = () => opts.onProgress?.(done, total, weightTotal > 0 ? Math.min(1, weightDone / weightTotal) : 1);
+  const weigh = (batch: readonly number[]) => { for (const i of batch) weightDone += progressWeight(entries[i]); };
 
   // Parse nothing that is already known (PLAN.md §6.3.1, item 6). The cache is best-effort.
   if (cache && todo.length) {
@@ -69,7 +74,7 @@ export async function runSlowPass(manifest: Manifest, pool: ComputePool, config:
     const hits: SyntaxFacts[] = [];
     todo = todo.filter((i) => {
       const hit = entries[i].oid ? reuse(known.get(entries[i].oid), entries[i]) : null;
-      if (hit) hits.push(hit);
+      if (hit) { hits.push(hit); weightDone += progressWeight(entries[i]); }
       return !hit;
     });
     if (hits.length) {
@@ -78,7 +83,7 @@ export async function runSlowPass(manifest: Manifest, pool: ComputePool, config:
       opts.onBatch?.(hits);
     }
   }
-  opts.onProgress?.(done, total);
+  report();
 
   const batches = makeBatches(entries, todo, batchBytes(config));
   if (batches.length === 0) return out;
@@ -96,7 +101,7 @@ export async function runSlowPass(manifest: Manifest, pool: ComputePool, config:
       if (!Array.isArray(facts) || facts.length !== batch.length) throw new Error(`${SLOW_PASS_TASK}: a batch of ${batch.length} files returned ${Array.isArray(facts) ? facts.length : 'no'} results`);
     } catch (e) {
       // Call edges are an extra: a lost batch costs its files' edges, not the pass.
-      if (!stopped) { failed++; firstError ??= e; done += batch.length; opts.onProgress?.(done, total); }
+      if (!stopped) { failed++; firstError ??= e; done += batch.length; weigh(batch); report(); }
       return;
     }
     if (stopped) return;
@@ -109,7 +114,8 @@ export async function runSlowPass(manifest: Manifest, pool: ComputePool, config:
     out.push(...facts);
     done += batch.length;
     opts.onBatch?.(facts);
-    opts.onProgress?.(done, total);
+    weigh(batch);
+    report();
     if (cache && fresh.length) { try { await cache.putSyntax(fresh); } catch { /* best-effort */ } }
   }));
 

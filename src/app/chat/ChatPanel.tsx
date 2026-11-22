@@ -1,12 +1,13 @@
 // The Chat tab of the side panel: a scrolling transcript and a composer (PLAN.md §11.5). The panel
 // around it (width, resize handle, tab bar, close, Escape) belongs to the sidebar; this is its content.
-import { useEffect, useId, useLayoutEffect, useRef, type KeyboardEvent, type MouseEvent } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, type KeyboardEvent, type MouseEvent } from 'react';
 import { fileRef } from '../../model/types';
-import { setSelection, useReducedMotion, useRepoName } from '../store';
-import { PillButton, cx } from '../ui';
+import { setSelection, useReducedMotion, useReplica, useRepoName, useSelection } from '../store';
+import { PillButton, Strong, cx } from '../ui';
 import { Answer, preloadMarkdown } from './Answer';
 import { SendIcon, StopIcon } from './icons';
 import { takeFocus, usePanel } from './panel';
+import { selectionFacts, selectionPhrase } from './selectionNote';
 import { retryTurn, sendMessage, setDraft, stopTurn, useChat } from './state';
 import { liveEnv } from './tools/live';
 import { findFile } from './tools/lookup';
@@ -70,6 +71,25 @@ function EmptyState({ ask }: { ask: (question: string) => void }) {
         ))}
       </ul>
     </div>
+  );
+}
+
+/** Over the composer: what is selected on the map, which the next question is sent with. */
+function SelectionContext() {
+  const selection = useSelection();
+  const replica = useReplica();
+  const rev = replica?.rev ?? 0;
+  const phrase = useMemo(
+    () => (replica && selection.length > 0 ? selectionPhrase(selectionFacts(replica, selection)) : null),
+    // the replica is one object for the life of the map: `rev` says when a name or a count in it changed
+    [replica, selection, rev],
+  );
+  if (phrase === null) return null;
+  return (
+    <p className="gm-chat-context" title="The assistant is told what is selected on the map with each question">
+      <span className="gm-chat-context-mark" aria-hidden="true" />
+      <span className="gm-chat-context-text">Asking about <Strong>{phrase}</Strong></span>
+    </p>
   );
 }
 
@@ -194,6 +214,7 @@ export function ChatPanel() {
           {activity !== null && <p className="gm-chat-activity" aria-live="off"><span className="gm-chat-pulse" aria-hidden="true" />{activity}</p>}
         </div>
       </div>
+      <SelectionContext />
       <form className="gm-chat-composer" onSubmit={(e) => { e.preventDefault(); submit(); }}>
         <textarea
           ref={field}

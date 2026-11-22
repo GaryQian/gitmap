@@ -139,6 +139,60 @@ describe('camera', () => {
     expect(zoomed.z).toBeCloseTo(before.z, 2);
   });
 
+  it('pinches: zooms about the point between the fingers and pans as they move together', () => {
+    const r = rig();
+    const grabbed = r.groundAt(500, 400)!;
+    const d0 = r.view.distance;
+    r.pinchStart(500, 400);
+    expect(r.isMoving(0)).toBe(true);
+    r.pinchMove(500, 400, 0.5);          // fingers spread to twice the distance: twice as close
+    expect(r.view.distance).toBeCloseTo(d0 / 2, 6);
+    let now = r.groundAt(500, 400)!;
+    expect(now.x).toBeCloseTo(grabbed.x, 2);
+    expect(now.z).toBeCloseTo(grabbed.z, 2);
+    r.pinchMove(620, 340, 1);            // both fingers move: the grabbed point follows them
+    expect(r.view.distance).toBeCloseTo(d0 / 2, 6);
+    now = r.groundAt(620, 340)!;
+    expect(now.x).toBeCloseTo(grabbed.x, 2);
+    expect(now.z).toBeCloseTo(grabbed.z, 2);
+    r.pinchMove(620, 340, 1e-9);         // clamped like the wheel
+    expect(r.view.distance).toBe(config.camera.minDistance);
+    r.dragEnd();
+    expect(r.isMoving(1e9)).toBe(false);
+    const view = { ...r.view };
+    r.pinchMove(100, 100, 2);            // nothing after the fingers lift
+    expect(r.view).toEqual(view);
+  });
+
+  it('turns with a two-finger twist and tilts with a two-finger slide, about the point between the fingers', () => {
+    const r = rig();
+    const pivot = r.groundAt(500, 400)!;
+    const beside = r.groundAt(700, 400)!;          // a ground point to the right of the fingers
+    r.pinchStart(500, 400);
+    const az0 = r.view.azimuth;
+    r.pinchMove(500, 400, 1, 0.3);                 // the fingers twist clockwise
+    expect(Math.abs(r.view.azimuth - az0)).toBeCloseTo(0.3, 9);
+    let now = r.groundAt(500, 400)!;
+    expect(now.x).toBeCloseTo(pivot.x, 1);
+    expect(now.z).toBeCloseTo(pivot.z, 1);
+    // the map turned the way the fingers did: what was to the right is now lower on the screen
+    expect(r.project(beside.x, 0, beside.z).y).toBeGreaterThan(400 + 20);
+
+    const el0 = r.view.elevation;
+    r.pinchTilt(60);                               // both fingers slide down: toward top-down
+    expect(r.view.elevation).toBeGreaterThan(el0);
+    r.pinchTilt(-1e6);                             // and up: toward the horizon, clamped
+    expect(r.view.elevation).toBeGreaterThan(0);
+    expect(r.view.elevation).toBeLessThan(el0);
+    now = r.groundAt(500, 400)!;
+    expect(now.x).toBeCloseTo(pivot.x, 1);
+    expect(now.z).toBeCloseTo(pivot.z, 1);
+    r.dragEnd();
+    const view = { ...r.view };
+    r.pinchTilt(40);                               // nothing after the fingers lift
+    expect(r.view).toEqual(view);
+  });
+
   it('orbits around the ground point under the pointer and respects the distance clamps', () => {
     const r = rig();
     const pivot = r.groundAt(700, 450)!;

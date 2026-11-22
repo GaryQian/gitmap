@@ -72,7 +72,7 @@ export function getRepoOverview(_args: Args, env: ToolEnv): ToolOutcome {
     const shown = own.slice(0, CHAT_UI.overviewDistricts);
     const note = notes.get(city.ref);
     return {
-      ref: city.ref, name: city.name,
+      ref: city.ref, name: city.name, ...(city.derived ? { folderName: city.derived } : {}),
       files: tally.city.get(slot)?.files ?? 0, lines: tally.city.get(slot)?.lines ?? 0,
       districts: shown.map((d) => ({ ref: d.hit.ref, name: d.hit.name, files: d.files })),
       ...(own.length > shown.length ? { moreDistricts: own.length - shown.length } : {}),

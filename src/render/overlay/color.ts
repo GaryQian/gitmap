@@ -3,7 +3,7 @@
 // per event rather than per instance, such as a click's burst of particles. Pure.
 import type { OverlayView } from '../../contracts/render';
 import { hexToRgb } from '../../shared';
-import { OVERLAY_UNKNOWN, overlayT, rampColor } from '../spheres/overlay';
+import { overlayT, rampColor } from '../spheres/overlay';
 
 export interface OverlayColor {
   /** sRGB 0..1: the ramp colour of the unit's value, or the view's "unknown" colour. */
@@ -15,7 +15,7 @@ export interface OverlayColor {
 /** The colour the unit in `slot` takes under `view`. */
 export function overlayColorAt(view: OverlayView, slot: number): OverlayColor {
   const t = overlayT(slot >= 0 && slot < view.values.length ? view.values[slot] : undefined, view.domain);
-  if (t === OVERLAY_UNKNOWN) return { rgb: hexToRgb(view.unknown), known: false };
+  if (t < 0) return { rgb: hexToRgb(view.unknown), known: false }; // not yet known, or filtered out
   return { rgb: rampColor(view.stops, t, view.discrete), known: true };
 }
 

@@ -8,13 +8,36 @@ import { APP_LOCAL } from '../tunables';
 import { Card, PillButton, cx } from '../ui';
 import './controls.css';
 
-/** Just how to move around and select; the rest (hover, double-click, dragging labels) is found by use. */
+/** How to move around, select and open a file; the rest (hover, dragging labels) is found by use. */
 const CONTROLS: readonly (readonly [input: string, action: string])[] = [
   ['Drag', 'Pan'],
   ['Wheel', 'Zoom'],
   ['Middle-drag or Space+drag', 'Orbit'],
   ['Shift+click or Shift+drag', 'Select'],
+  ['Double-click', 'Open file'],
 ];
+
+/** The same on a touch screen. */
+const TOUCH_CONTROLS: typeof CONTROLS = [
+  ['Drag', 'Pan'],
+  ['Pinch', 'Zoom'],
+  ['Two-finger twist or slide', 'Orbit'],
+  ['Tap', 'Select'],
+  ['Double-tap', 'Open file'],
+];
+
+/** True where the main way of pointing is a finger. */
+function useTouchScreen(): boolean {
+  const [touch, setTouch] = useState(() => typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches);
+  useEffect(() => {
+    if (typeof matchMedia !== 'function') return;
+    const query = matchMedia('(pointer: coarse)');
+    const onChange = () => setTouch(query.matches);
+    query.addEventListener('change', onChange);
+    return () => query.removeEventListener('change', onChange);
+  }, []);
+  return touch;
+}
 
 const HIDDEN_KEY = 'starmap.controlsHidden';
 
@@ -25,6 +48,7 @@ function loadHidden(): boolean {
 function ControlsKey() {
   const [open, setOpen] = useState(() => !loadHidden());
   const id = useId();
+  const controls = useTouchScreen() ? TOUCH_CONTROLS : CONTROLS;
 
   const toggle = useCallback(() => {
     setOpen((was) => {
@@ -49,7 +73,7 @@ function ControlsKey() {
       </PillButton>
       <Card blur id={id} className={cx('gm-controls-card', open && 'is-open')} role="region" aria-label="Controls" aria-hidden={!open}>
         <dl className="gm-controls-list">
-          {CONTROLS.map(([input, action]) => (
+          {controls.map(([input, action]) => (
             <div key={input} className="gm-controls-item">
               <dt>{input}</dt>
               <dd>{action}</dd>

@@ -28,6 +28,9 @@ export const CHAT_UI = {
   selectionMax: 2000,
   /** Selected files named by get_view_state. */
   viewSelection: 30,
+  /** Selected files, and selected cities and districts, named in the note sent with each question. */
+  noteFiles: 12,
+  noteAreas: 12,
   /** A district (then a city) is framed when it holds at least this share of what was selected. */
   frameShare: 0.6,
   /** Characters of one tool result. The loop has its own budget; this is the executor's backstop. */

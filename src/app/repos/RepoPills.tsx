@@ -2,19 +2,32 @@
 // most recently opened first; a demo carries a "Demo" tag. Each shows the repo's name and where it is
 // from; clicking one opens it. A saved repo also has a small × that deletes what was saved for it,
 // after a confirmation dialog; demos have none.
-import { useEffect, useId, useRef, useState } from 'react';
+//
+// First in the row is a small search pill. Clicking it (or typing in it) opens the search: the pill
+// widens into a field and moves to the middle on a line of its own, every repo pill goes away, and
+// the repos that match what is typed appear beneath it. Clicking anywhere else, or Escape, closes it.
+import { useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { config, type DemoRepo } from '../../config';
+import { LAYER, useDismissable } from '../keys';
 import { openSource } from '../session';
 import { lineFor } from '../status/actions';
 import { offerFolder } from '../status/folder';
 import { setMessage } from '../store';
-import { CloseIcon, PillButton, Strong } from '../ui';
+import { CloseIcon, Pill, PillButton, SearchIcon, Strong, cx } from '../ui';
 import { DemoTag } from './DemoTag';
-import { demosOpened, markDemoOpened, orderPills } from './demos';
+import { demosOpened, markDemoOpened, orderPills, type RepoPillItem } from './demos';
+import { findRepos } from './find';
 import { NO_SAVED_REPOS, savedRepos, whereLabel, type SavedOpen, type SavedRepo, type SavedRepos } from './registry';
+import { uiScale } from '../uiScale';
 
-/** Saved repos shown. The page is one button and a few pills, not a list to scroll. */
+/** Saved repos shown. The page is one button and a few pills, not a list to scroll. The search reaches the rest. */
 const MAX_SAVED = 8;
+/** Matches shown under the search field. */
+const MAX_FOUND = 12;
+/** How long the search pill takes to travel between its place in the row and the middle. */
+const SEARCH_MOVE_MS = 220;
+/** When to read the saved list again after the landing page appears: a map just closed may still be saving. */
+const RELIST_AFTER_MS = [1200, 3500, 8000];
 
 /** A demo's package: `/demo/<name>.starmap.zip` is relative to where the app is served, which is not always the origin's root. */
 export function demoUrl(repo: DemoRepo): string {
@@ -27,8 +40,10 @@ export function demoUrl(repo: DemoRepo): string {
 function RepoPill({ name, where, title, demo, onOpen }: { name: string; where?: string; title?: string; demo?: boolean; onOpen(): void }) {
   return (
     <PillButton className="gm-repo-pill" title={title} aria-label={demo ? `${name}, demo` : undefined} onClick={onOpen}>
-      <Strong>{name}</Strong>
-      {where && <span className="gm-repo-where">{where}</span>}
+      <span className="gm-repo-pill-text">
+        <Strong>{name}</Strong>
+        {where && <span className="gm-repo-where">{where}</span>}
+      </span>
       {demo && <DemoTag />}
     </PillButton>
   );
@@ -81,8 +96,69 @@ function ConfirmDelete({ repo, onCancel, onConfirm }: { repo: SavedRepo; onCance
   );
 }
 
+/**
+ * The search pill. Closed, it reads "Search" and is as small as its label; open, it is a field.
+ * Focus alone does not open it, so tabbing across the page leaves the pills where they are: a press
+ * on the pill or a typed letter does.
+ */
+function SearchField({ open, query, pill, input, onOpen, onQuery, onEnter }: {
+  open: boolean;
+  query: string;
+  pill: RefObject<HTMLDivElement | null>;
+  input: RefObject<HTMLInputElement | null>;
+  onOpen(): void;
+  onQuery(query: string): void;
+  onEnter(): void;
+}) {
+  return (
+    <div className="gm-repo-search-slot">
+      <Pill
+        ref={pill}
+        className={cx('gm-repo-search', open && 'is-open')}
+        title={open ? undefined : 'Search repos'}
+        onMouseDown={(e) => {
+          onOpen();
+          if (e.target === input.current) return;
+          e.preventDefault(); // a press on the icon or the padding must not take the focus away again
+          input.current?.focus();
+        }}
+      >
+        <SearchIcon />
+        <input
+          ref={input}
+          className="gm-repo-search-input"
+          type="text"
+          role="searchbox"
+          aria-label="Search repos"
+          placeholder={open ? 'Search repos' : 'Search'}
+          autoComplete="off"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          value={query}
+          onChange={(e) => { onOpen(); onQuery(e.target.value); }}
+          onKeyDown={(e) => {
+            if (e.nativeEvent.isComposing) return;
+            if (e.key === 'Enter') { e.preventDefault(); if (open) onEnter(); else onOpen(); }
+            else if (e.key === 'ArrowDown' && !open) { e.preventDefault(); onOpen(); }
+          }}
+        />
+      </Pill>
+    </div>
+  );
+}
+
 export function RepoPills() {
   const [saved, setSaved] = useState<SavedRepo[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [query, setQuery] = useState('');
+  /** The height of the pills when the search opened: held while it is open, so the page above does not move. */
+  const [held, setHeld] = useState<number | null>(null);
+  const root = useRef<HTMLDivElement>(null);
+  const searchPill = useRef<HTMLDivElement>(null);
+  const searchInput = useRef<HTMLInputElement>(null);
+  /** Where the middle of the search pill was before the search opened or closed: it travels from there. */
+  const movedFrom = useRef<{ x: number; y: number } | null>(null);
   const [deleting, setDeleting] = useState<SavedRepo | null>(null);
   const registry = useRef<SavedRepos>(NO_SAVED_REPOS);
   const deleteButtons = useRef(new Map<string, HTMLButtonElement>());
@@ -91,19 +167,31 @@ export function RepoPills() {
 
   useEffect(() => {
     let live = true;
-    void (async () => {
+    const load = async (): Promise<void> => {
       try {
         const found = await savedRepos();
         const list = await found.listSaved();
         if (!live) return;
         registry.current = found;
-        setSaved(list.slice(0, MAX_SAVED));
+        // keep the same array when nothing changed, so a re-read does not re-render the pills
+        setSaved((shown) => (shown.length === list.length && shown.every((r, i) => r.id === list[i].id && r.lastOpened === list[i].lastOpened) ? shown : list));
       } catch (err) {
         // the page still works without the list: a folder can be chosen, a demo opened
         console.warn('starmap: could not list saved repos', err);
       }
-    })();
-    return () => { live = false; };
+    };
+    void load();
+    // The landing page appears the moment a map is closed, while that map's last save may still be
+    // on its way to storage. Read the list again shortly after, so the repo just closed shows up
+    // without a reload; and again when the tab comes back, in case another tab saved one.
+    const later = RELIST_AFTER_MS.map((ms) => setTimeout(() => void load(), ms));
+    const onVisible = (): void => { if (document.visibilityState === 'visible') void load(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      live = false;
+      for (const t of later) clearTimeout(t);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, []);
 
   const remove = async (repo: SavedRepo): Promise<void> => {
@@ -142,6 +230,60 @@ export function RepoPills() {
     void openSource({ kind: 'demo', name: repo.name, url: demoUrl(repo) });
   };
 
+  const middleOfSearch = (): { x: number; y: number } | null => {
+    const r = searchPill.current?.getBoundingClientRect();
+    return r ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : null;
+  };
+
+  const openSearch = (): void => {
+    if (searching) return;
+    movedFrom.current = middleOfSearch();
+    setHeld(root.current?.offsetHeight ?? null);
+    setSearching(true);
+  };
+
+  const closeSearch = (): void => {
+    movedFrom.current = middleOfSearch();
+    setSearching(false);
+    setQuery('');
+    setHeld(null);
+  };
+
+  // The pill does not jump between its place in the row and the middle: it travels there.
+  useLayoutEffect(() => {
+    const from = movedFrom.current;
+    movedFrom.current = null;
+    const el = searchPill.current;
+    if (!from || !el || typeof el.animate !== 'function') return;
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    const r = el.getBoundingClientRect();
+    // measured in window pixels; the landing page is zoomed by the chrome's scale (uiScale.ts)
+    const z = uiScale();
+    const dx = (from.x - (r.left + r.width / 2)) / z, dy = (from.y - (r.top + r.height / 2)) / z;
+    if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+    const easing = getComputedStyle(el).getPropertyValue('--gm-ease').trim() || 'ease';
+    el.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'translate(0, 0)' }], { duration: SEARCH_MOVE_MS, easing });
+  }, [searching]);
+
+  // A press anywhere but the field, a repo pill or the delete dialog closes the search.
+  useEffect(() => {
+    if (!searching) return;
+    const onPointerDown = (e: PointerEvent): void => {
+      const target = e.target instanceof Element ? e.target : null;
+      if (target?.closest('.gm-repo-search, .gm-repo-pill, .gm-repo-delete, .gm-repo-dialog')) return;
+      closeSearch();
+    };
+    window.addEventListener('pointerdown', onPointerDown, true);
+    return () => window.removeEventListener('pointerdown', onPointerDown, true);
+  }, [searching]);
+
+  // Escape closes it too; the delete dialog, when open, takes the key for itself.
+  useDismissable(searching, () => { if (!deleting) closeSearch(); }, { layer: LAYER.list, owns: (field) => field === searchInput.current });
+
+  const open = (item: RepoPillItem): void => {
+    if (item.kind === 'demo') openDemo(item.repo); else void openSaved(item.repo);
+  };
+
   const cancelDelete = () => {
     const repo = deleting;
     setDeleting(null);
@@ -149,9 +291,31 @@ export function RepoPills() {
     if (repo) requestAnimationFrame(() => deleteButtons.current.get(repo.id)?.focus());
   };
 
+  const shown = orderPills(saved.slice(0, MAX_SAVED), config.demo.repos, demoOpened);
+  const term = query.trim();
+  // the search looks through every saved repo, not only the few on the page
+  const found = searching ? findRepos(orderPills(saved, config.demo.repos, demoOpened), term, MAX_FOUND) : [];
+
   return (
-    <>
-      {orderPills(saved, config.demo.repos, demoOpened).map((item) => {
+    <div
+      ref={root}
+      className={cx('gm-repo-pills', searching && 'is-searching')}
+      style={held !== null ? { minHeight: held } : undefined}
+      // the keyboard's "clicking elsewhere": the focus going to something outside
+      onBlur={(e) => { if (searching && e.relatedTarget instanceof Node && !e.currentTarget.contains(e.relatedTarget)) closeSearch(); }}
+    >
+      {(shown.length > 0 || searching) && (
+        <SearchField
+          open={searching}
+          query={query}
+          pill={searchPill}
+          input={searchInput}
+          onOpen={openSearch}
+          onQuery={setQuery}
+          onEnter={() => { if (found[0]) open(found[0]); }}
+        />
+      )}
+      {(searching ? found : shown).map((item) => {
         if (item.kind === 'demo') {
           const demo = item.repo;
           return <RepoPill key={item.key} demo name={demo.name} where={demo.location} title={demo.location} onOpen={() => openDemo(demo)} />;
@@ -174,6 +338,7 @@ export function RepoPills() {
         </div>
         );
       })}
+      {searching && term !== '' && found.length === 0 && <p className="gm-repo-none" role="status">No repos match</p>}
       {deleting && (
         <ConfirmDelete
           key={deleting.id}
@@ -185,6 +350,6 @@ export function RepoPills() {
           }}
         />
       )}
-    </>
+    </div>
   );
 }

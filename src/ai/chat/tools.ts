@@ -21,12 +21,12 @@ export const CHAT_TOOLS: readonly ToolDefinition[] = [
   // ---- looking things up ----
   {
     name: 'get_repo_overview', kind: 'read',
-    description: 'The map at a glance: repo name, file and line counts, languages, and every city with its ref, name, size, districts and (when written) its summary. Call this first if the context does not already answer the question.',
+    description: 'The map at a glance: repo name, file and line counts, languages, and every city with its ref, name (and folderName, the name it had before AI notes titled it, when that differs), size, districts and (when written) its summary. Call this first if the context does not already answer the question.',
     inputSchema: obj({}),
   },
   {
     name: 'list_area', kind: 'read',
-    description: 'What is inside a city or district. For a city: its districts. For a district: its files with path, language, lines and importance (0 to 1, share of files it outranks). Most important first.',
+    description: 'What is inside a city or district. For a city: its districts. For a district: its files with path, language, lines and importance (0 to 1: its rank among the files that other files depend on, 1 the most depended on; 0 means nothing depends on it). Most important first.',
     inputSchema: obj({ area: str('A city or district ref, such as "c:3" or "d:12".'), limit: int('Maximum rows, default 40.') }, ['area']),
   },
   {

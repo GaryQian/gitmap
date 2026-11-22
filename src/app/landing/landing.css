@@ -1,0 +1,42 @@
+/* The landing page's two buttons (PLAN.md §17.7): "Choose a folder" on the centre line, and beside it
+   a round icon button that opens an exported archive. The rest of the page is in shell.css. */
+
+.gm-choose {
+  position: relative;
+  display: flex;
+  justify-content: center;
+}
+
+/* Hung off the right of the folder button, so that one stays exactly where it was; the label opens
+   to the right, over empty page, and moves nothing. Alone (a browser with no folder dialog), it sits
+   on the centre line itself. */
+.gm-choose > .gm-archive-button { position: absolute; left: calc(100% + 10px); top: 0; }
+.gm-choose > .gm-archive-button:only-child { position: static; }
+
+/* Closed, the pill is a circle around its icon: the side padding centres an 18 px icon in the pill's
+   own height (1 px of border each side). */
+.gm-pill.gm-archive-button {
+  gap: 0;
+  padding: 0 calc((var(--gm-pill-h) - 18px) / 2 - 1px);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.gm-archive-button > svg { flex: none; }
+
+.gm-archive-label {
+  max-width: 0;
+  margin: 0;
+  opacity: 0;
+  overflow: hidden;
+  transition: max-width 240ms var(--gm-ease), margin 240ms var(--gm-ease), opacity 180ms var(--gm-ease);
+}
+.gm-archive-button:hover .gm-archive-label,
+.gm-archive-button:focus-visible .gm-archive-label {
+  max-width: 280px;
+  margin: 0 6px 0 10px;
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gm-archive-label { transition: none; }
+}

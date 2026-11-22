@@ -29,7 +29,7 @@ describe('round 0 skeleton', () => {
   });
 });
 
-import { maxUnitRadius, unitRadius } from '../shared';
+import { IMAGE_LANG, maxUnitRadius, unitRadius, unitRadiusAt } from '../shared';
 
 describe('unitRadius (PLAN.md §8.1)', () => {
   const v = config.visual;
@@ -43,5 +43,12 @@ describe('unitRadius (PLAN.md §8.1)', () => {
       expect(unitRadius(loc, 1, v)).toBeLessThanOrEqual(maxUnitRadius(v) + 1e-9);
     }
     expect(unitRadius(5000, 0, v)).toBeGreaterThan(unitRadius(50, 0, v));
+  });
+
+  it('sizes an image by its bytes and any other unit by its lines', () => {
+    const cols = { loc: [0, 0, 120], bytes: [400 * v.imageBytesPerLine, 4 * v.imageBytesPerLine, 400 * v.imageBytesPerLine], lang: [IMAGE_LANG, IMAGE_LANG, 'ts'], importancePct: [0, 0, 0] };
+    expect(unitRadiusAt(cols, 0, v)).toBeCloseTo(unitRadius(400, 0, v), 6);
+    expect(unitRadiusAt(cols, 0, v)).toBeGreaterThan(unitRadiusAt(cols, 1, v));
+    expect(unitRadiusAt(cols, 2, v)).toBeCloseTo(unitRadius(120, 0, v), 6);
   });
 });

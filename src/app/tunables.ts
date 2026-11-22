@@ -2,6 +2,15 @@
 // move them into config (see "Requested changes" in the 2G report). Nothing else in src/app repeats
 // these numbers.
 export const APP_LOCAL = {
+  uiScale: {
+    /** The chrome is drawn at its written size in a window this big: a maximised browser on a 1080p screen, its tabs and address bar taken off. */
+    refWidth: 1920,
+    refHeight: 950,
+    /** Smallest scale: the 12 px labels come out at about 8.4 px, the least that stays legible. */
+    min: 0.7,
+    /** Largest scale: a larger window keeps the written size. */
+    max: 1,
+  },
   pills: {
     /**
      * Pills start to fade at this many camera distances and are at their faintest at `fadeEnd`. How

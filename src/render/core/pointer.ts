@@ -27,6 +27,21 @@ export interface WheelInfo extends PointerInfo {
   deltaY: number;
 }
 
+/** Two fingers on the canvas. */
+export interface PinchInfo {
+  phase: 'start' | 'move' | 'end';
+  /** The point midway between the fingers, canvas-relative CSS pixels. */
+  x: number;
+  y: number;
+  /** Distance between the fingers over what it was at the previous event (1 at the start and the end): above 1 they spread. */
+  scale: number;
+  /** How far the line between the fingers has turned since the previous event, radians, clockwise on screen (0 at the start and the end). */
+  turn: number;
+  /** The two fingers, canvas-relative CSS pixels. */
+  a: { x: number; y: number };
+  b: { x: number; y: number };
+}
+
 export interface PointerHandler {
   readonly name: string;
   /** Higher runs first. The camera uses 0. */
@@ -44,6 +59,12 @@ export interface PointerHandler {
   click?(p: PointerInfo): boolean | void;
   dblclick?(p: PointerInfo): boolean | void;
   wheel?(w: WheelInfo): boolean | void;
+  /**
+   * A second finger came down. The start is offered until one handler returns true; that handler
+   * then gets every move and the end. A gesture the first finger began is cancelled first (`up`
+   * with `cancelled`), and neither finger produces a click.
+   */
+  pinch?(g: PinchInfo): boolean | void;
   /** The pointer left the canvas. Every handler is told. */
   leave?(): void;
 }
@@ -52,6 +73,11 @@ export class PointerRouter {
   private handlers: PointerHandler[] = [];
   private capture: { handler: PointerHandler; pointerId: number } | null = null;
   private press: { x: number; y: number; pointerId: number; dragged: boolean } | null = null;
+  /** Fingers on the canvas, by pointer id, in canvas-relative CSS pixels. */
+  private touches = new Map<number, { x: number; y: number }>();
+  private pinch: { a: number; b: number; handler: PointerHandler | null; distance: number; angle: number } | null = null;
+  /** Fingers still down after their pinch ended: ignored until they lift, so the one left behind neither pans nor hovers. */
+  private spent = new Set<number>();
   private space = false;
   private unlisten: (() => void)[] = [];
 
@@ -104,8 +130,52 @@ export class PointerRouter {
     return null;
   }
 
+  /** The two pinching fingers: their midpoint, their separation, and the direction from the first to the second. */
+  private pinchShape(): { x: number; y: number; distance: number; angle: number; a: { x: number; y: number }; b: { x: number; y: number } } | null {
+    const a = this.pinch && this.touches.get(this.pinch.a), b = this.pinch && this.touches.get(this.pinch.b);
+    if (!a || !b) return null;
+    return {
+      x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, distance: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)),
+      angle: Math.atan2(b.y - a.y, b.x - a.x), a: { x: a.x, y: a.y }, b: { x: b.x, y: b.y },
+    };
+  }
+
+  private startPinch(e: PointerEvent): void {
+    // whatever the first finger was doing (a pan, a marquee) ends here, and it is no longer a tap
+    if (this.capture) {
+      const { handler, pointerId } = this.capture;
+      this.capture = null;
+      try { this.canvas.releasePointerCapture(pointerId); } catch { /* already released */ }
+      handler.up?.(this.info(e, -1), true);
+    }
+    this.press = null;
+    const [a, b] = [...this.touches.keys()];
+    this.pinch = { a, b, handler: null, distance: 1, angle: 0 };
+    const shape = this.pinchShape()!;
+    this.pinch.distance = shape.distance;
+    this.pinch.angle = shape.angle;
+    this.pinch.handler = this.offer((h) => h.pinch?.({ phase: 'start', x: shape.x, y: shape.y, scale: 1, turn: 0, a: shape.a, b: shape.b }));
+    for (const id of [a, b]) { try { this.canvas.setPointerCapture(id); } catch { /* the pointer is already gone */ } }
+  }
+
+  private endPinch(): void {
+    const pinch = this.pinch;
+    if (!pinch) return;
+    const shape = this.pinchShape();
+    this.pinch = null;
+    for (const id of [pinch.a, pinch.b]) if (this.touches.has(id)) this.spent.add(id);
+    const at = shape ?? { x: 0, y: 0, a: { x: 0, y: 0 }, b: { x: 0, y: 0 } };
+    pinch.handler?.pinch?.({ phase: 'end', x: at.x, y: at.y, scale: 1, turn: 0, a: at.a, b: at.b });
+  }
+
   private onDown(e: PointerEvent): void {
-    if (this.capture) return; // a second button or finger during a gesture is ignored
+    if (e.pointerType === 'touch') {
+      const p = this.info(e, e.button);
+      this.touches.set(e.pointerId, { x: p.x, y: p.y });
+      if (this.touches.size === 2 && !this.pinch) { this.startPinch(e); return; }
+      if (this.touches.size > 1) { this.spent.add(e.pointerId); return; } // a third finger takes no part
+    }
+    if (this.capture) return; // a second button during a gesture is ignored
     const p = this.info(e, e.button);
     this.press = { x: p.x, y: p.y, pointerId: e.pointerId, dragged: false };
     const handler = this.offer((h) => h.down?.(p));
@@ -117,6 +187,22 @@ export class PointerRouter {
 
   private onMove(e: PointerEvent): void {
     const p = this.info(e, -1);
+    const touch = this.touches.get(e.pointerId);
+    if (touch) {
+      touch.x = p.x; touch.y = p.y;
+      const pinch = this.pinch;
+      if (pinch && (e.pointerId === pinch.a || e.pointerId === pinch.b)) {
+        const shape = this.pinchShape()!;
+        const scale = shape.distance / pinch.distance;
+        // the short way round, so crossing ±π is not a full turn
+        const turn = Math.atan2(Math.sin(shape.angle - pinch.angle), Math.cos(shape.angle - pinch.angle));
+        pinch.distance = shape.distance;
+        pinch.angle = shape.angle;
+        pinch.handler?.pinch?.({ phase: 'move', x: shape.x, y: shape.y, scale, turn, a: shape.a, b: shape.b });
+        return;
+      }
+      if (this.spent.has(e.pointerId)) return;
+    }
     const press = this.press;
     if (press && press.pointerId === e.pointerId && !press.dragged
       && Math.hypot(p.x - press.x, p.y - press.y) > RENDER_LOCAL.pointer.clickSlopPx) press.dragged = true;
@@ -128,6 +214,11 @@ export class PointerRouter {
   }
 
   private onUp(e: PointerEvent, cancelled: boolean): void {
+    if (this.touches.has(e.pointerId)) {
+      if (this.pinch && (e.pointerId === this.pinch.a || e.pointerId === this.pinch.b)) this.endPinch();
+      this.touches.delete(e.pointerId);
+      if (this.spent.delete(e.pointerId)) return;
+    }
     const p = this.info(e, e.button);
     const press = this.press;
     if (this.capture && this.capture.pointerId === e.pointerId) {
@@ -154,6 +245,9 @@ export class PointerRouter {
     this.unlisten = [];
     this.handlers = [];
     this.capture = null;
+    this.pinch = null;
+    this.touches.clear();
+    this.spent.clear();
   }
 }
 

@@ -6,7 +6,12 @@
   overflow: hidden;
   background: var(--gm-void);
   color: var(--gm-text);
+  /* A click on the page leaves a collapsed selection wherever it lands (often the empty chrome at the
+     top left), and with caret browsing on (F7) the browser draws a blinking caret there. Nothing outside
+     a text field is editable, so the caret is hidden everywhere else. */
+  caret-color: transparent;
 }
+.gm-app :is(input, textarea, [contenteditable]:not([contenteditable='false'])) { caret-color: var(--gm-text); }
 
 /* ---- background ---- */
 
@@ -117,6 +122,28 @@
   letter-spacing: 0.03em;
 }
 
+/* ---- size: the chrome follows the window (uiScale.ts) ---- */
+
+:root { --gm-ui-scale: 1; }
+/* Boxes laid out by CSS alone are zoomed. The sidebar reader and the chat panel (rightEdge) are not. */
+.gm-chrome,
+.gm-landing,
+.gm-waiting,
+.gm-region-overlay,
+.gm-menu-button { zoom: var(--gm-ui-scale); }
+/* What is placed in the scene by script keeps its position in window pixels and is scaled from its
+   top left corner instead; the placement code measures it with shownSize(). Positions are written to
+   the `translate` property, which applies before `scale` (a `transform` would be scaled with it). */
+.gm-scene-pill,
+.gm-tooltip,
+.gm-detail,
+.gm-card.gm-summary,
+.gm-poi-pill.gm-pill,
+.gm-poi-card {
+  scale: var(--gm-ui-scale);
+  transform-origin: 0 0;
+}
+
 /* ---- chrome regions ---- */
 
 .gm-region { pointer-events: none; }
@@ -127,6 +154,9 @@
   inset: 0;
   overflow: hidden;
 }
+/* its own stacking context: the pills' and cards' z-index levels (pills.css) order them among
+   themselves and never lift one over the fixed chrome above the scene */
+.gm-region-scene { isolation: isolate; }
 
 .gm-frame {
   position: absolute;
@@ -194,3 +224,28 @@
 @keyframes gm-arrive { from { opacity: 0; } to { opacity: 1; } }
 .gm-app[data-phase='map'] .gm-chrome,
 .gm-app[data-phase='map'] .gm-region-scene { animation: gm-arrive 600ms ease both; }
+
+/* ---- a phone: the chrome folds behind a menu ---- */
+
+/* App.tsx sets data-phone on a phone only (phone.ts), so none of this reaches a desktop window or a
+   tablet. The menu button sits in the top left corner and the chrome starts below it. */
+.gm-menu-button { position: absolute; top: 8px; left: 8px; z-index: 5; pointer-events: auto; }
+.gm-app[data-phone] .gm-chrome { padding: 48px 8px 8px; }
+
+/* Folded: a piece of chrome stays only while it is in use.
+   - the top centre: work in progress and notices, which come and go by themselves
+   - the selection, the overlays that are switched on, a search being typed
+   - "Reset view" once the view has moved, the tour while it runs, a question or failure from the AI
+   Everything else (title, repo info, search, the other overlays, settings, the controls key, the
+   legend, the tour and chat buttons, the reader's handle) waits behind the menu button. */
+.gm-app[data-menu='closed'] .gm-chrome .gm-region:not(.gm-region-topCenter) > :not(:is(
+  .gm-selected,
+  .gm-overlays:has([aria-pressed='true']),
+  .gm-search:has(.is-expanded),
+  .gm-reset:not(.is-idle),
+  .gm-tour-card,
+  .gm-ai-prompt,
+  .gm-ai-failure
+)) { display: none !important; }
+.gm-app[data-menu='closed'] .gm-overlays .gm-overlay-pill:not([aria-pressed='true']) { display: none !important; }
+.gm-app[data-menu='closed'] .gm-reader-handle { display: none !important; }

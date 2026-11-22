@@ -1,5 +1,7 @@
 // Stage 4 — importance (PLAN.md §6.7): PageRank over the directed unit graph, then a percentile
-// across the whole repo. Typed arrays and CSR adjacency throughout; no per-edge objects.
+// among the units that have at least one dependent. Most units of a repo have none; ranked with the
+// rest they would fill the bottom of the scale and push every unit with a dependent or two above
+// the 90th percentile. Typed arrays and CSR adjacency throughout; no per-edge objects.
 
 export interface PageRankOptions {
   damping?: number;
@@ -27,7 +29,7 @@ export interface WeightedEdges {
 export interface Importance {
   /** PageRank per unit; sums to 1. */
   rank: Float64Array;
-  /** Percentile of the rank across all units, 0..1. */
+  /** Percentile of the rank among the units that have a dependent, 1/k..1; 0 for a unit that has none. */
   pct: Float64Array;
   iterations: number;
 }
@@ -37,7 +39,10 @@ export function computeImportance(n: number, edges: WeightedEdges, opts: PageRan
   const w = new Float64Array(edges.count);
   for (let e = 0; e < edges.count; e++) w[e] = edges.weight[e] * edges.confidence[e];
   const { rank, iterations } = pageRank(n, edges.count, edges.src, edges.dst, w, opts);
-  return { rank, pct: percentiles(rank), iterations };
+  // A dependent is another unit with an edge that carries rank here (the edges pageRank uses).
+  const hasDependent = new Uint8Array(n);
+  for (let e = 0; e < edges.count; e++) if (w[e] > 0 && edges.src[e] !== edges.dst[e]) hasDependent[edges.dst[e]] = 1;
+  return { rank, pct: percentiles(rank, hasDependent), iterations };
 }
 
 /**
@@ -94,27 +99,33 @@ export function pageRank(
 }
 
 /**
- * Percentile by rank: the share of the other values that lie strictly below, 0..1. Ties share a
- * percentile, so a graph with no edges gives all zeros; a single value gets 1.
+ * Percentile among the ranked values only: the 1-based position of a value among the `k` ranked
+ * ones, in ascending order, over `k`. So the lowest ranked value gets 1/k, a top value that stands
+ * alone gets 1, and a single ranked value gets 1. Ties share the lowest position of their group
+ * (three values tied at the top of ten all get 0.8), so a tie never lifts anything.
+ * Values that are not ranked take no part and get 0; with nothing ranked, all are 0.
  */
-export function percentiles(values: Float64Array): Float64Array {
+export function percentiles(values: Float64Array, ranked: ArrayLike<number>): Float64Array {
   const n = values.length;
   const out = new Float64Array(n);
-  if (n === 0) return out;
-  if (n === 1) { out[0] = 1; return out; }
-  const sorted = Float64Array.from(values).sort();
+  let k = 0;
+  const pool = new Float64Array(n);
+  for (let u = 0; u < n; u++) if (ranked[u]) pool[k++] = values[u];
+  if (k === 0) return out;
+  const sorted = pool.subarray(0, k).sort();
   // First position of each tie group, per sorted position.
-  const groupStart = new Int32Array(n);
+  const groupStart = new Int32Array(k);
   let start = 0;
-  for (let i = 1; i < n; i++) {
+  for (let i = 1; i < k; i++) {
     if (sorted[i] > sorted[start] * (1 + TIE_EPSILON)) start = i;
     groupStart[i] = start;
   }
   for (let u = 0; u < n; u++) {
+    if (!ranked[u]) continue;
     const v = values[u];
-    let lo = 0, hi = n - 1;
+    let lo = 0, hi = k - 1;
     while (lo < hi) { const mid = (lo + hi) >> 1; if (sorted[mid] < v) lo = mid + 1; else hi = mid; }
-    out[u] = groupStart[lo] / (n - 1);
+    out[u] = (groupStart[lo] + 1) / k;
   }
   return out;
 }

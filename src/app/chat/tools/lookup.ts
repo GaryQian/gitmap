@@ -4,6 +4,7 @@
 import uFuzzy from '@leeoniya/ufuzzy';
 import type { ModelReplica } from '../../../contracts/store';
 import { cityRef, districtRef, unitRef, type NodeRef } from '../../../model/types';
+import { cityNames } from '../../cityNames';
 import { CHAT_UI } from '../tunables';
 
 // ---- files ----
@@ -102,8 +103,10 @@ export interface AreaHit {
   kind: 'city' | 'district';
   slot: number;
   ref: NodeRef;
-  /** Its own name ("Shaders"). */
+  /** Its own name ("Shaders"). A city goes by the title AI notes gave it, once it has one. */
   name: string;
+  /** A city's name before AI notes titled it, when that differs from `name`. A tool argument may use either. */
+  derived?: string;
   /** How a sentence names it: "Rendering", or "Shaders in Rendering" for a district. */
   label: string;
   /** The city it is, or is in. */
@@ -116,8 +119,10 @@ export function cityAt(replica: ModelReplica, slot: number): AreaHit | null {
   const cities = replica.table('city');
   const id = slot >= 0 ? cities.ids[slot] : null;
   if (id == null) return null;
-  const name = nameOr(cities.cols.name[slot], id);
-  return { kind: 'city', slot, ref: cityRef(id), name, label: name, citySlot: slot };
+  const known = cityNames(replica).get(id);
+  const name = nameOr(known?.title, id);
+  const derived = known?.titled && known.derived.trim() ? known.derived : undefined;
+  return { kind: 'city', slot, ref: cityRef(id), name, ...(derived ? { derived } : {}), label: name, citySlot: slot };
 }
 
 export function districtAt(replica: ModelReplica, slot: number): AreaHit | null {
@@ -145,7 +150,7 @@ export function findArea(replica: ModelReplica, raw: string): AreaHit | null {
   if (text.startsWith('d:')) return districtAt(replica, replica.table('district').slotOf(text.slice(2)));
   const wanted = text.toLowerCase();
   if (wanted === '') return null;
-  const named = allAreas(replica).filter((a) => a.name.toLowerCase() === wanted);
+  const named = allAreas(replica).filter((a) => a.name.toLowerCase() === wanted || a.derived?.toLowerCase() === wanted);
   if (named.length === 1) return named[0]!;
   // a city and a district may share a name: the city is the one meant
   const cities = named.filter((a) => a.kind === 'city');

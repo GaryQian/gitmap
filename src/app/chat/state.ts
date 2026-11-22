@@ -10,6 +10,7 @@ import {
   type ChatClient, type ChatMessage, type ChatTurnEnd, type ChatTurnEvent,
 } from './contract';
 import { activityLabel } from './labels';
+import { hasSelectionNote, selectionNote, withSelection } from './selectionNote';
 import { showReferenced, watchUser } from './show';
 import { createToolExecutor } from './tools/executor';
 import { liveEnv } from './tools/live';
@@ -107,6 +108,18 @@ async function run(messages: ChatMessage[]): Promise<void> {
   }
 }
 
+/**
+ * A question as the model is sent it: with what is selected on the map just now in front of it
+ * (selectionNote.ts). The transcript keeps the person's own words.
+ */
+function asked(question: string, earlier: readonly ChatMessage[]): ChatMessage {
+  const { session, selection } = useApp.getState();
+  if (!session) return { role: 'user', text: question };
+  // once a selection has been named, its going away is named too
+  const sayEmpty = earlier.some((m) => m.role === 'user' && hasSelectionNote(m.text));
+  return { role: 'user', text: withSelection(question, selectionNote(session.replica, selection, { sayEmpty })) };
+}
+
 // ---- actions ----
 
 export function setDraft(draft: string): void { useChat.setState({ draft }); }
@@ -118,7 +131,7 @@ export function sendMessage(text: string): void {
   if (question === '' || transcript.running) return;
   dispatch({ type: 'send', text: question });
   beforeLast = history;
-  void run([...history, { role: 'user', text: question }]);
+  void run([...history, asked(question, history)]);
 }
 
 /** Stop the turn in flight. What has been written stays. */
@@ -133,7 +146,7 @@ export function retryTurn(): void {
   const question = lastQuestion(transcript);
   if (question === null) return;
   dispatch({ type: 'retry' });
-  void run([...beforeLast, { role: 'user', text: question }]);
+  void run([...beforeLast, asked(question, beforeLast)]);
 }
 
 /** Forget the conversation. The map stays as the assistant left it. */

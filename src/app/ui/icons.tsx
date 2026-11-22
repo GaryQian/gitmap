@@ -37,6 +37,16 @@ export function GearIcon(props: { size?: number }) {
   );
 }
 
+/** A sheet with a folded corner: a file to open. */
+export function FileIcon(props: { size?: number }) {
+  return (
+    <Icon {...props}>
+      <path d="M13.5 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-10z" />
+      <path d="M13.5 3.5v5h5" />
+    </Icon>
+  );
+}
+
 /** A lowercase "i" in a circle: what this is. */
 export function InfoIcon(props: { size?: number }) {
   return (
@@ -70,6 +80,16 @@ export function ChevronLeftIcon(props: { size?: number }) {
   return (
     <Icon {...props}>
       <path d="M14.5 6.5L9 12l5.5 5.5" />
+    </Icon>
+  );
+}
+
+/** A magnifier: search. */
+export function SearchIcon(props: { size?: number }) {
+  return (
+    <Icon {...props}>
+      <circle cx="10.5" cy="10.5" r="6" />
+      <path d="M15 15l5 5" />
     </Icon>
   );
 }

@@ -43,7 +43,7 @@ const SENTENCES = {
   'folder-unreadable': () => ({ text: 'That folder could not be read.' }),
   'folder-read-stopped': () => ({ text: 'That folder could not be read all the way through. Check that it is still there and try again.' }),
   'folder-too-large': (p) => ({ text: `That folder holds more than ${named(p.limit, 'the largest number of files')} Starmap can list. Choose a smaller folder, or add a .gitignore that leaves out generated files.` }),
-  'not-a-folder': () => ({ text: 'That is a file, not a folder. Drop a folder, or a saved map (.starmap.json.gz).' }),
+  'not-a-folder': () => ({ text: 'That is a file, not a folder. Drop a folder, or an exported archive (.starmap.zip or .starmap.json.gz).' }),
   'saved-map-unreadable': () => ({ text: 'That file could not be read as a saved map. It may be damaged or cut short.' }),
   'saved-map-other-version': () => ({ text: 'That saved map was made by another version of Starmap and cannot be opened here.' }),
 

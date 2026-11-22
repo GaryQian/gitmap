@@ -11,6 +11,8 @@ export interface OverlayParams {
   direction: ReachDirection;
   /** Dependency reach: how many hops to walk; Infinity = all the way. */
   maxHops: number;
+  /** Recency: leave out files that changed more than this many seconds before the newest one; Infinity = every file. */
+  maxAgeSeconds: number;
   /** The active overlay's view as last handed to the renderer, for the hover tooltip; null when none is on. */
   shown: OverlayViewInfo | null;
   /** The session raised a 'no-history' notice. Kept after the notice is dismissed. */
@@ -23,6 +25,7 @@ export const useOverlayParams = create<OverlayParams>()(() => ({
   contributorId: null,
   direction: 'dependsOn',
   maxHops: Infinity,
+  maxAgeSeconds: Infinity,
   shown: null,
   noHistory: noticed(useApp.getState().notices),
 }));
@@ -30,11 +33,12 @@ export const useOverlayParams = create<OverlayParams>()(() => ({
 export function setContributor(contributorId: number | null): void { useOverlayParams.setState({ contributorId }); }
 export function setDirection(direction: ReachDirection): void { useOverlayParams.setState({ direction }); }
 export function setMaxHops(maxHops: number): void { useOverlayParams.setState({ maxHops }); }
+export function setMaxAge(maxAgeSeconds: number): void { useOverlayParams.setState({ maxAgeSeconds }); }
 
-// A new map starts with its own top contributor and no word about history; the direction and the
-// hop limit are a viewer's habit and stay.
+// A new map starts with its own top contributor, every age shown and no word about history; the
+// direction and the hop limit are a viewer's habit and stay.
 const unsubscribe = useApp.subscribe((s, prev) => {
-  if (s.session !== prev.session) useOverlayParams.setState({ contributorId: null, noHistory: noticed(s.notices) });
+  if (s.session !== prev.session) useOverlayParams.setState({ contributorId: null, maxAgeSeconds: Infinity, noHistory: noticed(s.notices) });
   else if (s.notices !== prev.notices && noticed(s.notices) && !useOverlayParams.getState().noHistory) useOverlayParams.setState({ noHistory: true });
 });
 if (import.meta.hot) import.meta.hot.dispose(unsubscribe);

@@ -24,19 +24,43 @@ function randomPairs(n: number, m: number, seed: number): [number, number][] {
 }
 
 describe('importance', () => {
-  it('gives percentiles that are monotonic in PageRank, with ties sharing one', () => {
+  it('gives percentiles that are monotonic in PageRank among units with dependents, with ties sharing one', () => {
     const n = 500;
-    const { rank, pct } = computeImportance(n, graph(randomPairs(n, 2000, 5)));
+    const pairs = randomPairs(n, 2000, 5);
+    const { rank, pct } = computeImportance(n, graph(pairs));
     expect(rank.reduce((a, b) => a + b, 0)).toBeCloseTo(1, 9);
-    const order = Array.from({ length: n }, (_, i) => i).sort((a, b) => rank[a] - rank[b]);
-    for (let k = 1; k < n; k++) {
+    const used = new Set(pairs.map((p) => p[1]));
+    expect(used.size).toBeLessThan(n);
+    for (let u = 0; u < n; u++) {
+      if (used.has(u)) expect(pct[u]).toBeGreaterThan(0);
+      else expect(pct[u]).toBe(0);
+    }
+    const order = [...used].sort((a, b) => rank[a] - rank[b]);
+    for (let k = 1; k < order.length; k++) {
       const lo = order[k - 1], hi = order[k];
       expect(pct[hi]).toBeGreaterThanOrEqual(pct[lo]);
       if (rank[hi] === rank[lo]) expect(pct[hi]).toBe(pct[lo]);
     }
-    expect(Math.min(...pct)).toBe(0);
-    expect(Math.max(...pct)).toBeLessThanOrEqual(1);
-    expect(pct[order[n - 1]]).toBeGreaterThan(0.99);
+    expect(pct[order[0]]).toBe(1 / used.size);
+    expect(pct[order[order.length - 1]]).toBe(1);
+    expect(Math.max(...pct)).toBe(1);
+  });
+
+  it('spreads the units that have dependents across the range, however many have none', () => {
+    // 20 libraries; library i is used by the first 20 · (i + 1) of 400 leaf files that nothing depends on.
+    const libs = 20, leaves = 400, n = libs + leaves;
+    const pairs: [number, number][] = [];
+    for (let leaf = 0; leaf < leaves; leaf++) {
+      for (let lib = 0; lib < libs; lib++) if (leaf < 20 * (lib + 1)) pairs.push([libs + leaf, lib]);
+    }
+    const { rank, pct } = computeImportance(n, graph(pairs));
+    for (let leaf = libs; leaf < n; leaf++) expect(pct[leaf]).toBe(0);
+    const ranked = Array.from(pct.subarray(0, libs)).sort((a, b) => a - b);
+    // Evenly spaced from 1/20 to 1 when no two tie; ranked across all 420 files they would all sit above 0.95.
+    expect(new Set(Array.from(rank.subarray(0, libs))).size).toBe(libs);
+    ranked.forEach((p, i) => expect(p).toBeCloseTo((i + 1) / libs, 12));
+    expect(ranked.filter((p) => p > 0.9)).toHaveLength(2);
+    expect(ranked.filter((p) => p <= 0.5)).toHaveLength(10);
   });
 
   it('never ranks a unit below one whose dependents are a subset of its own', () => {
@@ -78,10 +102,18 @@ describe('importance', () => {
 
   it('handles the degenerate graphs', () => {
     expect(Array.from(computeImportance(0, graph([])).pct)).toEqual([]);
-    expect(Array.from(computeImportance(1, graph([])).pct)).toEqual([1]);
+    // No unit has a dependent: nothing is ranked.
+    expect(Array.from(computeImportance(1, graph([])).pct)).toEqual([0]);
     expect(Array.from(computeImportance(4, graph([])).pct)).toEqual([0, 0, 0, 0]);
-    expect(Array.from(computeImportance(3, graph([[0, 1], [1, 2], [2, 0]])).pct)).toEqual([0, 0, 0]);
-    expect(Array.from(percentiles(Float64Array.of(3, 1, 2, 1)))).toEqual([1, 0, 2 / 3, 0]);
+    expect(Array.from(computeImportance(2, graph([[0, 0]])).pct)).toEqual([0, 0]); // a self-edge is not a dependent
+    expect(Array.from(computeImportance(2, graph([[0, 1]], 1, 0)).pct)).toEqual([0, 0]); // nor is an edge of no weight
+    // Exactly one unit has dependents: it is the top.
+    expect(Array.from(computeImportance(4, graph([[0, 3], [1, 3]])).pct)).toEqual([0, 0, 0, 1]);
+    // Ties share the lowest position of their group: a cycle of three is 1/3 each.
+    const cycle = Array.from(computeImportance(3, graph([[0, 1], [1, 2], [2, 0]])).pct);
+    for (const p of cycle) expect(p).toBeCloseTo(1 / 3, 12);
+    expect(Array.from(percentiles(Float64Array.of(3, 1, 2, 1), [1, 1, 1, 1]))).toEqual([1, 1 / 4, 3 / 4, 1 / 4]);
+    expect(Array.from(percentiles(Float64Array.of(3, 3, 2, 9), [1, 1, 1, 0]))).toEqual([2 / 3, 2 / 3, 1 / 3, 0]);
   });
 
   it('reports its time on 100k units and 1M edges (log only)', () => {

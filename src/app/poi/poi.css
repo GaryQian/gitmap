@@ -10,7 +10,7 @@
   position: absolute;
   left: 0;
   top: 0;
-  will-change: transform;
+  will-change: translate;
 }
 .gm-poi-pill:not([data-placed]),
 .gm-poi-card:not([data-placed]) { visibility: hidden; }
@@ -23,6 +23,8 @@
   padding: 0 11px 0 8px;
   font-size: 12px;
   border-color: color-mix(in srgb, var(--gm-warm) 46%, var(--gm-hairline));
+  /* the bottom tier of the scene's pills, under district and city pills (see pills.css) */
+  z-index: 1;
   animation: gm-poi-in 260ms var(--gm-ease);
 }
 @keyframes gm-poi-in { from { opacity: 0; } }
@@ -40,11 +42,11 @@
 .gm-poi-pill.gm-pill:hover,
 .gm-poi-pill.gm-pill:focus-visible,
 .gm-poi-pill.gm-pill.is-open {
-  z-index: 1;
+  z-index: 2;
   background: var(--gm-pill-bg-strong);
   border-color: var(--gm-warm);
 }
-.gm-poi-pill.gm-pill.is-open { z-index: 2; font-weight: 500; }
+.gm-poi-pill.gm-pill.is-open { font-weight: 500; }
 /* No drop shadows; in dark mode the pill that has attention gets a faint warm halo. */
 :root[data-theme='dark'] .gm-poi-pill.gm-pill:hover,
 :root[data-theme='dark'] .gm-poi-pill.gm-pill.is-open {
@@ -54,7 +56,7 @@
 /* ---- card ---- */
 
 .gm-poi-card {
-  z-index: 3;
+  z-index: 9;
   display: flex;
   flex-direction: column;
   width: 348px;

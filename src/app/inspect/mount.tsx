@@ -7,13 +7,14 @@ import type { RenderApi, ScreenPoint } from '../../contracts/render';
 import type { NodeRef } from '../../model/types';
 import { overlayFact } from '../../overlays';
 import { useOverlayParams } from '../overlays/state';
-import { languageColor, unitRadius } from '../../shared';
+import { languageColor, sizedByBytes, sizeLines, unitRadius } from '../../shared';
 import { clamp, groundToPixels, useAnchor, type Place, type Placement } from '../anchor';
 import { LAYER, useDismissable } from '../keys';
 import { selectOnly, setFocus, useApp, useFocus, useHover, useRender, useReplica, useReplicaVersion } from '../store';
 import { APP_LOCAL } from '../tunables';
+import { shownSize } from '../uiScale';
 import { Card, CloseIcon, Strong } from '../ui';
-import { countLabel, percentileLabel, unitDetails, unitSummary, type Neighbor, type UnitSummary } from '../units';
+import { countLabel, formatBytes, percentileLabel, unitDetails, unitSummary, type Neighbor, type UnitSummary } from '../units';
 import './inspect.css';
 
 /** How often the detail card looks whether it should take the keyboard focus back after a name in it was followed. */
@@ -21,7 +22,7 @@ const KEEP_FOCUS_MS = 100;
 
 /** A sphere's radius on screen, in CSS pixels. */
 function spherePixels(render: RenderApi, at: ScreenPoint, unit: UnitSummary, selected: boolean): number {
-  const radius = unitRadius(unit.loc, unit.importancePct, config.visual) * (selected ? config.visual.selectedScale : 1);
+  const radius = unitRadius(sizeLines(unit.loc, unit.bytes, unit.lang, config.visual), unit.importancePct, config.visual) * (selected ? config.visual.selectedScale : 1);
   return groundToPixels(render, at, radius, 'x');
 }
 
@@ -52,7 +53,7 @@ function Tooltip() {
       x: clamp(at.x - size.width / 2, margin, view.width - size.width - margin),
       y: above >= margin ? above : at.y + r + gap,
     };
-  }, [unit?.slot, unit?.loc, unit?.importancePct, selected]);
+  }, [unit?.slot, unit?.loc, unit?.bytes, unit?.importancePct, selected]);
   // the active overlay's word on this file: its age under Recency, its hops under Dependency reach
   const fact = replica && unit && overlay ? overlayFact(overlay, replica, unit.slot) : null;
   useAnchor(unit ? target : null, box, place, unit ? `${unit.path}|${unit.loc}|${unit.fanIn}|${unit.fanOut}|${fact}` : null);
@@ -64,7 +65,7 @@ function Tooltip() {
       <div className="gm-tooltip-path">{unit.path}</div>
       <div className="gm-tooltip-facts">
         <span className="gm-fact"><LanguageDot lang={unit.lang} />{unit.langName}</span>
-        <span className="gm-fact">{countLabel(unit.loc, 'line', 'lines')}</span>
+        <span className="gm-fact">{sizedByBytes(unit.lang) ? formatBytes(unit.bytes) : countLabel(unit.loc, 'line', 'lines')}</span>
         <span className="gm-fact" title="Files that depend on it, and files it depends on">
           {unit.fanIn.toLocaleString()} in · {unit.fanOut.toLocaleString()} out
         </span>
@@ -180,11 +181,12 @@ function DetailCard() {
     if (!el || !d || d.id !== e.pointerId) return;
     const view = el.offsetParent as HTMLElement | null;
     const { marginPx: margin } = APP_LOCAL.anchor;
-    const x = clamp(e.clientX - d.dx, margin, (view?.clientWidth ?? Infinity) - el.offsetWidth - margin);
-    const y = clamp(e.clientY - d.dy, margin, (view?.clientHeight ?? Infinity) - el.offsetHeight - margin);
+    const shown = shownSize(el);
+    const x = clamp(e.clientX - d.dx, margin, (view?.clientWidth ?? Infinity) - shown.width - margin);
+    const y = clamp(e.clientY - d.dy, margin, (view?.clientHeight ?? Infinity) - shown.height - margin);
     pinned.current = { x, y };
     // written here as well: the scene may not render a frame while nothing in it moves
-    el.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0)`;
+    el.style.translate = `${Math.round(x)}px ${Math.round(y)}px`;
   };
   const onDragEnd = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (drag.current?.id !== e.pointerId) return;
@@ -216,8 +218,8 @@ function DetailCard() {
       <dl className="gm-detail-facts">
         <dt>Language</dt>
         <dd><span className="gm-fact"><LanguageDot lang={unit.lang} />{unit.langName}</span></dd>
-        <dt>Lines of code</dt>
-        <dd>{unit.loc.toLocaleString()}{pair && <span className="gm-dim"> across {unit.files.length} files</span>}</dd>
+        <dt>{sizedByBytes(unit.lang) ? 'Size' : 'Lines of code'}</dt>
+        <dd>{sizedByBytes(unit.lang) ? formatBytes(unit.bytes) : unit.loc.toLocaleString()}{pair && <span className="gm-dim"> across {unit.files.length} files</span>}</dd>
         <dt>Importance</dt>
         <dd>{percentileLabel(unit.importancePct)}</dd>
         {(unit.city || unit.district) && (

@@ -8,9 +8,11 @@ import { config } from '../config';
 import { App } from './App';
 import { closeSession, fakeOptionsFromUrl, openSource } from './session';
 import { initEnvironment, useApp } from './store';
+import { initUiScale } from './uiScale';
 
 document.title = config.app.title;
 initEnvironment();
+initUiScale();
 
 // No StrictMode: its double-run of effects would create, dispose and re-create WebGL renderers on
 // the same canvas, which the renderer is not asked to survive.

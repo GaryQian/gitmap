@@ -3,7 +3,9 @@
 
 /* name in Medium, where it is from beside it, quieter */
 .gm-repo-pill { gap: 10px; max-width: min(340px, 100%); }
-.gm-repo-pill .gm-strong { overflow: hidden; text-overflow: ellipsis; }
+.gm-repo-pill-text { display: inline-flex; align-items: center; gap: 10px; min-width: 0; }
+/* the name keeps its letters: when a pill is too long it is the "where" beside it that gives way */
+.gm-repo-pill .gm-strong { flex: 0 0 auto; max-width: 60%; overflow: hidden; text-overflow: ellipsis; }
 .gm-repo-where { overflow: hidden; text-overflow: ellipsis; color: var(--gm-text-dim); }
 /* "Demo": a quiet outlined chip, on a demo's pill here and after the repo name in the title pill.
    Quiet by its size and its hairline, not by dim text: dim text does not belong on a bare pill (theme.ts). */
@@ -19,11 +21,20 @@
   letter-spacing: 0.04em;
 }
 
-/* A saved repo: a small × inside the pill's right end. It stays hidden until the pointer has rested
-   on the pill for a second (the pill makes room for it then); keyboard focus shows it at once.
+/* A saved repo: a small × inside the pill's right end. It fades in once the pointer has rested on
+   the pill for half a second, but takes clicks from the moment the pointer is on the pill, so a click
+   aimed at it never opens the repo instead; keyboard focus shows it at once. It lies over the end of the text,
+   which fades out beneath it: the pill never changes size, so the row of pills never reflows.
    Demos have no ×. It is a sibling of the pill button, not inside it: a button cannot hold a button. */
-.gm-repo-saved { position: relative; display: inline-flex; max-width: 100%; }
-.gm-repo-saved .gm-repo-pill { transition: padding-right 160ms var(--gm-ease) 0s; }
+.gm-repo-saved { position: relative; display: inline-flex; max-width: min(340px, 100%); }
+/* the cap is on the wrapper: a pill capped by itself leaves its wrapper, and the ×, at the text's full width */
+.gm-repo-saved .gm-repo-pill { min-width: 0; max-width: 100%; }
+.gm-repo-saved .gm-repo-pill-text {
+  /* the transparent tail starts beyond the right edge; sliding it in hides the text under the × */
+  -webkit-mask: linear-gradient(to left, transparent 18px, black 30px) 0 0 / calc(100% + 30px) 100% no-repeat;
+  mask: linear-gradient(to left, transparent 18px, black 30px) 0 0 / calc(100% + 30px) 100% no-repeat;
+  transition: -webkit-mask-position 140ms var(--gm-ease) 0s, mask-position 140ms var(--gm-ease) 0s;
+}
 .gm-repo-delete {
   position: absolute;
   top: 50%;
@@ -40,17 +51,83 @@
   background: transparent;
   color: var(--gm-text-dim);
   cursor: pointer;
+  /* the landing region is pointer-events: none; a pill opts back in, and so must this sibling of one */
+  pointer-events: auto;
   /* hidden = not clickable either; visibility (unlike pointer-events) waits out a transition delay */
   opacity: 0;
   visibility: hidden;
   transform: translateY(-50%);
   transition: opacity 140ms var(--gm-ease) 0s, visibility 0s linear 140ms, background-color 140ms var(--gm-ease), color 140ms var(--gm-ease);
 }
-.gm-repo-saved:hover .gm-repo-pill { padding-right: 34px; transition-delay: 0.5s; }
-.gm-repo-saved:hover .gm-repo-delete { opacity: 1; visibility: visible; transition-delay: 0.5s, 0.5s, 0s, 0s; }
-.gm-repo-saved:focus-within .gm-repo-pill { padding-right: 34px; transition-delay: 0s; }
+.gm-repo-saved:hover .gm-repo-pill-text { -webkit-mask-position: 100% 0; mask-position: 100% 0; transition-delay: 0.5s; }
+.gm-repo-saved:hover .gm-repo-delete { opacity: 1; visibility: visible; transition-delay: 0.5s, 0s, 0s, 0s; }
+.gm-repo-saved:focus-within .gm-repo-pill-text { -webkit-mask-position: 100% 0; mask-position: 100% 0; transition-delay: 0s; }
 .gm-repo-saved:focus-within .gm-repo-delete { opacity: 1; visibility: visible; transition-delay: 0s, 0s, 0s, 0s; }
 .gm-repo-delete:hover, .gm-repo-delete:focus-visible { color: var(--gm-text); background: color-mix(in srgb, var(--gm-text) 14%, transparent); }
+
+/* ---- landing: the row of pills, and the search pill that leads it ---- */
+
+/* The pills wrap in rows on the centre line, as the landing region lays its children out; this box
+   is one child of that region, so that its height can be held while the search is open. */
+.gm-repo-pills {
+  box-sizing: border-box;
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-content: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* Closed, the slot is the size of its pill and sits first in the row. Open, it takes a whole line,
+   so the field is alone in the middle and the matches start on the line beneath. */
+.gm-repo-search-slot { display: inline-flex; justify-content: center; max-width: 100%; }
+.gm-repo-pills.is-searching > .gm-repo-search-slot { flex: 0 0 100%; }
+
+/* At rest it reads as a small pill labelled "Search": the label is the field's placeholder. */
+.gm-repo-search { gap: 7px; max-width: 100%; cursor: pointer; }
+.gm-repo-search > svg { flex: none; }
+.gm-repo-search.is-open { cursor: text; background: var(--gm-pill-bg-strong); }
+.gm-repo-search:hover { background: var(--gm-pill-bg-strong); border-color: color-mix(in srgb, var(--gm-text) 34%, transparent); }
+:root[data-theme='dark'] .gm-repo-search:hover:not(.is-open) { box-shadow: 0 0 16px color-mix(in srgb, var(--gm-halo) 16%, transparent); }
+/* the focus ring belongs to the whole pill, not to the bare field inside it */
+.gm-repo-search:has(.gm-repo-search-input:focus-visible) { outline: 2px solid var(--gm-halo); outline-offset: 2px; box-shadow: 0 0 0 5px var(--gm-focus-band); }
+.gm-repo-search-input:focus-visible { outline: none; --gm-focus-band: transparent; }
+
+.gm-repo-search-input {
+  box-sizing: content-box;
+  /* the width of the label; the field opens to its working width with the search */
+  width: 6ch;
+  min-width: 0;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  cursor: inherit;
+  transition: width 220ms var(--gm-ease);
+}
+.gm-repo-search.is-open .gm-repo-search-input { width: min(260px, 56vw); }
+.gm-repo-search-input::placeholder { color: var(--gm-text); opacity: 1; transition: color 140ms var(--gm-ease); }
+.gm-repo-search.is-open .gm-repo-search-input::placeholder { color: var(--gm-text-dim); }
+
+/* a match arrives quietly as the query finds it */
+.gm-repo-pills.is-searching > .gm-repo-pill,
+.gm-repo-pills.is-searching > .gm-repo-saved { animation: gm-repo-found 160ms var(--gm-ease); }
+@keyframes gm-repo-found { from { opacity: 0; transform: translateY(-3px); } }
+
+/* nothing matches: one quiet line where the pills would be, in the page's message style */
+.gm-repo-none { flex: 0 0 100%; margin: 0; font-size: 13px; line-height: 34px; text-align: center; color: var(--gm-text-dim); }
+
+@media (prefers-reduced-motion: reduce) {
+  .gm-repo-search-input { transition: none; }
+  .gm-repo-pills.is-searching > .gm-repo-pill,
+  .gm-repo-pills.is-searching > .gm-repo-saved { animation: none; }
+}
 
 /* The confirmation: a card in the middle of the page over a dimmed backdrop. */
 .gm-repo-dialog {

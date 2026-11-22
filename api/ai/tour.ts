@@ -1,5 +1,5 @@
 // POST /api/ai/tour — Vercel Function (Node.js runtime, Web fetch handler). The logic is in src/ai/server.
-import { createDeps, handlers } from '../../src/ai/server/index';
+import { createDeps, handlers } from '../_lib/server.mjs';
 
 const deps = createDeps(process.env);
 

@@ -1,8 +1,10 @@
 // From a file's bytes to what the reader shows: text, the first part of a very large text, or the
 // fact that it is not text. Pure, no React.
+import { extname } from '../../shared';
 
 export type Decoded =
   | { kind: 'binary' }
+  | { kind: 'image'; bytes: Uint8Array; mime: string }
   | {
       kind: 'text';
       text: string;
@@ -42,6 +44,21 @@ export function countLines(text: string): number {
   let lines = 1;
   for (let i = text.indexOf('\n'); i >= 0; i = text.indexOf('\n', i + 1)) lines++;
   return text.endsWith('\n') ? lines - 1 : lines;
+}
+
+const IMAGE_MIME: Record<string, string> = {
+  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp',
+  avif: 'image/avif', svg: 'image/svg+xml', ico: 'image/x-icon', bmp: 'image/bmp',
+};
+
+/** The MIME type a browser shows a file as, by extension; null for a file that is not an image. */
+export function imageMime(path: string): string | null {
+  return IMAGE_MIME[extname(path)] ?? null;
+}
+
+export function decodeFile(path: string, bytes: Uint8Array, capBytes: number, sniffBytes: number): Decoded {
+  const mime = imageMime(path);
+  return mime ? { kind: 'image', bytes, mime } : decodeContent(bytes, capBytes, sniffBytes);
 }
 
 export function decodeContent(bytes: Uint8Array, capBytes: number, sniffBytes: number): Decoded {

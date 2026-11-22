@@ -46,7 +46,11 @@ export interface FactsCache {
 export interface PassOptions<T = unknown> {
   lane?: Lane;
   cache?: FactsCache;
-  onProgress?(done: number, total: number): void;
+  /**
+   * `share` is the part of the work that is done, 0–1, weighted by file size: a count of files runs
+   * ahead of the work, because the many small files finish first.
+   */
+  onProgress?(done: number, total: number, share?: number): void;
   /**
    * Called with each batch of results as it finishes (in completion order), so a caller can use
    * what has arrived so far without waiting for the pass to end (the reveal escape hatch, PLAN.md §6.8).

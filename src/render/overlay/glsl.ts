@@ -15,6 +15,11 @@ attribute vec2 aOverlay;
 vec3 gmRamp(float t, int row, vec3 unknown) {
   return t < 0.0 ? unknown : texelFetch(uRamp, ivec2(int(clamp(t, 0.0, 1.0) * 255.0 + 0.5), row), 0).rgb;
 }
+// How strong an overlay colour is, 0..1: 0 for the grey faded end of a ramp, 1 for a saturated colour.
+float gmOverlayHeat(vec3 ovCol) {
+  float chroma = max(ovCol.r, max(ovCol.g, ovCol.b)) - min(ovCol.r, min(ovCol.g, ovCol.b));
+  return smoothstep(0.10, 0.60, chroma);
+}
 // Sets vOvCol (overlay colour) and vOvKnown (0 = not yet known, 1 = known), cross-faded.
 void gmOverlay() {
   vOvCol = mix(gmRamp(aOverlay.x, 0, uUnknownFrom), gmRamp(aOverlay.y, 1, uUnknown), uOverlayBlend);
@@ -27,10 +32,11 @@ void gmOverlay() {
  * body's own limb darkening and surface detail, `burn` its core light (0..1).
  */
 export const GLSL_OVERLAY_BODY = /* glsl */ `
-vec3 gmOverlayBody(vec3 ovCol, float known, float d2, float shade, float burn, vec3 voidCol) {
+vec3 gmOverlayBody(vec3 ovCol, float known, float d2, float shade, float burn, float glow, vec3 voidCol) {
   // known: the overlay colour as it is (its lightness carries meaning, so no exposure curve),
-  // with the neutral white core on top
-  vec3 lit = mix(ovCol * shade * 1.08, vec3(1.0), burn * 0.55);
+  // with the neutral white core on top. glow (0..1, the bright end of the ramp) lifts the body
+  // further, so the brightest stars stand well clear of the faded bulk.
+  vec3 lit = mix(ovCol * shade * (1.08 + 0.45 * glow), vec3(1.0), burn * 0.55);
   // not yet known: unlit, hollow
   vec3 unlit = mix(mix(ovCol, voidCol, 0.5), ovCol, smoothstep(0.30, 0.80, d2));
   return mix(unlit, lit, known);

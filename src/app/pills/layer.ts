@@ -6,9 +6,11 @@ import type { Session } from '../../contracts/pipeline';
 import type { FrameInfo, RenderApi, ScreenPoint } from '../../contracts/render';
 import { cityRef, districtRef, type NodeRef } from '../../model/types';
 import { clamp, groundToPixels, sceneObstacles } from '../anchor';
+import { cityNames } from '../cityNames';
 import { useApp } from '../store';
 import { sceneFadeFloor } from '../theme';
 import { APP_LOCAL } from '../tunables';
+import { onUiScale, shownSize } from '../uiScale';
 import { distanceFade, keepPills, type PillBox, type Rect } from './place';
 
 type Kind = 'city' | 'district';
@@ -57,13 +59,23 @@ interface Drag {
 /** Shift+arrow moves a focused pill's city or district this far on screen: the keyboard's drag. CSS pixels. */
 const KEY_NUDGE_PX = 24;
 
+export interface PillLayerOptions {
+  /**
+   * A real click on a pill (or Enter or Space on a focused one), never the end of a drag. With Shift
+   * held the camera stays where it is: the click only adds to, or takes from, the selection.
+   */
+  onPick?(ref: NodeRef, mods: { shift: boolean }): void;
+}
+
 export interface PillLayer {
   /** Counts or names may have changed (the size slider moved): rebuild the labels on the next update. */
   invalidate(): void;
+  /** The selection: a selected city's or district's pill is marked, and stays on screen like a focused one. */
+  setSelected(refs: readonly NodeRef[]): void;
   dispose(): void;
 }
 
-export function createPillLayer(container: HTMLElement, render: RenderApi, session: Session): PillLayer {
+export function createPillLayer(container: HTMLElement, render: RenderApi, session: Session, options: PillLayerOptions = {}): PillLayer {
   const T = APP_LOCAL.pills;
   const doc = container.ownerDocument;
   const pool: Pill[] = [];
@@ -79,6 +91,7 @@ export function createPillLayer(container: HTMLElement, render: RenderApi, sessi
   let disposed = false;
   let drag: Drag | null = null;
   let suppressClick = false;
+  let selected: ReadonlySet<NodeRef> = new Set();
   /** The pill that holds the group's one tab stop (roving tabindex), and the order arrow keys walk. */
   let tabRef: NodeRef | null = null;
   let tabPill: Pill | null = null;
@@ -110,13 +123,21 @@ export function createPillLayer(container: HTMLElement, render: RenderApi, sessi
     return pill;
   }
 
+  /** The selected state, on its own: a pooled pill changes node without changing its text, and back. */
+  function mark(pill: Pill): void {
+    const on = pill.label !== null && selected.has(pill.label.ref);
+    pill.el.classList.toggle('is-selected', on);
+    pill.el.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
+
   function bind(pill: Pill, label: Label): void {
     pill.label = label;
     // Other features (the city summary card) read this to tell which node a pooled pill stands for.
     pill.el.dataset.ref = label.ref;
-    if (pill.sig === label.sig) return;
+    if (pill.sig === label.sig) { mark(pill); return; }
     pill.sig = label.sig;
     pill.el.className = `gm-scene-pill gm-scene-pill-${label.kind}`;
+    mark(pill);
     pill.nameEl.textContent = label.name;
     pill.countEl.textContent = label.count;
     pill.countEl.hidden = label.count === '';
@@ -133,8 +154,9 @@ export function createPillLayer(container: HTMLElement, render: RenderApi, sessi
     let width = widths.get(label.sig);
     if (width === undefined || heights[label.kind] === undefined) {
       bind(ruler, label);
-      width = ruler.el.offsetWidth;
-      heights[label.kind] = ruler.el.offsetHeight;
+      const shown = shownSize(ruler.el);
+      width = shown.width;
+      heights[label.kind] = shown.height;
       widths.set(label.sig, width);
     }
     return { width, height: heights[label.kind]! };
@@ -169,10 +191,12 @@ export function createPillLayer(container: HTMLElement, render: RenderApi, sessi
     let counts: Map<NodeRef, { visible: number; total: number }>;
     try { counts = render.visibleCounts(); } catch { counts = new Map(); }
     const bySlot: (CityLabel | undefined)[] = [];
+    // the title AI notes gave the city once there is one, else the name derived from its folders
+    const names = cityNames(replica);
     cities = [];
     for (const slot of cityTable.slots()) {
       const ref = cityRef(cityTable.ids[slot]!);
-      const name = cityTable.cols.name[slot] || 'City';
+      const name = names.get(cityTable.ids[slot]!)?.title || 'City';
       const n = counts.get(ref);
       const hiding = !!n && n.visible < n.total;
       const count = !n ? '' : hiding ? `${n.visible.toLocaleString()} / ${n.total.toLocaleString()}` : n.total.toLocaleString();
@@ -211,7 +235,7 @@ export function createPillLayer(container: HTMLElement, render: RenderApi, sessi
 
   function offer(label: Label, at: ScreenPoint, radius: number, opacity: number): void {
     const pill = byRef.get(label.ref);
-    const held = !!pill && (drag?.pill === pill || doc.activeElement === pill.el);
+    const held = selected.has(label.ref) || (!!pill && (drag?.pill === pill || doc.activeElement === pill.el));
     if (opacity <= 0.01 && !held) return;
     const { width, height } = sizeOf(label);
     // the pill sits just above the far edge of its territory, so it does not cover the stars inside
@@ -238,6 +262,8 @@ export function createPillLayer(container: HTMLElement, render: RenderApi, sessi
     const fade = (depth: number): number => distanceFade(depth, cameraDistance, minFade);
 
     candidates.length = 0;
+    // the legend's "District titles" switch; city pills stay either way
+    const districtTitles = useApp.getState().settings.districtTitles;
     for (const city of cities) {
       const at = render.project(city.ref);
       if (!at) continue;
@@ -245,7 +271,7 @@ export function createPillLayer(container: HTMLElement, render: RenderApi, sessi
       if (at.visible) offer(city, at, radius, fade(at.depth));
       // districts are always named, even when their city's centre is off screen; where pills would
       // overlap, the city's wins (keepPills)
-      for (const district of city.districts) {
+      if (districtTitles) for (const district of city.districts) {
         const dAt = render.project(district.ref);
         if (dAt?.visible) offer(district, dAt, positions.district[3 * district.slot + 2] ?? 0, fade(dAt.depth));
       }
@@ -304,14 +330,14 @@ export function createPillLayer(container: HTMLElement, render: RenderApi, sessi
     if (rx === pill.x && ry === pill.y) return;
     pill.x = rx;
     pill.y = ry;
-    pill.el.style.transform = `translate3d(${rx}px, ${ry}px, 0)`;
+    pill.el.style.translate = `${rx}px ${ry}px`;
   }
 
   function schedule(): void {
     if (!scheduled && !disposed) scheduled = requestAnimationFrame(() => { scheduled = 0; update(); });
   }
 
-  // ---- dragging a pill moves its city or district; a click flies to it ----
+  // ---- dragging a pill moves its city or district; a click selects it and flies to it ----
 
   const pillOf = (target: EventTarget | null): Pill | null => {
     const el = target instanceof Element ? target.closest('.gm-scene-pill') : null;
@@ -369,7 +395,9 @@ export function createPillLayer(container: HTMLElement, render: RenderApi, sessi
     const pill = pillOf(e.target);
     if (!pill) return;
     if (suppressClick) { suppressClick = false; return; }
-    void render.flyTo(pill.label!.ref).catch(() => {});
+    const ref = pill.label!.ref;
+    options.onPick?.(ref, { shift: e.shiftKey });
+    if (!e.shiftKey) void render.flyTo(ref).catch(() => {});
   }
 
   /** The keyboard's drag: one step on screen, then let go, exactly as a short drag with the pointer would. */
@@ -438,11 +466,18 @@ export function createPillLayer(container: HTMLElement, render: RenderApi, sessi
   resize.observe(container);
   // text set in a fallback font was measured too early
   const onFonts = () => { widths.clear(); schedule(); };
+  // and at another scale (uiScale.ts) every pill has another size on screen
+  const offScale = onUiScale(() => { widths.clear(); for (const k of Object.keys(heights)) delete heights[k as Kind]; schedule(); });
   doc.fonts?.addEventListener('loadingdone', onFonts);
   schedule();
 
   return {
     invalidate() { modelDirty = true; schedule(); },
+    setSelected(refs) {
+      selected = new Set(refs.filter((r) => r.startsWith('c:') || r.startsWith('d:')));
+      for (const pill of byRef.values()) mark(pill);
+      schedule();
+    },
     dispose() {
       disposed = true;
       if (scheduled) cancelAnimationFrame(scheduled);
@@ -450,6 +485,7 @@ export function createPillLayer(container: HTMLElement, render: RenderApi, sessi
       offReplica();
       resize.disconnect();
       doc.fonts?.removeEventListener('loadingdone', onFonts);
+      offScale();
       container.removeEventListener('pointerdown', onPointerDown);
       container.removeEventListener('pointermove', onPointerMove);
       container.removeEventListener('pointerup', endDrag);

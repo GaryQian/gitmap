@@ -16,6 +16,11 @@ import { OVERLAY_UNKNOWN, RAMP_WIDTH, buildRamp, overlayT } from '../spheres/ove
 
 /** Floats per instance in `data`: from, to. */
 export const OVERLAY_ITEMS = 2;
+/**
+ * The glow of the brightest stars under an overlay, as a share of the glow the most important file
+ * has without one (0..1). Half: clearly lit, without the overlay's colour washing out its neighbours.
+ */
+export const OVERLAY_GLOW = 0.5;
 /** Rows of the ramp texture: from, to. */
 export const RAMP_ROWS = 2;
 const ROW = RAMP_WIDTH * 4;
@@ -35,6 +40,8 @@ export class OverlayFade {
   rampDirty = false;
 
   private target = 0;
+  /** How strongly the strong end of the current overlay's ramp glows: OVERLAY_GLOW, or 0 when it adds none (OverlayView.glow). Kept while fading out. */
+  glow = 0;
   /** The view whose values are in the `to` column. */
   private view: OverlayView | null = null;
   /** An update of the same overlay that arrived mid-fade; applied when the fade ends. */
@@ -87,6 +94,7 @@ export class OverlayFade {
     }
     ramp.set(buildRamp(view.stops, view.discrete, RAMP_WIDTH), ROW);
     this.unknown = hexToRgb(view.unknown);
+    this.glow = (view.glow ?? !view.discrete) ? OVERLAY_GLOW : 0;
     this.view = view;
     for (let s = 0; s < this.capacity; s++) data[s * OVERLAY_ITEMS + 1] = this.valueOf(s, live[s] > 0);
     if (!crossfade) {

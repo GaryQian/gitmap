@@ -217,3 +217,13 @@
   border-color: var(--gm-overlay-accent);
   box-shadow: inset 0 0 36px color-mix(in srgb, var(--gm-overlay-accent) 28%, transparent);
 }
+
+/* Recency's age slider: the shaded part is the range of ages still shown, from the thumb to the
+   recent end on the right, so it starts full and shrinks as the window narrows. */
+.gm-slider.gm-slider-tail::-webkit-slider-runnable-track {
+  background: linear-gradient(to right, color-mix(in srgb, var(--gm-text) 22%, transparent) var(--gm-slider-fill), var(--gm-halo) var(--gm-slider-fill));
+}
+.gm-slider.gm-slider-tail::-moz-range-track {
+  background: linear-gradient(to right, color-mix(in srgb, var(--gm-text) 22%, transparent) var(--gm-slider-fill), var(--gm-halo) var(--gm-slider-fill));
+}
+.gm-slider.gm-slider-tail::-moz-range-progress { background: transparent; }

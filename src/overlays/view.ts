@@ -5,9 +5,9 @@ import type { ColorStop, OverlayView } from '../contracts/render';
 import type { ModelReplica } from '../contracts/store';
 import { parseRef, type Layer, type LayerStatus, type NodeRef } from '../model/types';
 import { buildAdjacency, computeReach, type Adjacency, type ReachDirection } from './adjacency';
-import { OVERLAY_COLORS, OVERLAY_RAMP, fadedColor, fadedToBright, hotToFaded, ownershipStops, ownershipT, unknownColor, type OverlayPalette } from './colors';
+import { OVERLAY_COLORS, OVERLAY_RAMP, fadedColor, fadedToBright, fadedToBrightFrom, hotToFaded, ownershipStops, ownershipT, unknownColor, type OverlayPalette } from './colors';
 import { ownershipContributors, ownershipShare } from './ownership';
-import { RECENCY_OLDER, type OverlayId } from './types';
+import { RECENCY_OLDER, TESTS, TESTS_SHOWN, type OverlayId } from './types';
 
 export interface OverlayContext {
   replica: ModelReplica;
@@ -25,11 +25,16 @@ export interface OverlayContext {
   /** Reach: otherwise the seeds (unit or file refs, or unit slots) and the direction to walk from them. */
   seeds?: readonly NodeRef[] | readonly number[];
   direction?: ReachDirection;
-  /** Reach: a cached buildAdjacency() result; built here when absent. */
+  /** Reach and Tests: a cached buildAdjacency() result; built here when absent. */
   adjacency?: Adjacency;
   maxHops?: number;
   /** Recency: the present, in seconds. Default: the clock. */
   now?: number;
+  /**
+   * Recency: leave out files that changed more than this many seconds before the newest file, and
+   * end the scale there. Default Infinity: every file, the scale ending at the oldest one.
+   */
+  maxAgeSeconds?: number;
   /** Bright-end colours per mode; default OVERLAY_COLORS. */
   colors?: Record<ThemeMode, OverlayPalette>;
 }
@@ -42,6 +47,8 @@ export interface OverlayViewInfo extends OverlayView {
   coverage: number;
   /** Ownership: the contributor whose share is shown, for the hover line. */
   contributor?: string;
+  /** Recency: seconds between the newest and the oldest file (0 when unknown), and how many units the age filter leaves out. */
+  recency?: { spanSeconds: number; hidden: number };
   labels: {
     /** What t = 0 and t = 1 mean. */
     low: string;
@@ -79,6 +86,26 @@ export function formatAge(seconds: number): string {
   if (days < 60) return say(days, 'day');
   if (days < 720) return say(days / 30.44, 'month');
   return say(days / 365.25, 'year');
+}
+
+/**
+ * Recency's age slider (PLAN.md §10). Its positions 0..1 are spread evenly over the logarithm of the
+ * age, from one day to the whole span of the map, so the last few days take as much of the slider as
+ * the last few years. The far end, 1, is "every file": no cut-off.
+ */
+export const RECENCY_MIN_CUTOFF_SECONDS = DAY;
+/** Slider position → the cut-off in seconds behind the newest file (Infinity at the far end, or when the span is too short to cut). */
+export function recencyCutoffAt(position: number, spanSeconds: number): number {
+  const lo = RECENCY_MIN_CUTOFF_SECONDS;
+  if (!(position < 1) || !(spanSeconds > lo)) return Infinity;
+  return Math.exp(Math.log(lo) + Math.max(0, position) * (Math.log(spanSeconds) - Math.log(lo)));
+}
+/** The slider position of a cut-off; the inverse of recencyCutoffAt. */
+export function recencyPositionOf(cutoffSeconds: number, spanSeconds: number): number {
+  const lo = RECENCY_MIN_CUTOFF_SECONDS;
+  if (!(cutoffSeconds < spanSeconds) || !(spanSeconds > lo)) return 1;
+  const p = (Math.log(Math.max(lo, cutoffSeconds)) - Math.log(lo)) / (Math.log(spanSeconds) - Math.log(lo));
+  return p < 0 ? 0 : p > 1 ? 1 : p;
 }
 
 /** "now", or "3 days ago". */
@@ -169,19 +196,30 @@ export function overlayView(id: OverlayId, ctx: OverlayContext): OverlayViewInfo
       // Log of the age behind the newest file: the first hours and days take most of the ramp, so
       // brightness falls off fast and the old bulk of the repo sits together near the faded end.
       const unit = OVERLAY_RAMP.recencyLogUnitSeconds;
-      const span = Math.log1p(Math.max(0, newest - oldest) / unit);
+      const known = newest !== -Infinity;
+      const fullSpan = known ? Math.max(0, newest - oldest) : 0;
+      // The age filter: files further behind the newest than the cut-off are left out, and the
+      // faded end of the scale is the cut-off itself, so what remains spans the whole ramp. That
+      // ramp also starts further from grey the narrower the window is (by the slider's travel, which
+      // is logarithmic in age), so the map as a whole turns greener as the slider moves to recent.
+      const maxAge = ctx.maxAgeSeconds ?? Infinity;
+      const cut = known && maxAge < fullSpan;
+      const floor = cut ? (1 - recencyPositionOf(maxAge, fullSpan)) * OVERLAY_RAMP.recencyFocusFloor : 0;
+      const span = Math.log1p((cut ? Math.max(0, maxAge) : fullSpan) / unit);
+      let hidden = 0;
       for (let s = 0; s < capacity; s++) {
         const v = values[s];
         if (v !== v) continue;
+        if (cut && (v <= RECENCY_OLDER || newest - v > maxAge)) { values[s] = -Infinity; hidden++; continue; }
         if (v <= RECENCY_OLDER) { values[s] = 0; continue; }
         const t = span > 0 ? 1 - Math.log1p(Math.max(0, newest - v) / unit) / span : 1;
         values[s] = t < 0 ? 0 : t > 1 ? 1 : t;
       }
-      const known = newest !== -Infinity;
       return {
-        id, values, domain: [0, 1], stops: fadedToBright(faded, palette.recency), unknown, status, coverage,
+        id, values, domain: [0, 1], stops: fadedToBrightFrom(faded, palette.recency, floor), unknown, status, coverage,
+        recency: { spanSeconds: fullSpan, hidden },
         labels: {
-          low: known ? `Oldest, ${ago(now - oldest)}` : 'Oldest',
+          low: !known ? 'Oldest' : cut ? `Oldest shown, ${ago(now - (newest - maxAge))}` : `Oldest, ${ago(now - oldest)}`,
           high: known ? `Newest, ${ago(now - newest)}` : 'Newest',
           unknown: notYet,
         },
@@ -209,11 +247,33 @@ export function overlayView(id: OverlayId, ctx: OverlayContext): OverlayViewInfo
     }
     case 'tests': {
       const t = palette.tests;
+      // The layer says test, covered or uncovered. Here "uncovered" is split in two: a unit linked
+      // to a covered one, in either direction (it uses tested code, or tested code uses it), is one
+      // hop from a tested file; the rest have none within a hop.
+      const stored = perSlot(layer?.values, capacity);
+      const values = new Float32Array(capacity).fill(NaN);
+      const adj = layer ? ctx.adjacency ?? buildAdjacency(replica) : null;
+      const isCovered = (u: number) => stored[u] === TESTS.covered;
+      for (let s = 0; s < capacity; s++) {
+        const v = stored[s];
+        if (v !== v) continue;
+        if (v === TESTS.test) { values[s] = TESTS_SHOWN.test; continue; }
+        if (v === TESTS.covered) { values[s] = TESTS_SHOWN.covered; continue; }
+        let near = false;
+        if (adj && s < adj.capacity) {
+          for (let k = adj.outOffsets[s]; k < adj.outOffsets[s + 1] && !near; k++) near = isCovered(adj.outTargets[k]);
+          for (let k = adj.inOffsets[s]; k < adj.inOffsets[s + 1] && !near; k++) near = isCovered(adj.inTargets[k]);
+        }
+        values[s] = near ? TESTS_SHOWN.near : TESTS_SHOWN.uncovered;
+      }
       return {
-        id, values: perSlot(layer?.values, capacity), domain: [0, 2], discrete: true,
-        stops: [{ t: 0, color: t.test }, { t: 0.5, color: t.covered }, { t: 1, color: t.uncovered }],
+        id, values, domain: [0, 3], discrete: true,
+        stops: [{ t: 0, color: t.test }, { t: 1 / 3, color: t.covered }, { t: 2 / 3, color: t.near }, { t: 1, color: t.uncovered }],
         unknown, status, coverage,
-        labels: { low: 'Tests', high: 'Untested', unknown: layer ? 'Not code' : notYet, categories: ['Tests', 'Referenced by a test', 'Not referenced by any test'] },
+        labels: {
+          low: 'Tests', high: 'Untested', unknown: layer ? 'Not code' : notYet,
+          categories: ['Tests', 'Referenced by a test', 'One hop from a tested file', 'No tested file within a hop'],
+        },
       };
     }
     case 'reach': {
@@ -230,7 +290,8 @@ export function overlayView(id: OverlayId, ctx: OverlayContext): OverlayViewInfo
       const end = Number.isFinite(maxHops) ? far + 1 : Math.min(far + 1, OVERLAY_RAMP.reachHops);
       const not = direction === 'dependsOn' ? 'Not a dependency' : 'Not a dependent';
       return {
-        id, values: hops, domain: [0, end], stops: hotToFaded(palette.reach, faded), unknown, status: 'complete', coverage: 1,
+        // no glow: reach is read from the colour alone, and the selection it starts from already glows
+        id, values: hops, domain: [0, end], stops: hotToFaded(palette.reach, faded), glow: false, unknown, status: 'complete', coverage: 1,
         labels: {
           low: 'Selection',
           high: far + 1 > end ? `${end}+ hops` : hopsText(far),

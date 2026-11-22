@@ -5,7 +5,7 @@ import type { PhysicsApi, PhysicsEngine, PhysicsInit, PositionBuffers, SettleRep
 import { GEN_ANY, GEN_CITY, GEN_DISTRICT0, GEN_REV } from '../contracts/physics';
 import { createReplica } from '../model';
 import type { LayoutSnapshot, PatchBatch } from '../model/types';
-import { unitRadius } from '../shared';
+import { unitRadiusAt } from '../shared';
 
 function allocate(cap: PhysicsInit['capacity']): PositionBuffers {
   const shared = typeof SharedArrayBuffer !== 'undefined' && (typeof crossOriginIsolated === 'undefined' || crossOriginIsolated);
@@ -49,7 +49,7 @@ export function createStaticPhysics(init: PhysicsInit): PhysicsEngine {
     }
     const districtR = new Map<number, number>();
     for (const [d, list] of byDistrict) {
-      const radius = (u: number) => unitRadius(units.cols.loc[u], units.cols.importancePct[u], init.config.visual);
+      const radius = (u: number) => unitRadiusAt(units.cols, u, init.config.visual);
       list.sort((a, b) => radius(b) - radius(a) || a - b);
       let area = 0;
       let maxR = 0;

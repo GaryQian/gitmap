@@ -76,9 +76,12 @@ describe('the tools that look things up', () => {
     expect(cut.cut).toMatch(/not listed/);
     const miss = await call('list_area', { area: 'c:c9' });
     expect(miss.ok).toBe(false);
-    expect(read(miss).nearest[0]).toMatch(/^c:c\d \(city-\d\)$/);
+    expect(read(miss).nearest[0]).toMatch(/^c:c\d \((city-\d|Core)\)$/);
     // a name will do where the ref was not to hand
     expect(read(await call('list_area', { area: 'city-1' })).city.ref).toBe('c:c1');
+    // a city with an AI title answers to that title and to the name it replaced
+    expect(read(await call('list_area', { area: 'core' })).city).toMatchObject({ ref: 'c:c0', name: 'Core' });
+    expect(read(await call('list_area', { area: 'city-0' })).city.ref).toBe('c:c0');
   });
 
   it('get_file reports place, links, history and notes; an unknown path gets the nearest ones', async () => {
@@ -145,7 +148,7 @@ describe('the tools that look things up', () => {
     expect(found.results[0].area).toMatch(/^d:/);
 
     const notes = read(await call('get_notes'));
-    expect(notes.summaries[0]).toEqual({ area: 'c:c0', name: 'city-0', text: 'Holds the entry points.' });
+    expect(notes.summaries[0]).toEqual({ area: 'c:c0', name: 'Core', text: 'Holds the entry points.' });
     expect(notes.pointsOfInterest[0].path).toBe(firstPath(env));
     expect(notes.tour[0].step).toBe(1);
 
@@ -172,7 +175,7 @@ describe('the tools that act on the map', () => {
       expect(units.cols.lang[slot]).toBe('ts');
       expect(ref.slice(2).startsWith('city-0/')).toBe(true);
     }
-    expect(outcome.action).toBe(`Selected ${selected} TypeScript files in city-0`);
+    expect(outcome.action).toBe(`Selected ${selected} TypeScript files in Core`);
     expect(env.log.at(-1)).toMatch(/^flyTo [cd]:/);
 
     const district = read(await call('list_area', { area: 'c:c1' })).districts[0];

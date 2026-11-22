@@ -1,12 +1,14 @@
-// Top left, under the title pill: one pill per selected file, each removable, with "+N more" beyond a
-// handful and a clear-all action (PLAN.md §9, §17.6). Escape clears the selection.
+// Top left, under the title pill: one pill per selected file, city or district, each removable, with
+// "+N more" beyond a handful and a clear-all action (PLAN.md §9, §17.6). Escape clears the selection.
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import type { AppMount } from '../../contracts/app';
 import type { NodeRef } from '../../model/types';
 import { clearSelection, removeFromSelection, setFocus, useFocus, useRender, useReplica, useSelection } from '../store';
 import { LAYER, useDismissable } from '../keys';
+import { isAreaRef } from '../selectionState';
 import { APP_LOCAL } from '../tunables';
 import { CloseIcon, Pill, PillButton, Strong } from '../ui';
+import { areaName } from '../areas';
 import { unitName } from '../units';
 import './selected.css';
 
@@ -43,6 +45,7 @@ function SelectionPills() {
     if (focus !== null && !shown.includes(focus)) shown = [focus, ...shown.slice(1)];
   }
   const hiddenCount = selection.length - shown.length;
+  const areas = selection.some(isAreaRef);
 
   const show = (ref: NodeRef) => {
     setFocus(ref);
@@ -60,10 +63,12 @@ function SelectionPills() {
   };
 
   return (
-    <div className="gm-selected" role="group" aria-label={`Selection, ${selection.length} ${selection.length === 1 ? 'file' : 'files'}`}>
+    <div className="gm-selected" role="group" aria-label={`Selection, ${selection.length} ${areas ? (selection.length === 1 ? 'item' : 'items') : selection.length === 1 ? 'file' : 'files'}`}>
       <ul className={expanded ? 'gm-selected-list is-expanded' : 'gm-selected-list'} ref={list}>
         {shown.map((ref, at) => {
-          const name = unitName(replica, ref) ?? ref.slice(2);
+          const area = areaName(replica, ref);
+          const name = area?.name ?? unitName(replica, ref) ?? ref.slice(2);
+          const what = area ? (area.kind === 'city' ? `${area.name}, a city` : area.city ? `${area.name}, a district of ${area.city}` : `${area.name}, a district`) : ref.slice(2);
           return (
             <li key={ref}>
               <Pill size="small" active={ref === focus} className="gm-selected-pill">
@@ -71,7 +76,7 @@ function SelectionPills() {
                   type="button"
                   className="gm-selected-name"
                   data-ref={ref}
-                  title={`${ref.slice(2)} (Delete removes it from the selection)`}
+                  title={`${what} (Delete removes it from the selection)`}
                   aria-pressed={ref === focus}
                   onClick={() => show(ref)}
                   onKeyDown={onNameKey(ref, at)}

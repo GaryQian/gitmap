@@ -24,6 +24,7 @@ export function hash32(s: string): number {
  * Sphere radius (PLAN.md §8.1): file size sets it (volume ∝ lines of code) and importance can
  * enlarge it by up to `importanceBoost`, on a curve that keeps the boost for the files that earn it.
  * The one definition shared by physics (collision) and the renderer; nothing else computes a radius.
+ * `loc` is a size in lines: call unitRadiusAt for a unit, so that images and unsupported files are sized by bytes.
  */
 export function unitRadius(loc: number, importancePct: number, visual: Config['visual']): number {
   const { radiusMin: rMin, radiusMax: rMax, sizeScale: k, importanceBoost, importanceCurve } = visual;
@@ -32,12 +33,41 @@ export function unitRadius(loc: number, importancePct: number, visual: Config['v
   return rSize * (1 + importanceBoost * boost);
 }
 
+/** Language id of the image plug-in (src/lang/image). Image units are sized by bytes, not lines. */
+export const IMAGE_LANG = 'image';
+
+export interface UnitSizeColumns {
+  loc: ArrayLike<number>;
+  bytes: ArrayLike<number>;
+  lang: ArrayLike<string>;
+  importancePct: ArrayLike<number>;
+}
+
+/**
+ * True for the units measured in bytes rather than lines: images, and files no language plug-in
+ * claims ('other'), whose line count says little (data, binaries, generated text). Their spheres
+ * are sized by bytes and the chrome shows their size on disk instead of a line count.
+ */
+export function sizedByBytes(lang: string): boolean {
+  return lang === IMAGE_LANG || lang === 'other' || lang === '';
+}
+
+/** Lines of code, or for a unit sized by bytes the line count its size in bytes stands for. */
+export function sizeLines(loc: number, bytes: number, lang: string, visual: Config['visual']): number {
+  return sizedByBytes(lang) ? bytes / visual.imageBytesPerLine : loc;
+}
+
+/** unitRadius of the unit in `slot`. Every sphere of the map is sized through this. */
+export function unitRadiusAt(cols: UnitSizeColumns, slot: number, visual: Config['visual']): number {
+  return unitRadius(sizeLines(cols.loc[slot] ?? 0, cols.bytes[slot] ?? 0, cols.lang[slot] ?? '', visual), cols.importancePct[slot] ?? 0, visual);
+}
+
 /** Largest radius unitRadius can return, for sizing buffers and spatial hashes. */
 export function maxUnitRadius(visual: Config['visual']): number {
   return visual.radiusMax * (1 + visual.importanceBoost);
 }
 
-/** Outward glow strength, 0 below config.visual.glowFromPct rising to 1 at the top percentile. */
+/** Outward glow strength, 0 below config.visual.glowFromPct rising to 1 at the top percentile (which is among the files that have dependents). */
 export function glowAmount(importancePct: number, visual: Config['visual']): number {
   const t = (importancePct - visual.glowFromPct) / (1 - visual.glowFromPct);
   return t <= 0 ? 0 : t >= 1 ? 1 : t;
