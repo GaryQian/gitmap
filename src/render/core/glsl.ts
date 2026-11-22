@@ -32,6 +32,33 @@ vec3 gmUnitCenter(int slot, out vec4 info) {
 }
 /** Language colour (sRGB) of a unit by slot; a = 1 when the slot is in use. */
 vec4 gmUnitColor(int slot) { return texelFetch(uUnitColor, gmTexel(slot), 0); }
+
+// District aggregates on very large maps (PLAN.md §8.1; src/render/quality). uAggregate = [strength
+// 0..1 (0: off, as on every small and medium map), radius of a typical star in device pixels at
+// distance 1, pixel radius below which a district is one aggregate, pixel radius above which every
+// star is drawn]. The same maths runs on the CPU for picking (quality/aggregate.ts): keep the two in step.
+uniform vec4 uAggregate;
+uniform float uAggregateKeep;   // how much glow holds a star back from collapsing, 0..1
+/** A fixed 0..1 value per slot, the same in JavaScript (slotHash). */
+float gmSlotHash(int slot) {
+  uint h = uint(slot) * 2654435761u; h ^= h >> 15; h *= 2246822519u; h ^= h >> 13;
+  return float(h >> 8) / 16777216.0;
+}
+/** How far a district (slots = unit, district, city) has collapsed into its aggregate: 0 = stars only, 1 = aggregate only. */
+float gmAggregate(vec3 slots) {
+  if (uAggregate.x <= 0.0 || slots.y < 0.0 || slots.z < 0.0) return 0.0;
+  vec2 g = gmCity(int(slots.z + 0.5)).xy + gmDistrict(int(slots.y + 0.5)).xy;
+  float px = uAggregate.y / max(distance(cameraPosition, vec3(g.x, 0.0, g.y)), 1e-3);
+  return (1.0 - smoothstep(uAggregate.z, uAggregate.w, px)) * uAggregate.x;
+}
+/**
+ * True when this star has given way to its district's aggregate. Stars leave one by one as the
+ * camera pulls back, in a fixed order per slot; glow (0..1) holds a star back, so the brightest go last.
+ */
+bool gmAggregated(vec3 slots, float glow) {
+  float a = gmAggregate(slots) * (1.0 - glow * uAggregateKeep);
+  return a > 0.0 && a >= gmSlotHash(int(slots.x + 0.5));
+}
 `;
 
 export const GLSL_HASH = /* glsl */ `

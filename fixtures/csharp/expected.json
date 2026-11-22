@@ -57,5 +57,19 @@
     ["src/Shop/Services/IOrderService.cs", "src/Shop/Services/OrderService.cs"],
     ["src/Shop/Data/IRepository.cs", "src/Shop/Data/OrderRepository.cs"],
     ["src/Shop/Util/Guard.cs", "src/Shop/Util/TextExtensions.cs"]
-  ]
+  ],
+  "endToEnd": {
+    "about": "Read by src/lang/fixtures.e2e.test.ts. linked: [src, dst, symbol] joined by the symbol linker with no import statement between the two files (same package, namespace or module). ambiguous: calls whose name has several reachable definitions, so the linker drops them (PLAN.md 6.4). notLinked: a name that belongs to something outside the repo, so no edge from src to dst may carry it.",
+    "linked": [
+      ["src/Shop/Models/Customer.cs", "src/Shop/Models/Order.cs", "Order"],
+      ["src/Shop/Models/Order.cs", "src/Shop/Models/Customer.cs", "Customer"],
+      ["src/Shop/Models/Order.cs", "src/Shop/Models/Money.cs", "Money"],
+      ["src/Shop/Services/OrderService.cs", "src/Shop/Services/IOrderService.cs", "IOrderService"],
+      ["src/Shop/Data/OrderRepository.cs", "src/Shop/Data/IRepository.cs", "IRepository"]
+    ],
+    "ambiguous": [
+      ["src/Shop/Program.cs", "src/Shop/Services/OrderService.cs", "PlaceOrder", "declared by IOrderService.cs and by OrderService.cs, both in a namespace the caller uses"],
+      ["tests/Shop.Tests/OrderServiceTests.cs", "src/Shop/Services/OrderService.cs", "PlaceOrder", "declared by IOrderService.cs and by OrderService.cs, both in a namespace the caller uses"]
+    ]
+  }
 }

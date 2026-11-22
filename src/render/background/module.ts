@@ -103,10 +103,11 @@ export function createBackgroundModule(): SceneModule {
 
   function frame(f: FrameState): void {
     const view = ctx.rig.view, wisps = ctx.config.theme.wisps;
-    // slight parallax against camera movement is what gives the void depth
-    const k = wisps.parallax / RENDER_LOCAL.background.parallaxWorld;
+    // Slight parallax against camera movement is what gives the void depth. Under reduced motion
+    // the background is one still render of the same wisps: no drift, and no parallax either.
+    const k = ctx.reducedMotion ? 0 : wisps.parallax / RENDER_LOCAL.background.parallaxWorld;
     wisp.uPar.value.set(
-      (view.azimuth - RENDER_LOCAL.camera.defaultAzimuth) * wisps.parallax + view.x * k,
+      (view.azimuth - RENDER_LOCAL.camera.defaultAzimuth) * (ctx.reducedMotion ? 0 : wisps.parallax) + view.x * k,
       view.distance * Math.sin(view.elevation) * k - view.z * k,
     );
     wisp.uDrift.value = ctx.reducedMotion ? 0 : wispDrift(wisps, f.time);

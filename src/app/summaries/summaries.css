@@ -31,11 +31,15 @@
   line-height: 1.5;
   letter-spacing: 0.015em;
   animation: gm-summary-in 140ms var(--gm-ease);
+  transition: border-color 140ms var(--gm-ease);
 }
 .gm-card.gm-summary[data-placed] { visibility: visible; }
 /* straight after a neighbour's card, the next one is simply there */
 .gm-card.gm-summary.is-instant { animation: none; }
 @keyframes gm-summary-in { from { opacity: 0; } }
+
+/* Pinned by a click on its pill: the firmer hairline a pill gets while it is hovered or active. */
+.gm-card.gm-summary[data-pinned] { border-color: color-mix(in srgb, var(--gm-text) 34%, transparent); }
 
 .gm-summary-title { margin: 0 0 3px; font-weight: 500; }
 .gm-summary-text { margin: 0; overflow-wrap: anywhere; text-wrap: pretty; }

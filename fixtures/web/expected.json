@@ -30,5 +30,15 @@
     ["src/styles/main.css", "src/styles/mixins/_flex.scss"],
     ["src/styles/_theme.scss", "src/styles/mixins/_flex.scss"]
   ],
-  "external": ["vue", "svelte", "~bootstrap/scss/bootstrap"]
+  "external": ["vue", "svelte", "~bootstrap/scss/bootstrap"],
+  "calls": [
+    ["src/App.vue", "src/utils/format.ts", "formatName"],
+    ["src/App.vue", "src/components/UserCard.vue", "UserCard"],
+    ["src/components/UserCard.vue", "src/utils/format.ts", "formatName"],
+    ["src/widgets/Counter.svelte", "src/utils/format.ts", "formatName"],
+    ["src/widgets/Counter.svelte", "src/widgets/Badge.svelte", "Badge"],
+    ["src/pages/index.astro", "src/utils/format.ts", "formatName"],
+    ["src/pages/index.astro", "src/layouts/Base.astro", "Base"],
+    ["src/pages/index.astro", "src/widgets/Counter.svelte", "Counter"]
+  ]
 }

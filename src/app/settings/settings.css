@@ -8,3 +8,35 @@
   width: 248px;
   z-index: 1;
 }
+
+/* Reset and re-parse: a plain button, then one sentence and Cancel / Reset. */
+.gm-reset-button, .gm-reset-actions .gm-pill { padding: 0 12px; color: var(--gm-text); }
+.gm-reset-button:disabled { color: var(--gm-text-dim); }
+.gm-reset-note { margin: 6px 0 0 2px; font-size: 12px; line-height: 1.45; letter-spacing: 0.03em; color: var(--gm-text-dim); }
+.gm-reset-confirm .gm-reset-note { margin-top: 0; }
+.gm-reset-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 8px; }
+.gm-reset-go { font-weight: 500; border-color: color-mix(in srgb, var(--gm-text) 40%, transparent); }
+
+/* Export: two plain buttons, then (for the package) one or two sentences and Cancel / Export, the
+   progress line, and the result with the line for config.json. Same material as the reset row. */
+.gm-export-choices { display: flex; flex-wrap: wrap; gap: 6px; }
+.gm-export-button, .gm-export-actions .gm-pill { padding: 0 12px; color: var(--gm-text); }
+.gm-export-button:disabled { color: var(--gm-text-dim); }
+.gm-export-note { margin: 6px 0 0 2px; font-size: 12px; line-height: 1.45; letter-spacing: 0.03em; color: var(--gm-text-dim); overflow-wrap: anywhere; }
+.gm-export-confirm > .gm-export-note:first-child,
+.gm-export-confirm > :first-child > .gm-export-note:first-child { margin-top: 0; }
+.gm-export-progress { font-variant-numeric: tabular-nums; }
+.gm-export-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 8px; }
+.gm-export-go { font-weight: 500; border-color: color-mix(in srgb, var(--gm-text) 40%, transparent); }
+/* the line to paste into config.json: selectable, wrapped to the card */
+.gm-export-config {
+  display: block;
+  margin: 4px 0 0 2px;
+  padding: 6px 8px;
+  border: 1px solid var(--gm-hairline);
+  border-radius: 8px;
+  color: var(--gm-text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: all;
+}

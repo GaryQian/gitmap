@@ -36,15 +36,14 @@
 
 .gm-search-clear { margin-right: -8px; }
 
-/* Under the pill, centred on it. */
+/* Under the pill, from its left edge (it sits beside the title, near the window's left). */
 .gm-search-card {
   position: absolute;
   top: calc(100% + 8px);
-  left: 50%;
+  left: 0;
   z-index: 5;
   width: min(420px, calc(100vw - 32px));
   padding: 6px;
-  transform: translateX(-50%);
 }
 
 .gm-search-list {

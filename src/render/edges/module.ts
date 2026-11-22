@@ -10,11 +10,13 @@ import * as THREE from 'three';
 import type { ThemeMode } from '../../config';
 import type { PatchBatch } from '../../model/types';
 import { unitSlotOf } from '../core/anchor';
+import { dominantColors } from '../core/dominant';
+import { drain, pump, type Steps } from '../core/staged';
 import type { BatchInfo, FrameState, RevealInfo, SceneContext, SceneModule } from '../core/types';
-import { allocateBudget, forwardShare, strength01, strongestFirst, type Ribbon } from './aggregate';
+import { allocateBudget, ambientCaps, forwardShare, strength01, strongestFirst, type Ribbon } from './aggregate';
 import { EdgeBuffer } from './buffer';
 import { inView, lodMix, viewChanged, viewCircle, type LodMix, type LodScale } from './lod';
-import { buildEdgeModel, edgesOfDistrict, edgesOfUnit, type EdgeModel } from './model';
+import { buildEdgeModelSteps, edgesOfDistrict, edgesOfUnit, type EdgeModel, type EdgeModelResult } from './model';
 import { EDGE_FRAG, EDGE_VERT, FLASH_FRAG, FLASH_VERT } from './shaders';
 import { EDGE_LOCAL } from './tunables';
 
@@ -61,9 +63,12 @@ export function createEdges(): SceneModule {
   let model: EdgeModel | null = null;
   /** The model changed: rebuild the derived data once batches go quiet. */
   let modelDirty = false, dirtySince = 0, lastBatch = 0;
+  /** A rebuild in progress (model.ts): the previous model keeps drawing until the new one is whole. */
+  let build: { job: Steps; out: EdgeModelResult } | null = null;
+  let buildStarted = 0;
   let selectDirty = true, focusDirty = true, positionsMoved = false;
   let lastView: { x: number; z: number; distance: number } | null = null;
-  let lastSelect = 0, lastQuality = 0;
+  let lastSelect = 0, lastScale = 1;
   let scale: LodScale = { city: 100, district: 30 };
   let hovered = -1;
   let novaSlot = -1, novaUntil = 0;
@@ -140,43 +145,42 @@ export function createEdges(): SceneModule {
   }
 
   // ---- budget ----
-  const qualityFactor = () => Math.pow(EDGE_LOCAL.qualityStep, Math.max(0, ctx.counters.quality));
-  const edgeBudget = () => Math.max(0, Math.floor(ctx.config.render.edgeBudget * qualityFactor()));
+  // Adaptive quality scales what the ambient levels may draw (PLAN.md §8.5: edge count first). The
+  // focus set is never reduced: it may use the whole of config.render.edgeBudget.
+  const edgeScale = () => Math.min(1, Math.max(0, ctx.quality.edgeScale));
+  const fullBudget = () => Math.max(0, Math.floor(ctx.config.render.edgeBudget));
+  const ambientBudget = () => Math.max(0, Math.floor(ctx.config.render.edgeBudget * edgeScale()));
 
   // ---- model ----
-  /** A ribbon end takes the colour of the commonest file type of its district or city. */
-  function dominantColors(group: Int32Array, groups: number): Float32Array {
-    const tally: Map<number, number>[] = Array.from({ length: groups }, () => new Map());
-    const color = ctx.units.color;
-    for (let u = 0; u < group.length; u++) {
-      const g = group[u];
-      if (g < 0 || g >= groups || 4 * u + 3 >= color.length || !color[4 * u + 3]) continue;
-      const key = (color[4 * u] << 16) | (color[4 * u + 1] << 8) | color[4 * u + 2];
-      tally[g].set(key, (tally[g].get(key) ?? 0) + 1);
-    }
-    const out = new Float32Array(groups * 3).fill(0.6);
-    tally.forEach((counts, g) => {
-      let best = -1, most = 0;
-      for (const [key, n] of counts) if (n > most || (n === most && key < best)) { best = key; most = n; }
-      if (best >= 0) { out[3 * g] = ((best >> 16) & 255) / 255; out[3 * g + 1] = ((best >> 8) & 255) / 255; out[3 * g + 2] = (best & 255) / 255; }
-    });
-    return out;
-  }
   const colorOf = (colors: Float32Array, g: number): number[] => [colors[3 * g] ?? 0.6, colors[3 * g + 1] ?? 0.6, colors[3 * g + 2] ?? 0.6];
 
-  function rebuildModel(): void {
-    model = buildEdgeModel(ctx.replica, ctx.config.visual, ctx.state.minBytes, ctx.state.typeFilter);
-    districtColor = dominantColors(model.unitDistrict, model.districtCity.length);
+  /** Start putting the derived data together again: at once, or a slice per frame when the model is large. */
+  function startBuild(nowMs: number): void {
+    const out: EdgeModelResult = { model: null };
+    const job = buildEdgeModelSteps(ctx.replica, ctx.config.visual, ctx.state.minBytes, ctx.state.typeFilter, out);
+    modelDirty = false;
+    buildStarted = nowMs;
+    if (ctx.replica.table('edge').capacity > EDGE_LOCAL.stagedBuildEdges) { build = { job, out }; return; }
+    drain(job);
+    commitModel(out.model!);
+  }
+
+  /** The new model is whole: use it from this frame on. */
+  function commitModel(next: EdgeModel): void {
+    build = null;
+    model = next;
+    // a ribbon end takes the colour of the commonest file type of its district or city
+    districtColor = dominantColors(model.unitDistrict, model.districtCity.length, ctx.units.color);
     const districtCity = model.districtCity;
     districtUnits = new Int32Array(districtCity.length);
     for (const d of model.unitDistrict) if (d >= 0) districtUnits[d]++;
     // slots may have been reassigned by a rebuild: ask the interaction module what is hovered now
     hovered = ctx.service<{ hoveredSlot(): number }>('interaction')?.hoveredSlot() ?? hovered;
     const unitCity = model.unitDistrict.map((d) => (d < 0 ? -1 : districtCity[d]));
-    cityColor = dominantColors(unitCity, ctx.replica.table('city').capacity);
+    cityColor = dominantColors(unitCity, ctx.replica.table('city').capacity, ctx.units.color);
     if (stamp.length < model.capacity) stamp = new Uint32Array(Math.max(model.capacity, stamp.length * 2));
-    modelDirty = false;
     selectDirty = focusDirty = true;
+    ctx.invalidate();
   }
 
   function markModelDirty(): void {
@@ -184,6 +188,9 @@ export function createEdges(): SceneModule {
     if (!modelDirty) dirtySince = now;
     modelDirty = true;
     lastBatch = now;
+    // a build under way is reading tables that just changed: start it again once batches go quiet,
+    // unless it has been running for long (changes keep coming), in which case it finishes and is redone
+    if (build && now - buildStarted < EDGE_LOCAL.rebuildMaxMs) build = null;
     ctx.animate(EDGE_LOCAL.rebuildQuietMs + 100);
   }
 
@@ -274,7 +281,11 @@ export function createEdges(): SceneModule {
     const mix = currentMix(view.distance);
     const circle = viewCircle(view, view.distance);
     const pos = ctx.positions.buffers;
-    const q = qualityFactor();
+    const scaleNow = edgeScale();
+    const caps = ambientCaps(scaleNow, {
+      cityRibbons: m.cityRibbons.length, cityMin: EDGE_LOCAL.cityRibbonsMin, districtRibbons: EDGE_LOCAL.districtRibbons,
+      ambientEdges: ctx.config.render.ambientEdges,
+    });
 
     const cityIn = (c: number) => c >= 0 && 3 * c + 2 < pos.city.length && inView(circle, pos.city[3 * c], pos.city[3 * c + 1], pos.city[3 * c + 2]);
     const districtIn = (d: number) => {
@@ -283,12 +294,12 @@ export function createEdges(): SceneModule {
       return inView(circle, pos.city[3 * c] + pos.district[3 * d], pos.city[3 * c + 1] + pos.district[3 * d + 1], pos.district[3 * d + 2]);
     };
 
-    // far: every city pair (there are few)
-    const cityWanted = mix.city > 0 ? m.cityRibbons : [];
+    // far: every city pair (there are few); the strongest only when quality is reduced
+    const cityWanted = mix.city > 0 ? m.cityRibbons.slice(0, caps.city) : [];
     // mid: district ribbons between districts of the cities in view, strongest first
     const districtWanted: Ribbon[] = [];
     if (mix.district > 0) {
-      const cap = Math.max(1, Math.floor(EDGE_LOCAL.districtRibbons * q));
+      const cap = caps.district;
       const seen = new Map<number, boolean>();
       const visible = (c: number) => { let v = seen.get(c); if (v === undefined) seen.set(c, (v = cityIn(c))); return v; };
       for (const r of m.districtRibbons) {
@@ -303,7 +314,7 @@ export function createEdges(): SceneModule {
       let unitsInView = 0;
       for (let d = 0; d < m.districtCity.length; d++) if (m.districtCity[d] >= 0 && districtIn(d)) { inViewDistricts.push(d); unitsInView += districtUnits[d] ?? 0; }
       // a small ambient set: capped overall, and thinned to a few per file when only a few districts are in view
-      const cap = Math.max(0, Math.floor(Math.min(ctx.config.render.ambientEdges, Math.ceil(unitsInView * EDGE_LOCAL.ambientPerUnit)) * q));
+      const cap = Math.max(0, Math.floor(Math.min(ctx.config.render.ambientEdges, Math.ceil(unitsInView * EDGE_LOCAL.ambientPerUnit)) * scaleNow));
       // each district offers its strongest few; with many in view, no single one may flood the set
       const perDistrict = Math.max(16, Math.ceil((cap * 3) / Math.max(1, inViewDistricts.length)));
       const candidates: number[] = [];
@@ -321,7 +332,9 @@ export function createEdges(): SceneModule {
       fileWanted = strongestFirst(m.rank, cap, candidates);
     }
 
-    const [, cityN, districtN, fileN] = allocateBudget(edgeBudget(), [levels.focus.buffer.count, cityWanted.length, districtWanted.length, fileWanted.length]);
+    // the focus set comes first; the ambient levels share what quality allows of the rest
+    const ambient = Math.min(ambientBudget(), Math.max(0, fullBudget() - levels.focus.buffer.count));
+    const [cityN, districtN, fileN] = allocateBudget(ambient, [cityWanted.length, districtWanted.length, fileWanted.length]);
     fillRibbons(levels.city, cityWanted.slice(0, cityN), time, true);
     fillRibbons(levels.district, districtWanted.slice(0, districtN), time, false);
     if (fileWanted.length > fileN) fileWanted.length = fileN;
@@ -331,7 +344,7 @@ export function createEdges(): SceneModule {
 
     lastView = { ...view };
     lastSelect = performance.now();
-    lastQuality = ctx.counters.quality;
+    lastScale = ctx.quality.edgeScale;
     selectDirty = positionsMoved = false;
   }
 
@@ -357,11 +370,11 @@ export function createEdges(): SceneModule {
       }
     }
     const before = focus.buffer.count;
-    fillFiles(focus, strongestFirst(m.eff, edgeBudget(), candidates), time, unitsInFocus);
+    fillFiles(focus, strongestFirst(m.eff, fullBudget(), candidates), time, unitsInFocus);
     focusDirty = false;
     // the focus set comes first in the budget: if it grew, the ambient levels may have to give way
     const total = focus.buffer.count + levels.city.buffer.count + levels.district.buffer.count + levels.file.buffer.count;
-    if (focus.buffer.count > before && total > edgeBudget()) selectDirty = true;
+    if (focus.buffer.count > before && total > fullBudget()) selectDirty = true;
   }
 
   // ---- module hooks ----
@@ -437,7 +450,12 @@ export function createEdges(): SceneModule {
     const step = ctx.reducedMotion ? 1 : f.dt / EDGE_LOCAL.fadeIn;
     if (revealMix < 1) { revealMix = Math.min(1, revealMix + step * 0.5); ctx.invalidate(); }
 
-    if (modelDirty && (!model || f.nowMs - lastBatch >= EDGE_LOCAL.rebuildQuietMs || f.nowMs - dirtySince >= EDGE_LOCAL.rebuildMaxMs)) rebuildModel();
+    if (modelDirty && !build && (!model || f.nowMs - lastBatch >= EDGE_LOCAL.rebuildQuietMs || f.nowMs - dirtySince >= EDGE_LOCAL.rebuildMaxMs)) startBuild(f.nowMs);
+    if (build) {
+      // a large model: one slice per frame; the previous model keeps drawing until this one is whole
+      if (pump(build.job, ctx.config.render.patchBudgetMs)) commitModel(build.out.model!);
+      else ctx.animate(100);
+    }
     if (!model) return;
 
     if (novaSlot >= 0 && f.nowMs > novaUntil) { novaSlot = -1; focusDirty = true; }
@@ -447,7 +465,7 @@ export function createEdges(): SceneModule {
     let mix = currentMix(view.distance);
     const unfilled = (mix.city > 0 && !levels.city.filled) || (mix.district > 0 && !levels.district.filled) || (mix.file > 0 && !levels.file.filled);
     const moved = positionsMoved && f.nowMs - lastSelect >= EDGE_LOCAL.hotReselectMs;
-    if (selectDirty || unfilled || moved || ctx.counters.quality !== lastQuality || viewChanged(lastView, view)) {
+    if (selectDirty || unfilled || moved || ctx.quality.edgeScale !== lastScale || viewChanged(lastView, view)) {
       select(view, f.time);
       mix = currentMix(view.distance);
     }
@@ -484,6 +502,7 @@ export function createEdges(): SceneModule {
     for (const m of materials) m.dispose();
     meshes.length = materials.length = unsubscribe.length = 0;
     model = null;
+    build = null;
     ctx.counters.edgesDrawn = 0;
   }
 

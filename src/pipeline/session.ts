@@ -1,12 +1,11 @@
 // The main-thread Session: a view replica, the physics client, the renderer once a canvas is
 // attached, and a coordinator worker that does everything else (PLAN.md §3). Lead-owned.
 import type { Config } from '../config';
-import { demoSource, directorySource } from '../content';
+import { directorySource, openPackage, readPackage, type OpenedPackage } from '../content';
 import type { ContentSource } from '../contracts/git';
 import type { PhysicsApi } from '../contracts/physics';
 import type { PipelineEvents, RepoSource, SearchHit, Session, StageInfo } from '../contracts/pipeline';
 import type { RenderApi } from '../contracts/render';
-import type { ModelReplica } from '../contracts/store';
 import { createReplica } from '../model';
 import type { PatchBatch, RepoModel } from '../model/types';
 import { createPhysicsClient } from '../physics';
@@ -14,25 +13,18 @@ import { createRenderer } from '../render';
 import { Emitter } from '../shared';
 import type { CoordinatorCalls, CoordinatorMethod, FromCoordinator, MainCalls, ToCoordinator } from './protocol';
 
-/**
- * Where file contents come from (PLAN.md §12.1): the user's folder, or a demo's content pack read one
- * entry at a time and checked against the blob ids the map recorded. Null when there is neither.
- */
-function contentFor(source: RepoSource, replica: ModelReplica): ContentSource | null {
-  if (source.kind === 'directory') return directorySource(source.locator);
-  if (source.kind === 'snapshot') return source.locator ? directorySource(source.locator) : null;
-  if (source.kind === 'demo') {
-    const files = replica.table('file');
-    const base = typeof location === 'undefined' ? source.baseUrl : new URL(source.baseUrl, location.href).href;
-    return demoSource(base, {
-      oidOf(path) {
-        const slot = files.slotOf(path);
-        return slot >= 0 ? files.cols.oid[slot] || null : null;
-      },
-    });
-  }
-  return null;
+/** A package's files, before the package itself is open: every call waits for it. */
+function packageContent(opening: () => Promise<OpenedPackage>): ContentSource {
+  let opened: OpenedPackage | null = null;
+  const pkg = async () => (opened ??= await opening());
+  return {
+    read: async (ref) => (await pkg()).content.read(ref),
+    progress: () => opened?.content.progress() ?? { loaded: 0, total: null, done: false },
+    has: (path) => opened?.content.has(path) ?? null,
+  };
 }
+
+const megabytes = (bytes: number): string => (bytes / 1e6).toFixed(1);
 
 export function createBrowserSession(source: RepoSource, config: Config): Session {
   const events = new Emitter<PipelineEvents>();
@@ -48,7 +40,43 @@ export function createBrowserSession(source: RepoSource, config: Config): Sessio
   let disposed = false;
   let worker: Worker | null = null;
   let started: Promise<void> | null = null;
-  let content: ContentSource | null = contentFor(source, replica);
+  /** The blob id the map recorded for a path: what a package's files are checked against. */
+  const oidOf = (path: string): string | null => {
+    const files = replica.table('file');
+    const slot = files.slotOf(path);
+    return slot >= 0 ? files.cols.oid[slot] || null : null;
+  };
+  // A demo is one package (plan/DEMO-MODE.md §4): the page downloads it once, hands the map to the
+  // coordinator as soon as that part has arrived, and keeps the files, which go on arriving.
+  let demo: Promise<OpenedPackage> | null = null;
+  const openDemo = (): Promise<OpenedPackage> => {
+    if (source.kind !== 'demo') return Promise.reject(new Error('This map is not a demo.'));
+    demo ??= openPackage(typeof location === 'undefined' ? source.url : new URL(source.url, location.href).href, {
+      oidOf,
+      onProgress(loaded, total) {
+        if (disposed || revealed) return;
+        stage = { stage: 'structure', label: total ? `Downloading demo ${megabytes(loaded)} / ${megabytes(total)} MB` : `Downloading demo ${megabytes(loaded)} MB`, done: loaded, total: total ?? undefined };
+        events.emit('stage', stage);
+      },
+    });
+    return demo;
+  };
+  let dropped: Promise<OpenedPackage> | null = null;
+  /**
+   * Where file contents come from (PLAN.md §12.1): the user's folder, or the package the map came
+   * in, checked against the blob ids the map recorded. Null when there is neither.
+   */
+  function contentFor(): ContentSource | null {
+    if (source.kind === 'directory') return directorySource(source.locator);
+    if (source.kind === 'snapshot') {
+      if (source.locator) return directorySource(source.locator);
+      const file = source.package;
+      return file ? packageContent(() => (dropped ??= readPackage(file, { oidOf }))) : null;
+    }
+    if (source.kind === 'demo') return packageContent(openDemo);
+    return null;
+  }
+  let content: ContentSource | null = contentFor();
   /** Tell the coordinator the page was hidden, so a snapshot that is waiting gets written (PLAN.md §12). */
   const onVisibility = () => { if (document.visibilityState === 'hidden') send({ type: 'hidden' }); };
 
@@ -73,6 +101,10 @@ export function createBrowserSession(source: RepoSource, config: Config): Sessio
     // landed before the coordinator goes on to the reveal.
     loadLayout: async (layout) => { physics.loadLayout(layout); await physics.getLayout(); },
     getLayout: () => physics.getLayout(),
+    demoPackage: async () => {
+      const { manifest, map } = await openDemo();
+      return { manifest, map };
+    },
   };
 
   function onBatch(batch: PatchBatch): void {
@@ -218,6 +250,10 @@ export function createBrowserSession(source: RepoSource, config: Config): Sessio
     async exportModel(): Promise<RepoModel> {
       return call('exportModel', await physics.getLayout());
     },
+    // only a map with its folder beside it has files to read back
+    ...((source.kind === 'directory' || (source.kind === 'snapshot' && source.locator)) && {
+      readFiles: (paths: string[]) => call('readFiles', paths),
+    }),
     dispose() {
       disposed = true;
       if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisibility);

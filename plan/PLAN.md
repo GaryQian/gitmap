@@ -433,9 +433,13 @@ The library's README reports about 1 second for 50k nodes and 1M edges, well ins
 Graph preparation, informed by how the reference behaves:
 
 - **Symmetrise.** The reference rejects directed graphs. Clustering uses `w(u,v) = w(u→v) + w(v→u)`; direction is kept in the model for pulses, importance and reach.
-- **Orphans.** Isolated nodes stay singletons, and a graph with no edges returns all singletons. Config, docs and data files often have no code edges, so weak "same directory" affinity edges (`clustering.directoryAffinity`, default 0.1) are added to the clustering graph only.
+- **Orphans.** Isolated nodes stay singletons, and a graph with no edges returns all singletons. Config, docs and data files often have no code edges, so weak "same directory" affinity edges (`clustering.directoryAffinity`, default 0.3) are added to the clustering graph only.
 - **Hub suppression.** For clustering only, an edge into a node is down-weighted by the log of that node's in-degree, so one logging utility does not glue the repo into a single city.
-- **Path bias (available, off by default).** `clustering.pathBias` multiplies a code edge by `1 + pathBias × proximity`, where proximity is the share of the deeper file's directory chain that both files have in common: 1 in the same directory, 1/2 for sibling directories two levels down, 0 when nothing is shared. Edges across trees are never reduced, so strong coupling across trees still wins. Measured with `scripts/bench/pathbias.ts` on 2026-11-21, it did little: on react the share of each second-level directory kept in one city rose from 0.63 to 0.69–0.70 at a bias of 2–4, but on flutter and GitViz the change was within run-to-run noise. Reweighting edges that are mostly already inside a community does not move much, because modularity compares against a baseline that grows with the same weights. Keeping directory trees together more firmly has to come from the directory ties (`directoryAffinity` and the hub structure) or from the merge step, not from this multiplier.
+- **Path bias (available, off by default).** `clustering.pathBias` multiplies a code edge by `1 + pathBias × proximity`, where proximity is the share of the deeper file's directory chain that both files have in common: 1 in the same directory, 1/2 for sibling directories two levels down, 0 when nothing is shared. Edges across trees are never reduced, so strong coupling across trees still wins. Measured with `scripts/bench/pathbias.ts` on 2026-11-21, it did little: on react the share of each second-level directory kept in one city rose from 0.63 to 0.69–0.70 at a bias of 2–4, but on flutter and GitViz the change was within run-to-run noise. Reweighting edges that are mostly already inside a community does not move much, because modularity compares against a baseline that grows with the same weights. Two follow-up measurements on react, same script and day:
+  - **Merge-step bias** (`clustering.mergePathBias`, also off by default): when a community is merged away, a neighbour's score is multiplied by `1 + bias × closeness` of the two communities' dominant directories. Second-level directories kept in one city rose from 0.645 to 0.672 at a bias of 2, and no further at 4. A small gain, with no growth in the largest city.
+  - **Directory ties** (the existing `directoryAffinity`): raising it from 0.1 to 0.5 lifted the same figure from 0.645 to 0.778, and 1.5 gave 0.797. This is the lever that works. Its cost is a bigger largest city (30% of files at 0.1, 41% at 0.5) and districts that respect dependencies less (0.58 → 0.54 of edge weight kept inside a district); the share of edge weight kept inside cities barely moved (0.86 → 0.85).
+  - So the way to keep directory trees together more firmly is a stronger `directoryAffinity`, chosen together with the balance rules that hold giants back. The two multipliers are minor refinements.
+  - **Decided 2026-11-21: `directoryAffinity` is 0.3.** That value sits between the two measured ones (0.1 and 0.5) and was not itself measured.
 - **Tests.** Fixture graphs are run through python-louvain offline; our partitions must reach modularity within a tolerance of the reference's (not identical partitions, since the random sequences differ). One test pins the direction of `resolution`.
 
 **City count.** `K = round(citiesPerDecade · log10(files) + cityOffset)`, defaults `3.5` and `−2.2`, both in config:
@@ -799,6 +803,26 @@ interface Tour { id; steps: { parent: UnitRef; frame: 'file' | 'district' | 'cit
 - **Abuse:** rate limits only. The `/api/ai/*` routes get a per-IP request limit (a Vercel Firewall rule or a small Redis-backed limiter), a hard cap on input tokens per request, and a cap on detail calls per repo digest. A spend limit on the provider account is the backstop. The provider interface leaves room for a passcode or bring-your-own-key later.
 - Demo snapshots ship with AI annotations pre-generated, including every point of interest's detail cards, so demo mode needs no key and makes no model calls.
 
+### 11.5 Chat assistant (decided 2026-11-21)
+
+Once AI is enabled for a repo, a **Chat** pill appears at the bottom centre. It opens the right-edge side panel on a **Chat** tab, beside the File tab.
+
+- **Purpose: informational.** The assistant answers questions about the repo for someone who knows code but not this codebase. It cannot change the repo. It follows the same writing rule as the tour: architecture and behaviour, no narrated link counts unless asked.
+- **Model:** the mid tier (`ai.models.chat`: `claude-sonnet-5-5`, or `gpt-6.1-terra`).
+- **Context when needed.** Each request carries a compact overview of the map (cities with their summaries, sizes, languages), cached as a prompt prefix. Everything else is fetched by the model through tools, so a question about one file does not pay for the whole repo.
+- **Tools run in the browser.** The repo exists only in the page, so the model's tool calls come back to the page, which executes them and sends the results with the next request; the server stays a stateless proxy that streams the reply (`POST /api/ai/chat`, server-sent events). An MCP server was considered and set aside: a provider can only call an MCP server it can reach over the network, and there is none to reach. The catalogue uses MCP's tool shape (name, description, input schema), so the same tools could be served over MCP later, for example to let a desktop assistant drive the map.
+
+| Kind | Tools |
+|---|---|
+| Look things up | `get_repo_overview`, `list_area`, `search_files`, `get_file`, `get_dependencies`, `read_file`, `get_notes`, `get_view_state` |
+| Drive the map | `set_overlay`, `select`, `clear_selection`, `focus_on`, `open_file`, `set_filters`, `reset_view` |
+
+- **The map follows the answer.** When an answer points at a file, the view zooms to it: the assistant is told to fly there (or to select and frame a small group), and if it did not, the panel does it from the file paths the answer mentions. One file is selected and framed; several are selected together and framed as a group. The view is left alone when the user moved it themselves in the meantime.
+- **What the assistant does is always visible.** Each action on the map is a one-line entry in the transcript ("Turned on the Recency overlay", "Selected 14 files in Rendering"); look-ups show a quiet progress line. File paths in an answer are buttons that select the file and fly to it.
+- **Limits.** A bounded number of tool steps per message, a size budget per tool result, the same per-IP rate limit and input cap as the other routes, and a Stop button. The conversation lasts for the visit and is not saved.
+- **Consent.** Chat is offered only when AI notes are allowed for the repo. `read_file` sends the lines it reads to the provider; that is covered by the same consent.
+
+
 ---
 
 ## 12. Persistence, export, demo
@@ -807,40 +831,41 @@ interface Tour { id; steps: { parent: UnitRef; frame: 'file' | 'district' | 'cit
 - **Snapshot:** the gzipped model in the Origin Private File System, one file per repo, written at the reveal and after each later stage (debounced). The layout cache is included.
 - **Registry:** IndexedDB records `{ id, name, remoteUrl, directoryHandle, headOid, indexChecksum, schema, lastOpened }`. `name` and `remoteUrl` are what the landing page's repo pills show (§17.7). `navigator.storage.persist()` is requested.
 - **Return visit:** the snapshot loads and renders immediately, untouched. Folder permission is requested in the background; if `indexChecksum` differs, the top bar offers "N files changed · Update" (§6.8).
-- **Export / import:** the same `.starmap.json.gz` file, downloaded or dropped onto the landing page.
-- **Demo mode (M3):** two pre-parsed, permissively licensed open-source repos, one around 200 files and one around 5,000, each shipped as a snapshot plus a content pack of the actual files (§12.1). Exact repos chosen at M3.
+- **Export / import:** from the settings card, in two forms. "Map and files" writes a package, `<name>.starmap.zip`: the map and the text of its files (§12.1). "Map only" writes the `.starmap.json.gz` file, which holds no file contents. Either can be dropped onto the landing page.
+- **Demo mode:** Flutter, TensorFlow, React and this app's own repo, each shipped as one package that the app itself exported (§12.1, and `plan/DEMO-MODE.md` for the full design).
 - Bumping `schema` or `parserVersion` invalidates snapshots cleanly.
 
-### 12.1 Demo mode: the map plus the real files, no history
+### 12.1 Packages and demo mode: the map plus the real files, no history
 
-A demo is two static files per repo, built ahead of time and served from the app's own origin:
+A package is one file, `<name>.starmap.zip`, written by the app's own Export button. A demo is a package the app opens from the list in `config.demo.repos`; the same file dropped on the landing page opens as an ordinary import. The full design, with the decisions behind it, is in `plan/DEMO-MODE.md`.
 
-| File | Contents | Loaded |
-|---|---|---|
-| `snapshot.starmap.json.gz` | The parsed model: files, edges, cities, districts, settled layout, overlay layers, pre-generated AI annotations | When the demo pill is clicked |
-| `content.zip` | The actual text of every file on the map, at the exact commit that was parsed | One file at a time, when a file is opened |
+| Entry | Contents |
+|---|---|
+| `starmap.json` | A small manifest: repo name, source URL, commit, licence, export time, parser version, how complete the AI work is |
+| `map.starmap.json.gz` | The model: files, edges, cities, districts, settled layout, overlay layers, AI annotations including every detail card |
+| `files/<path>` | The text of the files on the map, at the commit that was parsed, plus the repo's licence and notice files |
 
-**What is in the content pack**
+**What is in the files**
 
-- Every file that has a sphere and is text: source, config, markdown. The bytes are the committed blobs, so they match what the parser saw line for line.
+- Every file that has a sphere and is text. The bytes are the committed blobs, so they match what the parser saw line for line; each is checked against the blob id the map recorded, when written and again when read.
 - The repo's `LICENSE` and `NOTICE` files, always, since permissive licences require the notice to travel with the code.
-- Not included: the `.git` directory and any commit history, binary assets, files over `parser.maxFileBytes`, and anything excluded from the map.
+- Not included: the `.git` directory and any commit history, binary files, files over `parser.maxFileBytes`.
+- **Trimming.** A package has a size budget (`demo.package.maxBytes`) and an optional line floor (`demo.package.minLines`). Files are written most important first; what does not fit is left out. A trimmed file keeps its sphere, and the sidebar says "This file is not included in the demo." when it is opened.
 
-**Why a zip, read one entry at a time**
+**Loading: the map first, then the files as one download**
 
-- A zip compresses each file separately and ends with a directory of byte offsets. The app fetches that directory once, then fetches only the bytes of the file being opened with an HTTP range request and inflates them with the browser's built-in decompressor. Opening one 5 KB file downloads about 2 KB, not the whole pack.
+- The package is fetched with one request. Its first two entries are the manifest and the map, so the map is on screen after the first few megabytes; the rest of the same response is the files, which go on arriving in the background. A file opened before they are all in waits, with a "Downloading the demo's files" line.
+- The whole package is kept in the browser's cache, so reopening is instant and works offline. A rebuilt package (a different validator from the host) replaces the cached one.
 - **Not one static asset per source file.** Serving a demo repo's `.html` and `.js` files from the app's origin would let a link execute that repo's code with access to the origin's storage, which holds the user's own saved repos. Inside a zip, repo content is never a navigable document.
-- Opened files are kept in the browser's cache, so reopening is instant and works offline.
-- **Fallback:** if the host does not honour range requests, the whole zip is downloaded in the background on the first file open and cached. *Range support on Vercel's static hosting is to be verified at M3.*
-- The snapshot already stores each file's blob hash, so the reader verifies that what it fetched is the version that was parsed.
-
-Expected size, from the pack measurements in §6.3.1: roughly a quarter of the raw source, so about 6–8 MB for a 5,000-file repo. This is an estimate until a demo is built.
 
 **No history, but the history overlays still work** (decided)
 
-- Recency, Ownership and Knowledge risk are stored in the snapshot as finished per-file values. Those are aggregates computed at build time; no commits, trees or diffs are shipped.
-- Contributor email addresses are stripped from the snapshot. Names are kept so the Ownership picker works.
+- Recency, Ownership and Knowledge risk are stored in the map as finished per-file values. Those are aggregates; no commits, trees or diffs are shipped.
+- Contributor email addresses are stripped from every exported package. Names are kept so the Ownership picker works.
 - Unavailable in a demo, and hidden rather than shown disabled: blame for one file, "N files changed · Update", the working-tree check.
+- A demo makes no model calls: its summaries, points of interest, tour and detail cards are in the package.
+
+**A demo never blocks the same repo opened locally.** A demo's id is `demo:<name>`, taken from the demo list and never from the repo it is of, so it shares no saved map, registry record or AI consent with a local clone. The landing page lists both, each as its own pill; the demo's carries a "Demo" tag, as does the title pill of an open demo.
 
 **One way to read a file, three sources**
 
@@ -848,22 +873,21 @@ Expected size, from the pack measurements in §6.3.1: roughly a quarter of the r
 interface ContentSource { read(file: NodeRef): Promise<Uint8Array> }
 // DirectorySource  — the user's working tree (sidebar, AI detail buttons)
 // PackSource       — git packfile blobs (the parser, §6.3.1)
-// DemoSource       — one zip entry by range request
+// PackageContent   — a package's files (a demo, or a dropped package)
 ```
 
-The sidebar and the AI detail buttons ask a `ContentSource` and never know which one they have, so demo mode adds no special cases to the interface.
+The sidebar and the AI detail buttons ask a `ContentSource` and never know which one they have.
 
-**Building a demo** (`scripts/build-demo.ts`, run by a developer)
+**Making a demo**
 
-1. Take a local clone and a commit.
-2. Run the same parse, cluster and layout pipeline in Node. The spikes already run the scanners and git readers unchanged in Node.
-3. Walk history once to compute the overlay layers, then discard it.
-4. Generate AI summaries, points of interest, the tour and each point of interest's detail cards with the developer's key, so the demo makes no model calls.
-5. Write the snapshot and the zip into `public/demo/<name>/`, and record the source URL, commit and licence in the snapshot.
+1. Open the repo's folder in the app, at the commit the demo should show; apply the refined structure and load the full history if offered.
+2. Allow AI and let the summaries, points of interest and tour finish.
+3. Settings → Export → "Map and files". The export writes the remaining detail cards, packs the files and saves the package, and prints the line to add to `config.demo.repos`.
+4. Put the file in `public/demo/`.
+
+`scripts/build-demo.ts` runs the same pipeline and the same writer in Node, without the AI step: for test fixtures, and as the fallback for a repo too large to export from a tab.
 
 The demo shows its source, commit and licence in the repo info card opened from the title pill.
-
-**Related, not decided:** the same two-file format would let a user export a map *with* its files, to share a fully browsable map with a colleague. Today's export contains no file contents, and opening one shows "Choose the repo folder to view files" in the sidebar.
 
 ---
 
@@ -891,7 +915,7 @@ One file, typed and validated at build, imported by client and server. Secrets a
   "clustering": { "citiesPerDecade": 3.5, "cityOffset": -2.2, "minCities": 1, "maxCities": 20,
                   "districtsPerDecade": 3.5, "districtOffset": -2.2, "minDistrictSize": 5,
                   "sizeBias": 0.5, "districtSizeBias": 1, "splitModularity": 0.3, "mergeCoupling": 0.4, "countSlack": 1.5, "districtCountSlack": 2.5,
-                  "resolution": 1.0, "seed": 1, "directoryAffinity": 0.1, "hubDamping": true },
+                  "resolution": 1.0, "seed": 1, "directoryAffinity": 0.3, "pathBias": 0, "mergePathBias": 0, "hubDamping": true },
   "physics":    { "sliceMs": 8, "reheat": 0.3, "velocityDecay": 0.6, "settleTicks": 150,
                   "city":     { "gap": 40, "linkStrength": 0.5, "charge": -60, "gravity": 0.02 },
                   "district": { "pad": 6, "linkStrength": 0.6, "externalPull": 0.15, "lloyd": 0.1 },

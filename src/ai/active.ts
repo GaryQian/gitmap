@@ -1,4 +1,4 @@
-// Which AI provider is in use, and its three model tiers. Browser-safe: the page needs the answer
+// Which AI provider is in use, and the model of each tier. Browser-safe: the page needs the answer
 // for the digest hash and the reduce timing, the server for choosing its adapter and the model of
 // each call, and both must agree. This file must not import ./server (which pulls in the provider SDK).
 import type { Config } from '../config';
@@ -6,7 +6,10 @@ import type { ModelRole } from '../contracts/ai';
 
 export type AiEnv = Record<string, string | undefined>;
 
-/** One model id per tier (see `ModelRole`): summaries → bulk, tour → tour, the rest → synthesis. */
+/**
+ * One model id per role (see `ModelRole`). The annotations use three tiers: city summaries → bulk,
+ * the tour → tour, points of interest and detail answers → synthesis. `chat` is the chat assistant's.
+ */
 export type TierModels = Record<ModelRole, string>;
 
 export interface ActiveAi {
@@ -27,12 +30,14 @@ export function resolveProviderId(env: AiEnv, config: Config): string {
 }
 
 /**
- * The model id of each tier from one provider's block in config.json (`ai.models`,
+ * The model id of each role from one provider's block in config.json (`ai.models`,
  * `ai.openaiModels`). A block written before the tour had its own tier has no `tour` key: the tour
- * then stays on the synthesis model, as it was.
+ * then stays on the synthesis model, as it was. A block without `chat` uses the tour's model for it
+ * (both are the mid tier).
  */
-export function tierModels(block: { synthesis: string; bulk: string; tour?: string }): TierModels {
-  return { synthesis: block.synthesis, tour: block.tour?.trim() || block.synthesis, bulk: block.bulk };
+export function tierModels(block: { synthesis: string; bulk: string; tour?: string; chat?: string }): TierModels {
+  const tour = block.tour?.trim() || block.synthesis;
+  return { synthesis: block.synthesis, tour, chat: block.chat?.trim() || tour, bulk: block.bulk };
 }
 
 /** Vite defines `import.meta.env` in the page and its workers; plain Node has none. */

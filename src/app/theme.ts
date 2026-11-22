@@ -18,6 +18,8 @@ const QUIET_TEXT_MIX = 0.56;
 const STRONG_STEP = 0.6;
 /** The fill behind a selected segment or legend row: the text colour at this opacity (ui.css, legend.css). */
 const SELECTED_FILL = 0.14;
+/** The most of an overlay's own colour that tints the fill of its active pill. */
+const ACCENT_TINT = 0.22;
 
 function linear(c: number): number {
   return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
@@ -184,6 +186,57 @@ export function contrastChecks(mode: ThemeMode, theme: Config['theme'] = config.
     check('link text on the sidebar', link, c.sidebar, body),
     check('focus ring on the sidebar', c.halo, c.sidebar, GRAPHIC_CONTRAST),
   ];
+}
+
+// ---- an overlay's own colour in the chrome: the pill of the overlay that is on ----
+
+/** The fill of an active overlay pill, over the worst backdrop: `tint` of the overlay's colour in the strong material. */
+function accentFill(mode: ThemeMode, theme: Config['theme'], accent: Rgb, tint: number): Rgb {
+  const c = palette(mode, theme);
+  return over(accent, tint, over(c.surface, strongOpacity(mode, theme), c.backdrop));
+}
+
+/**
+ * How much of the overlay's colour goes into the fill of its active pill: ACCENT_TINT, or less where
+ * that much would leave the pill's text short of 4.5:1 over the worst backdrop.
+ */
+export function accentTint(mode: ThemeMode, accent: string, theme: Config['theme'] = config.theme): number {
+  const text = hexToRgb(theme[mode].text);
+  const color = hexToRgb(accent);
+  let percent = Math.round(ACCENT_TINT * 100);
+  while (percent > 0 && contrastRatio(text, accentFill(mode, theme, color, percent / 100)) < PILL_TEXT_CONTRAST) percent--;
+  return percent / 100;
+}
+
+/**
+ * The overlay's colour as a mark on its active pill (the dot, the ring): the colour itself where it
+ * stands out 3:1 from the tinted fill, otherwise moved toward the text colour until it does.
+ */
+export function accentMark(mode: ThemeMode, accent: string, theme: Config['theme'] = config.theme): Rgb {
+  const color = hexToRgb(accent);
+  const fill = accentFill(mode, theme, color, accentTint(mode, accent, theme));
+  return mixUntil(color, hexToRgb(theme[mode].text), (mark) => contrastRatio(mark, fill) >= GRAPHIC_CONTRAST);
+}
+
+/** The contrast of an active overlay pill wearing `accent`, over the worst backdrop. `name` says whose colour it is. */
+export function accentChecks(mode: ThemeMode, name: string, accent: string, theme: Config['theme'] = config.theme): ContrastCheck[] {
+  const fill = accentFill(mode, theme, hexToRgb(accent), accentTint(mode, accent, theme));
+  return [
+    { what: `text on the active ${name} pill`, ratio: contrastRatio(hexToRgb(theme[mode].text), fill), min: PILL_TEXT_CONTRAST },
+    { what: `the ${name} colour as the dot and ring of its pill`, ratio: contrastRatio(accentMark(mode, accent, theme), fill), min: GRAPHIC_CONTRAST },
+  ];
+}
+
+/**
+ * What the overlays feature writes on :root while an overlay is on (overlays.css reads them): its
+ * colour, how much of it tints the active pill, and the colour of the marks on that pill.
+ */
+export function accentVariables(mode: ThemeMode, accent: string, theme: Config['theme'] = config.theme): Record<string, string> {
+  return {
+    '--gm-overlay-accent': accent,
+    '--gm-overlay-tint': `${Math.round(accentTint(mode, accent, theme) * 100)}%`,
+    '--gm-overlay-mark': rgba(accentMark(mode, accent, theme)),
+  };
 }
 
 function rgba(color: string | Rgb, alpha = 1): string {

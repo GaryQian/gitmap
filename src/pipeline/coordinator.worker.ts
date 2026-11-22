@@ -13,7 +13,7 @@ import type { LayoutSnapshot } from '../model/types';
 import { memoryBlobStore, openPersistence, opfsBlobStore, type PersistentFactsCache } from '../persist';
 import { createPipelineAi, type PipelineAi } from './ai';
 import { runSource, type PipelineDeps, type PipelineState } from './core';
-import type { PipelinePersistence } from './persist';
+import { HISTORY_DIR, type PipelinePersistence } from './persist';
 import type { CoordinatorCalls, FromCoordinator, MainCalls, MainMethod, ToCoordinator } from './protocol';
 import { createPipelineSearch, type PipelineSearch } from './search';
 
@@ -26,6 +26,7 @@ let state: PipelineState | null = null;
 let deps: PipelineDeps | null = null;
 let search: PipelineSearch | null = null;
 let ai: PipelineAi | null = null;
+let readFiles: ((paths: string[]) => Promise<(Uint8Array | null)[]>) | null = null;
 
 // ---- requests to the main thread ----
 let nextId = 1;
@@ -45,8 +46,6 @@ function emit<E extends keyof PipelineEvents>(evt: E, payload: PipelineEvents[E]
 // ---- local storage (PLAN.md §12), opened once; in-memory where the browser offers none ----
 interface LocalStorage extends PipelinePersistence { facts: PersistentFactsCache }
 let storage: Promise<LocalStorage> | null = null;
-/** The OPFS directory beside `snapshots/` that holds each repo's history facts. */
-const HISTORY_DIR = 'history';
 function openStorage(): Promise<LocalStorage> {
   // openPersistence never rejects: without OPFS and IndexedDB (private browsing) it hands back
   // in-memory twins, and the page works the same, minus the return visit.
@@ -100,6 +99,11 @@ const calls: { [M in keyof CoordinatorCalls]: (...args: Parameters<CoordinatorCa
     return ai ? ai.detail(poiId, question, fileText) : { failure: null };
   },
   aiCancel() { ai?.cancel(); },
+  async readFiles(paths) {
+    if (!deps || !state) throw new Error('The map has not finished loading.');
+    readFiles ??= (await import('./exportFiles')).createFileReader(deps, state);
+    return readFiles(paths);
+  },
 };
 
 async function start(source: RepoSource, config: Config): Promise<void> {
@@ -120,10 +124,13 @@ async function start(source: RepoSource, config: Config): Promise<void> {
         getLayout: () => askMain('getLayout'),
       },
       openRepo: openRepoAccess,
-      async loadDemo(baseUrl) {
-        const res = await fetch(new URL('snapshot.starmap.json.gz', new URL(baseUrl, scope.location.href)));
-        if (!res.ok) throw new Error(`Could not load the demo (${res.status}).`);
-        return decodeModel(new Uint8Array(await res.arrayBuffer()));
+      // The page downloads the package (it keeps the files); the map comes here to be decoded.
+      // A demo's identity comes from the demo list, never from the repo it is of (plan/DEMO-MODE.md §6).
+      async loadDemo(demo) {
+        const { manifest, map } = await askMain('demoPackage');
+        const model = await decodeModel(map);
+        const { sourceUrl, commit, license, exportedAt } = manifest;
+        return { ...model, meta: { ...model.meta, id: `demo:${demo.name}`, source: 'demo', demo: { sourceUrl, commit, license, exportedAt } } };
       },
       cache: local?.facts,
       persist: local ?? undefined,

@@ -46,5 +46,15 @@
     ["Sources/App/Checkout.swift", "Sources/App/ReceiptPrinter.swift"],
     ["Tests/CoreTests/CartTests.swift", "Tests/CoreTests/Fixtures.swift"],
     ["Tests/CoreTests/CartTests.swift", "Tests/CoreTests/MoneyTests.swift"]
-  ]
+  ],
+  "endToEnd": {
+    "about": "Read by src/lang/fixtures.e2e.test.ts. linked: [src, dst, symbol] joined by the symbol linker with no import statement between the two files (same package, namespace or module). ambiguous: calls whose name has several reachable definitions, so the linker drops them (PLAN.md 6.4). notLinked: a name that belongs to something outside the repo, so no edge from src to dst may carry it.",
+    "linked": [
+      ["Sources/App/Checkout.swift", "Sources/Core/Pricing/PriceRule.swift", "PercentOff"],
+      ["Sources/App/Checkout.swift", "Sources/App/Receipt.swift", "Receipt"],
+      ["Sources/Core/Money.swift", "Sources/Core/Core.swift", "Core"],
+      ["Sources/Core/Core.swift", "Sources/Core/Currency.swift", "Currency"],
+      ["Tests/CoreTests/CartTests.swift", "Sources/Core/Money.swift", "Money"]
+    ]
+  }
 }

@@ -1,9 +1,12 @@
 // Particles (PLAN.md §8.4, §8.6): two GPU point pools, both stateless functions of time.
 //   ambient  stellar wind (motes bound to a host sphere chosen in proportion to importance) and
 //            sparse void dust through the volume. Off when particles are disabled or motion is reduced.
+//            The wind is importance shown in file-type colours, so it fades out while an overlay
+//            shows (PLAN.md §8.1, §8.6); the dust is neutral and stays.
 //   bursts   each burst is a spawn time, an origin and a seed. 'select': a core flash, a ring of
 //            particles in the type colour and a shockwave across the ground. 'open': a nova and a
 //            brief column of light. Plus a small flash per sphere as it ignites at the reveal.
+//            A burst takes the star's overlay colour while an overlay shows. None under reduced motion.
 import * as THREE from 'three';
 import type { ThemeMode } from '../../config';
 import type { NodeRef, PatchBatch } from '../../model/types';
@@ -12,6 +15,8 @@ import { unitSlotOf } from '../core/anchor';
 import { makeSlotTexture, slotTexHeight, SLOT_TEX_WIDTH } from '../core/positions';
 import { RENDER_LOCAL } from '../core/tunables';
 import type { BatchInfo, FrameState, RevealInfo, SceneContext, SceneModule } from '../core/types';
+import { effectColor } from '../overlay/color';
+import type { SpheresApi } from '../spheres/module';
 import { chooseHosts, windWeight } from './hosts';
 import { AMBIENT_VERT, BURST_VERT, IGNITE_FRAG, IGNITE_VERT, POINT_FRAG, SHAPE_FRAG, SHAPE_VERT } from './shaders';
 import { PARTICLE_LOCAL as P } from './tunables';
@@ -38,7 +43,7 @@ export function createParticles(): SceneModule {
 
   const vec4s = () => Array.from({ length: P.maxBursts }, () => new THREE.Vector4(0, 0, 0, LONG_AGO));
   const own = {
-    uBounds: { value: new THREE.Vector4(0, 0, 1, 1) }, uAmbient: { value: 0 },
+    uBounds: { value: new THREE.Vector4(0, 0, 1, 1) }, uAmbient: { value: 0 }, uWind: { value: 1 },
     uBurstA: { value: vec4s() }, uBurstB: { value: vec4s() }, uBurstC: { value: vec4s() },
     uLife: { value: new THREE.Vector2(P.selectSeconds, P.openSeconds) }, uSparks: { value: 1 },
     uShape: { value: new THREE.Vector4(P.ringRadii, P.ringWorld, P.columnHeight, P.columnWidth) },
@@ -107,8 +112,10 @@ export function createParticles(): SceneModule {
     // a unit's burst follows it through the position textures; a district or city bursts from its ground centre
     let color = ctx.uniforms.uHalo.value, r = 6;
     if (slot >= 0 && slot < ctx.units.capacity) {
-      const c = ctx.units.color;
-      color = new THREE.Vector3(c[4 * slot] / 255, c[4 * slot + 1] / 255, c[4 * slot + 2] / 255);
+      // the star's own colour: its file type, or its overlay colour while an overlay shows
+      const c = ctx.units.color, text = ctx.uniforms.uText.value;
+      const neutral = [text.x * P.unknownBurst, text.y * P.unknownBurst, text.z * P.unknownBurst] as const;
+      color = new THREE.Vector3(...effectColor(ctx.state.overlay, slot, [c[4 * slot] / 255, c[4 * slot + 1] / 255, c[4 * slot + 2] / 255], neutral));
       r = anchor.r;
     }
     own.uBurstA.value[i].set(anchor.x, anchor.y, anchor.z, now);
@@ -220,6 +227,7 @@ export function createParticles(): SceneModule {
       if (hostsDirty && f.nowMs - hostsDirtyAt >= P.wind.rehostQuietMs) chooseAmbientHosts();
       const fade = Math.min(1, (f.time - revealAt) / P.fadeIn);
       if (fade !== own.uAmbient.value) { own.uAmbient.value = fade; ctx.invalidate(); }
+      own.uWind.value = 1 - (ctx.service<SpheresApi>('spheres')?.overlayMix() ?? 0);
       const b = ctx.rig.bounds;
       own.uBounds.value.set(b.x - b.r, b.z - b.r, 2 * b.r, 2 * b.r);
     }

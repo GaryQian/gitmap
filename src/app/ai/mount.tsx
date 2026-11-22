@@ -105,6 +105,7 @@ function AiFailure() {
       size="small"
       role="status"
       className="gm-ai-failure"
+      title={failure.text}
       style={{ '--gm-ai-failure-ms': `${AI_UI.failureMs}ms` } as CSSProperties}
       onAnimationEnd={() => clearAiFailure(failure.id)}
     >

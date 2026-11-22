@@ -13,7 +13,7 @@ import type { ModelPatch, Poi, StructureTables } from '../../model/types';
 import { syntheticMeta, syntheticTables, tablesToOps } from '../../testing/synthetic';
 import {
   AiClientError, createAiClient, describeAiError, generateAnnotations as generate, generateDetail, getConsent, poiCount, reduceHeadStart,
-  resetConsent, setConsent, shouldAsk, toAiErrorInfo,
+  resetConsent, setConsent, shouldAsk, toAiErrorInfo, TOUR_ID,
 } from '../index';
 import type { AiClient, ConsentStorage, DigestInput, GenerateOptions } from '../index';
 import { createCannedProvider, createMemoryLimiter, handlers } from '../server';
@@ -268,6 +268,39 @@ describe('ai client orchestration', () => {
     expect(working.sent.map((s) => s.route)).toEqual(['tour']);
     expect(second.errors).toEqual([]);
     expect(store.replica.annotations.some((a) => a.type === 'tour')).toBe(true);
+  });
+
+  it('writes a tour of an earlier version again, alone: one request, and the old tour is replaced', async () => {
+    const { store, input } = repo();
+    await generateAnnotations({ input, client: server().client, timing: fast, emit: (ops) => store.propose(ops) });
+    // the stored set as an earlier version left it: the same digest, the tour under its old id
+    const current = store.replica.annotations.find((a) => a.type === 'tour')!;
+    expect(current.id).toBe(TOUR_ID);
+    const old = { ...current, id: 'tour', steps: current.steps.map((s) => ({ ...s, text: 'This entry point has eight outgoing links.' })) };
+    store.propose([{ op: 'annotation', action: 'remove', value: current }, { op: 'annotation', action: 'set', value: old }]);
+    const others = store.replica.annotations.filter((a) => a.type !== 'tour');
+
+    const { client, sent } = server();
+    const result = await generateAnnotations({ input, client, timing: fast, emit: (ops) => store.propose(ops) });
+    expect(sent.map((s) => s.route)).toEqual(['tour']);
+    expect(result).toMatchObject({ skipped: false, errors: [], digestHash: store.replica.meta?.digestHash });
+    // only the tour changed hands: the old one out, the new one in
+    expect(result.ops.map((op) => (op.op === 'annotation' ? `${op.action} ${op.value.id}` : op.op))).toEqual(['remove tour', `set ${TOUR_ID}`]);
+    const tours = store.replica.annotations.filter((a) => a.type === 'tour');
+    expect(tours.map((t) => t.id)).toEqual([TOUR_ID]);
+    expect(tours[0].steps.some((s) => s.text.includes('outgoing links'))).toBe(false);
+    expect(store.replica.annotations.filter((a) => a.type !== 'tour')).toEqual(others);
+
+    // and it is settled: the next run asks for nothing
+    const again = server();
+    expect((await generateAnnotations({ input, client: again.client, timing: fast })).skipped).toBe(true);
+    expect(again.sent).toHaveLength(0);
+
+    // an old tour whose replacement fails stays where it is
+    store.propose([{ op: 'annotation', action: 'remove', value: tours[0] }, { op: 'annotation', action: 'set', value: old }]);
+    const down = server(config, (call) => (call.route === 'tour' ? errorBody('provider', 502) : undefined));
+    await generateAnnotations({ input, client: down.client, timing: fast, emit: (ops) => store.propose(ops) });
+    expect(store.replica.annotations.filter((a) => a.type === 'tour').map((t) => t.id)).toEqual(['tour']);
   });
 
   it('stops at once when the server has no key, and leaves the stored set alone', async () => {

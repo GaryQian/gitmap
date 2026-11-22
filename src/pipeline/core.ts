@@ -45,8 +45,8 @@ export interface PipelineDeps {
   emit<E extends keyof PipelineEvents>(evt: E, e: PipelineEvents[E]): void;
   /** Open the repo in this thread (the pool opens its own copies in its workers). */
   openRepo(locator: RepoLocator): Promise<RepoAccess>;
-  /** Fetch and decode a demo snapshot. */
-  loadDemo?(baseUrl: string): Promise<RepoModel>;
+  /** The model of a demo, from its package, marked as that demo (id `demo:<name>`). */
+  loadDemo?(source: Extract<RepoSource, { kind: 'demo' }>): Promise<RepoModel>;
   cache?: FactsCache;
   /** Snapshots, registry and the history facts. Absent: nothing is saved and every visit parses. */
   persist?: PipelinePersistence;
@@ -209,7 +209,7 @@ export async function runSource(source: RepoSource, deps: PipelineDeps): Promise
     let model: RepoModel;
     if (source.kind === 'demo') {
       if (!deps.loadDemo) throw new Error('Demo loading is not available here.');
-      model = await deps.loadDemo(source.baseUrl);
+      model = await deps.loadDemo(source);
     } else model = source.model;
     await showModel(model);
     return state;

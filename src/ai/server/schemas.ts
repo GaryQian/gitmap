@@ -75,13 +75,13 @@ const refList = (description: string): JsonSchema => ({ type: 'array', items: { 
 
 export const SUMMARY_SCHEMA = object({
   label: string('A short name for the role this city plays.'),
-  text: string('What this city contains and the role it plays.'),
+  text: string('What this city does and the main things inside it that do it. No counts or measurements.'),
 });
 
 const POI_ITEM = object({
   parent: string('The one allowed file reference (u:) this point of interest stands on. Never a district or a city.'),
   label: string('A short name.'),
-  summary: string('Its role and how it connects to the rest. If it speaks for a whole district or city, it says which.'),
+  summary: string('Its role: what it does, what it receives and what it hands on. No counts or measurements. If it speaks for a whole district or city, it says which.'),
   kind: { type: 'string', enum: [...POI_KINDS] },
   evidence: string('One structural fact from the provided material that supports this choice.'),
   refs: refList('Other allowed references this point of interest relates to. May be empty.'),
@@ -94,7 +94,7 @@ const TOUR_STEP = object({
     enum: [...TOUR_FRAMES],
     description: 'What the camera shows: that file alone, or the district or city the file belongs to.',
   },
-  text: string('What happens here and how it leads on, including one structural fact. If it speaks for a whole district or city, it says which.'),
+  text: string('What this part of the system does and what it hands on to. No counts or measurements. If it speaks for a whole district or city, it says which.'),
   highlights: refList('Other allowed file references (u:) to light up during this step. May be empty.'),
 });
 

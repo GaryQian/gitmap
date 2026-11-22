@@ -3,10 +3,13 @@
 // these numbers.
 export const APP_LOCAL = {
   pills: {
-    /** Pills start to fade at this many camera distances and reach `fadeFloor` at `fadeEnd`. */
+    /**
+     * Pills start to fade at this many camera distances and are at their faintest at `fadeEnd`. How
+     * faint that is comes from the theme, not from here: `sceneFadeFloor(mode)` in theme.ts, the least
+     * opacity at which a pill's text is still readable over the worst backdrop.
+     */
     fadeStart: 1.3,
     fadeEnd: 3.5,
-    fadeFloor: 0.6,
     /** Space kept around a pill when dropping overlapping ones, CSS pixels. */
     gapPx: 4,
     /** A pill sits this far above the far edge of its territory, and never more than this share of the view above its anchor. */

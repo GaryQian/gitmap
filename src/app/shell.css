@@ -100,6 +100,14 @@
   display: grid;
   place-items: center;
 }
+/* The pill stays on the centre line; the cancel button hangs off its right end. */
+.gm-waiting-row { position: relative; display: inline-flex; }
+.gm-waiting-cancel {
+  --gm-pill-h: 40px;
+  position: absolute;
+  top: 0;
+  left: calc(100% + 8px);
+}
 .gm-waiting-pill {
   --gm-pill-h: 40px;
   min-width: 200px;
@@ -131,19 +139,27 @@
   min-width: 0;
   box-sizing: border-box;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  /* One column that is never wider than the window, and rows that give way before they push each
+     other off screen: in a small window, or a zoomed one, the top row then overflows downwards and the
+     bottom row upwards, and everything stays in reach. */
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, auto) minmax(0, 1fr) minmax(0, auto);
   padding: 16px;
 }
 .gm-chrome-row {
   display: grid;
   /* Equal sides keep the centre on the centre line; when the row is crowded the centre wraps first. */
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: 1fr minmax(0, auto) 1fr;
   gap: 12px;
 }
 .gm-chrome-top { align-items: start; }
-.gm-chrome-bottom { grid-row: 3; align-items: end; }
+/* `align-content: end`: when its place is too short for it, the bottom row overflows upwards */
+.gm-chrome-bottom { grid-row: 3; align-items: end; align-content: end; }
 
-.gm-region-topLeft { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+/* The title and search share the first row; everything else in the corner stacks below them. */
+.gm-region-topLeft { display: grid; grid-template-columns: auto auto; justify-content: start; justify-items: start; align-items: start; gap: 8px; }
+.gm-region-topLeft > * { grid-column: 1 / -1; }
+.gm-region-topLeft > .gm-title-pill, .gm-region-topLeft > .gm-search { grid-column: auto; }
 .gm-region-topCenter { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .gm-region-topRight { display: flex; flex-wrap: wrap; justify-content: flex-end; justify-self: end; gap: 8px; }
 .gm-region-bottomLeft { display: flex; align-items: flex-end; gap: 8px; }
@@ -162,6 +178,16 @@
   max-width: 720px;
   min-height: 34px;
   margin-top: 14px;
+}
+
+/* A narrow window, or a wide one zoomed to 200%: the search goes under the title, and the bottom
+   centre (the tour, a prompt) takes a row of its own above the two corners, so nothing overlaps. */
+@media (max-width: 760px) {
+  .gm-region-topLeft > .gm-search { grid-column: 1 / -1; }
+  .gm-chrome-bottom { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .gm-region-bottomCenter { grid-column: 1 / -1; grid-row: 1; }
+  .gm-region-bottomLeft { grid-column: 1; grid-row: 2; }
+  .gm-region-bottomRight { grid-column: 2; grid-row: 2; }
 }
 
 /* The map's chrome arrives with the reveal. */

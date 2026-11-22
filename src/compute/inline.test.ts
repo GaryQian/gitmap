@@ -118,4 +118,16 @@ describe('poolSize', () => {
     }
     expect(poolSize(config, 256)).toBe(Math.min(s.maxWorkers, memoryCap));
   });
+
+  it('leaves physical cores for the app\'s own threads and the rest of the computer', () => {
+    // 8 cores / 16 threads: 8 − 2 busy app threads − 1 reserved
+    expect(poolSize(config, 16)).toBe(5);
+    expect(poolSize(config, 8)).toBe(1);
+    expect(poolSize(config, 2)).toBe(1);
+    for (const cores of [4, 8, 12, 16, 24, 32]) {
+      const physical = Math.floor(cores / config.scheduler.threadsPerCore);
+      const n = poolSize(config, cores);
+      expect(n + config.scheduler.busyAppThreads + config.scheduler.reserveCores <= physical || n === 1).toBe(true);
+    }
+  });
 });

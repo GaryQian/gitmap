@@ -1,6 +1,6 @@
 // In the scene: what a city does, in the AI's words, on a card under its pill while the pointer
-// rests there or the pill has keyboard focus, and for as long as the city is selected (PLAN.md §11.1,
-// §17.6). React renders the card's text when the target or the model changes; where the card sits is
+// rests there or the pill has keyboard focus, and pinned there once the pill is clicked (PLAN.md
+// §11.1, §17.6). React renders the card's text when the target or the model changes; where the card sits is
 // written straight onto it whenever its pill moves, never through React state.
 import { useEffect, useLayoutEffect, useRef, useState, type Ref } from 'react';
 import { config } from '../../config';
@@ -8,9 +8,12 @@ import type { AppMount } from '../../contracts/app';
 import type { ModelReplica } from '../../contracts/store';
 import type { NodeRef } from '../../model/types';
 import { sceneObstacles } from '../anchor';
-import { useApp, useRender, useReplica } from '../store';
+import { LAYER, isTyping, topDismissable, useDismissable } from '../keys';
+import { useApp, useRender, useReplica, useSession } from '../store';
+import { APP_LOCAL } from '../tunables';
 import { Card, cx } from '../ui';
-import { cardContent, inFlight, pinnedCity, placeCard, type CardContent, type Rect } from './logic';
+import { cardContent, effectivePin, inFlight, pinAfter, placeCard, type CardContent, type Rect } from './logic';
+import { watchPinGestures } from './pin';
 import { trackPills, type PillTarget, type PillTracker } from './track';
 import { SUMMARY_UI } from './tunables';
 import './summaries.css';
@@ -29,6 +32,19 @@ function nodeName(replica: ModelReplica, ref: NodeRef): string {
 
 function contentOf(replica: ModelReplica | null | undefined, ref: NodeRef, generating: boolean): CardContent | null {
   return replica ? cardContent(replica.annotations, ref, nodeName(replica, ref), generating) : null;
+}
+
+/** Whether the node's card has anything in it right now, read straight from the store (for event handlers). */
+function hasCardNow(ref: NodeRef): boolean {
+  const { session, progress } = useApp.getState();
+  return contentOf(session?.replica, ref, inFlight(progress.ai)) !== null;
+}
+
+/** Escape is free when nothing above the selection is about to close on it (keys.ts keeps the stack). */
+function escapeIsFree(e: KeyboardEvent): boolean {
+  if (isTyping(e.target)) return false;
+  const top = topDismissable();
+  return !top || (top.layer ?? LAYER.card) <= LAYER.selection;
 }
 
 /** The fixed chrome, in the coordinates of `view`: the card goes to the other side of its pill rather than under it. */
@@ -70,8 +86,13 @@ function Summaries() {
   const render = useRender();
   const replica = useReplica();
   const generating = useApp((s) => inFlight(s.progress.ai));
-  /** The selected city (the latest, if several): its card is pinned, whatever the pointer does. */
-  const pinned = useApp((s) => pinnedCity(s.selection));
+  const session = useSession();
+  /** The city whose pill was clicked: its card is pinned, whatever the pointer does next. */
+  const [clicked, setClicked] = useState<NodeRef | null>(null);
+  const clickedNow = useRef(clicked);
+  clickedNow.current = clicked;
+  /** ... and failing that a selected city, should anything ever select one. */
+  const pinned = useApp((s) => effectivePin(clicked, s.selection));
   const [target, setTarget] = useState<PillTarget | null>(null);
   const host = useRef<HTMLDivElement>(null);
   const card = useRef<HTMLDivElement>(null);
@@ -82,16 +103,37 @@ function Summaries() {
     const tracking = trackPills(document, {
       delayMs: config.interaction.hoverDelayMs,
       graceMs: SUMMARY_UI.graceMs,
-      hasCard: (ref) => {
-        const { session, progress } = useApp.getState();
-        return contentOf(session?.replica, ref, inFlight(progress.ai)) !== null;
-      },
+      hasCard: hasCardNow,
       onTarget: setTarget,
       onMove: () => place.current(),
     });
     tracker.current = tracking;
     return () => { tracker.current = null; tracking.dispose(); };
   }, []);
+
+  // A click on a city pill pins its card, on the pinned pill again unpins it; a click on the open
+  // map or a free Escape lets go. Only listened to: the click still flies the camera to the city.
+  useEffect(() => watchPinGestures(document, {
+    clickSlopPx: APP_LOCAL.pills.clickSlopPx,
+    escapeIsFree,
+    onGesture: (gesture) => {
+      const before = clickedNow.current;
+      const after = pinAfter(before, gesture.type === 'pill' ? { ...gesture, hasCard: hasCardNow(gesture.ref) } : gesture);
+      if (after === before) return;
+      clickedNow.current = after;
+      setClicked(after);
+      // the tracker hears at once, so the card never shows a state in between
+      tracker.current?.setPinned(effectivePin(after, useApp.getState().selection));
+      // unpinned by a click on its own pill, or by Escape with the pointer still on it: the card
+      // goes now, not when the pointer leaves
+      if (after === null && gesture.type !== 'ground') tracker.current?.dismiss(gesture.type === 'pill' ? gesture.ref : before ?? undefined);
+    },
+  }), []);
+
+  // the pin does not outlive its map, or its city
+  useEffect(() => setClicked(null), [session]);
+  const gone = clicked !== null && replica !== null && replica.table('city').slotOf(clicked.slice(2)) < 0;
+  useEffect(() => { if (gone) setClicked(null); }, [gone]);
 
   useEffect(() => tracker.current?.setPinned(pinned), [pinned]);
 
@@ -109,6 +151,10 @@ function Summaries() {
   const pill = target?.el ?? null;
   const content = target ? contentOf(replica, target.ref, generating) : null;
   const showing = content !== null;
+
+  // A hover or focus card is one layer of the app's Escape stack: a press closes it and nothing
+  // else. A pinned card is not on the stack; Escape lets it go together with the selection (pin.ts).
+  useDismissable(showing && target !== null && !target.pinned, () => tracker.current?.dismiss(), { layer: LAYER.card });
 
   // The card follows its pill: placed now and on every move of the pill (the tracker calls `place`).
   useLayoutEffect(() => {

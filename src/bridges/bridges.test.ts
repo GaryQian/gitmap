@@ -144,3 +144,178 @@ describe('linkBridges', () => {
     expect(bridgeRawEdges(linkBridges(files))).toEqual([{ src: 'Bar.java', dst: 'linux/bar.c', kind: 'bridge', confidence: 1, count: 1, mechanism: 'jni' }]);
   });
 });
+
+// ---- small repos written inline: one rule of PLAN.md §6.4.1 each ----
+
+/** Bridge keys of every file of a small repo (path → text), as the fast pass would store them. */
+function scanRepo(repo: Record<string, string>): BridgeFile[] {
+  return Object.entries(repo).map(([path, text]) => ({ path, bridge: extractBridgeKeys({ path, lang: null, text, imports: importsOf(path, text) }, enabled) }));
+}
+/** The links of a small repo as "src → dst" lines with their mechanism, one per file pair. */
+function linksOf(repo: Record<string, string>): string[] {
+  return bridgeRawEdges(linkBridges(scanRepo(repo))).map((e) => `${e.src} → ${e.dst} [${e.kind} ${e.mechanism}]`).sort();
+}
+
+describe('JNI names in source', () => {
+  // The three escapes of the specification and an overloaded pair, as javac -h would name them.
+  const symbols = [
+    mangleJni('com.foo_bar.My_Class', 'do_it'),
+    mangleJni('com.foo_bar.My_Class$Inner', 'run'),
+    mangleJni('com.foo_bar.My_Class', 'put', 'I'),
+    mangleJni('com.foo_bar.My_Class', 'put', 'Ljava/lang/String;[J'),
+  ];
+  const native = ['#include <jni.h>', ...symbols.map((s) => `JNIEXPORT void JNICALL ${s}(JNIEnv *env, jobject self) {}`)].join('\n');
+  const java = [
+    'package com.foo_bar;',
+    'public class My_Class {',
+    '  public native void do_it();',
+    '  public native void put(int value);',
+    '  public native void put(String key, long[] values);',
+    '  static class Inner { native void run(); }',
+    '}',
+  ].join('\n');
+
+  it('writes the escapes _1, _00024 and the __signature suffix, and reads each symbol back', () => {
+    expect(symbols[0]).toContain('foo_1bar_My_1Class_do_1it');
+    expect(symbols[1]).toContain('My_1Class_00024Inner_run');
+    expect(symbols[2]).toMatch(/_put__I$/);
+    expect(symbols[3]).toMatch(/_put__Ljava_lang_String_2_3J$/);
+    for (const symbol of symbols) {
+      const name = demangleJni(symbol)!;
+      expect(mangleJni(name.className, name.method, name.signature), symbol).toBe(symbol);
+    }
+  });
+
+  it('gives a mangled C++ definition and the Java native method the same key, overloads sharing one', () => {
+    const provides = extractBridgeKeys({ path: 'native/my_class.cpp', lang: null, text: native, imports: [] }, enabled).provides;
+    const consumes = extractBridgeKeys({ path: 'java/com/foo_bar/My_Class.java', lang: null, text: java, imports: [] }, enabled).consumes;
+    const keys = ['jni:com.foo_bar.My_Class#do_it', 'jni:com.foo_bar.My_Class$Inner#run', 'jni:com.foo_bar.My_Class#put'];
+    expect([...provides].sort()).toEqual([...keys].sort());
+    expect([...consumes].sort()).toEqual([...keys].sort());
+    expect(linksOf({ 'java/com/foo_bar/My_Class.java': java, 'native/my_class.cpp': native }))
+      .toEqual(['java/com/foo_bar/My_Class.java → native/my_class.cpp [bridge jni]']);
+  });
+
+  it('does not join a native method to a function mangled for another class', () => {
+    const other = `JNIEXPORT void JNICALL ${mangleJni('com.foo_bar.Other', 'do_it')}(JNIEnv *env, jobject self) {}`;
+    expect(linksOf({ 'java/com/foo_bar/My_Class.java': java, 'native/other.cpp': other })).toEqual([]);
+  });
+});
+
+describe('RegisterNatives tables', () => {
+  const java = 'package com.foo;\npublic class Bar {\n  native void start(long handle);\n  native void stop(long handle);\n}\n';
+  const table = (className: string) => [
+    '#include <jni.h>',
+    'static void start(JNIEnv *env, jobject self, jlong handle) {}',
+    'static void stop(JNIEnv *env, jobject self, jlong handle) {}',
+    'static const JNINativeMethod kMethods[] = {',
+    '  {"start", "(J)V", (void *) start},',
+    '  {"stop", "(J)V", (void *) stop},',
+    '};',
+    'jint JNI_OnLoad(JavaVM *vm, void *reserved) {',
+    '  JNIEnv *env;',
+    '  (*vm)->GetEnv(vm, (void **) &env, JNI_VERSION_1_6);',
+    `  jclass clazz = (*env)->FindClass(env, "${className}");`,
+    '  (*env)->RegisterNatives(env, clazz, kMethods, 2);',
+    '  return JNI_VERSION_1_6;',
+    '}',
+  ].join('\n');
+
+  it('provides one key per table entry, for the class found with FindClass', () => {
+    const keys = extractBridgeKeys({ path: 'native/onload.c', lang: null, text: table('com/foo/Bar'), imports: [] }, enabled);
+    expect([...keys.provides].sort()).toEqual(['jni:com.foo.Bar#start', 'jni:com.foo.Bar#stop']);
+    // The class was looked up only to register natives for it: that is not a call into the JVM.
+    expect(keys.consumes).toEqual([]);
+  });
+
+  it('joins the Java class to the file holding its table, and to no table of another class', () => {
+    expect(linksOf({ 'java/com/foo/Bar.java': java, 'native/onload.c': table('com/foo/Bar') })).toEqual(['java/com/foo/Bar.java → native/onload.c [bridge jni]']);
+    expect(linksOf({ 'java/com/foo/Bar.java': java, 'native/onload.c': table('com/foo/Baz') })).toEqual([]);
+  });
+});
+
+describe('JNI, native → JVM', () => {
+  const native = [
+    '#include <jni.h>',
+    'void notify(JNIEnv *env, jobject target) {',
+    '  jclass listener = env->FindClass("com/foo/Listener");',
+    '  jmethodID onEvent = env->GetMethodID(listener, "onEvent", "(I)V");',
+    '  jclass util = env->FindClass("com/foo/Util");',
+    '  jmethodID now = env->GetStaticMethodID(util, "now", "()J");',
+    '  jclass string = env->FindClass("java/lang/String");',
+    '}',
+  ].join('\n');
+  const listener = 'package com.foo;\npublic class Listener {\n  void onEvent(int code) {}\n}\n';
+  const util = 'package com.foo\n\nobject Util {\n  @JvmStatic fun now(): Long = 0L\n}\n';
+
+  it('consumes the class named by FindClass, refined by the method name', () => {
+    const keys = extractBridgeKeys({ path: 'native/notify.cpp', lang: null, text: native, imports: [] }, enabled);
+    expect(keys.consumes).toContain('jvm:com.foo.Listener#onEvent');
+    expect(keys.consumes).toContain('jvm:com.foo.Util#now');
+    expect(keys.consumes.some((k) => k.startsWith('jvm:java.lang.String'))).toBe(true);
+    expect(keys.provides).toEqual([]);
+  });
+
+  it('points from the native file to the Java and Kotlin classes, and nowhere for a class outside the repo', () => {
+    expect(linksOf({ 'native/notify.cpp': native, 'app/java/com/foo/Listener.java': listener, 'app/kotlin/com/foo/Util.kt': util })).toEqual([
+      'native/notify.cpp → app/java/com/foo/Listener.java [bridge jni]',
+      'native/notify.cpp → app/kotlin/com/foo/Util.kt [bridge jni]',
+    ]);
+  });
+
+  it('finds a class by its conventional path when the JVM file carries no keys', () => {
+    const files: BridgeFile[] = [...scanRepo({ 'native/notify.cpp': native }), { path: 'app/java/com/foo/Listener.java' }, { path: 'other/Listener.java' }];
+    expect(linkBridges(files)).toEqual([
+      { src: 'native/notify.cpp', dst: 'app/java/com/foo/Listener.java', mechanism: 'jni', key: 'jvm:com.foo.Listener#onEvent', loose: true },
+    ]);
+  });
+
+  it('draws nothing when two files declare the class', () => {
+    const repo = { 'native/notify.cpp': native, 'app/java/com/foo/Listener.java': listener, 'tv/java/com/foo/Listener.java': listener };
+    expect(linksOf(repo)).toEqual([]);
+  });
+});
+
+describe('Protobuf stubs, one per generator', () => {
+  const proto = 'syntax = "proto3";\nmessage Foo {}\n';
+  // Code that imports the generated stub of foo.proto: foo_pb2.py, foo.pb.go (package foopb), foo_pb.ts, foo.pb.h.
+  const importers: Record<string, string> = {
+    'client/app.py': 'import foo_pb2\n\nprint(foo_pb2.Foo())\n',
+    'server/main.go': 'package main\n\nimport (\n\t"fmt"\n\n\t"example.com/shop/gen/foopb"\n)\n\nfunc main() { fmt.Println(&foopb.Foo{}) }\n',
+    'web/src/api.ts': "import { Foo } from './gen/foo_pb';\n\nexport const empty = new Foo();\n",
+    'native/report.cc': '#include "foo.pb.h"\n\nint size(const Foo &foo) { return foo.ByteSize(); }\n',
+  };
+
+  it('joins every importer of a stub to the .proto file, which becomes the hub', () => {
+    expect(linksOf({ ...importers, 'proto/foo.proto': proto, 'proto/bar.proto': proto })).toEqual(
+      Object.keys(importers).sort().map((path) => `${path} → proto/foo.proto [bridge protobuf]`),
+    );
+  });
+
+  it('joins a checked-in stub to its .proto as well', () => {
+    const stubs = {
+      'gen/foo_pb2.py': '# Generated by the protocol buffer compiler.  DO NOT EDIT!\n',
+      'gen/foo.pb.go': '// Code generated by protoc-gen-go. DO NOT EDIT.\npackage foopb\n',
+      'gen/foo_pb.ts': '// @generated by protoc-gen-es\nexport class Foo {}\n',
+      'gen/foo.pb.h': '// Generated by the protocol buffer compiler.  DO NOT EDIT!\n#pragma once\n',
+    };
+    expect(linksOf({ ...stubs, 'proto/foo.proto': proto })).toEqual(Object.keys(stubs).sort().map((path) => `${path} → proto/foo.proto [bridge protobuf]`));
+  });
+
+  it('draws nothing without the .proto, and nothing for an import that only looks similar', () => {
+    expect(linksOf(importers)).toEqual([]);
+    expect(linksOf({ 'client/app.py': 'import foo\nimport foo_pb3\n', 'web/src/api.ts': "import { x } from './foo';\n", 'proto/foo.proto': proto })).toEqual([]);
+  });
+
+  it('draws nothing for a stub name two .proto files answer to, unless the import names the directory', () => {
+    const two = { 'proto/billing/foo.proto': proto, 'proto/stock/foo.proto': proto };
+    expect(linksOf({ ...two, 'client/app.py': 'import foo_pb2\n' })).toEqual([]);
+    expect(linksOf({ ...two, 'client/app.py': 'from billing import foo_pb2\n' })).toEqual(['client/app.py → proto/billing/foo.proto [bridge protobuf]']);
+    // The most specific form that anyone provides decides: an ambiguous one is not retried more loosely.
+    const files: BridgeFile[] = [
+      { path: 'a/v1/foo.proto' }, { path: 'b/v1/foo.proto' }, { path: 'foo.proto' },
+      { path: 'client/app.py', bridge: { consumes: ['proto:v1/foo'] } },
+    ];
+    expect(linkBridges(files)).toEqual([]);
+  });
+});

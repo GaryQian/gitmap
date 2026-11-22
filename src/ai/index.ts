@@ -19,7 +19,7 @@ export { AiClientError, describeAiError, toAiErrorInfo } from './client/errors';
 export type { AiClientErrorCode, AiErrorInfo, AiServerErrorCode } from './client/errors';
 
 // ---- orchestration (worker or Node): map → reduce → on demand, as ModelPatch operations ----
-export { generateAnnotations, idleDetails, poiId, poisFromResponse, reduceHeadStart, stepsFromResponse, summaryId, TOUR_ID } from './client/generate';
+export { generateAnnotations, idleDetails, poiId, poisFromResponse, reduceHeadStart, stepsFromResponse, summaryId, TOUR_ID, TOUR_VERSION } from './client/generate';
 export type { AiProgress, AiStage, AiStageError, GenerateOptions, GenerateResult } from './client/generate';
 export { generateDetail, withheldMessage } from './client/detail';
 export type { DetailOptions, DetailResult } from './client/detail';
@@ -27,3 +27,10 @@ export type { DetailOptions, DetailResult } from './client/detail';
 // ---- consent (main thread): asked once per repository, remembered in this browser ----
 export { aiAllowed, CONSENT_KEY, getConsent, hasStoredAnnotations, resetConsent, setConsent, shouldAsk } from './client/consent';
 export type { Consent, ConsentStorage } from './client/consent';
+
+// ---- chat assistant (main thread): the tool contract, the map overview, the transport and the loop ----
+export { buildChatContext, CHAT_TOOLS, CHAT_TOOL_NAMES, CHAT_TUNABLES, createChatClient, DIRECTIONS, fitHistory, OVERLAY_NAMES, readSse, runChatTurn, truncateResult } from './chat';
+export type {
+  ChatClient, ChatClientOptions, ChatContextOptions, ChatEvent, ChatMessage, ChatRequest, ChatStop, ChatToolCall, ChatToolResult,
+  ChatTurnEnd, ChatTurnEvent, ChatTurnOptions, ChatTurnResult, ChatTurnSummary, ToolDefinition, ToolExecutor, ToolOutcome,
+} from './chat';

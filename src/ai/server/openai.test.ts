@@ -225,14 +225,15 @@ describe('provider selection', () => {
     expect(resolveProviderId({ VITE_AI_PROVIDER: '', AI_PROVIDER: ' ' }, openaiByConfig)).toBe('openai');
   });
 
-  it('gives the three model ids of the provider in use, from its own block in config', () => {
+  it('gives the model ids of the provider in use, from its own block in config', () => {
     expect(activeAi(config, { VITE_AI_PROVIDER: 'anthropic' })).toMatchObject({ provider: 'anthropic', models: config.ai.models });
     expect(activeAi(config, { VITE_AI_PROVIDER: 'openai' })).toMatchObject({ provider: 'openai', models: config.ai.openaiModels });
-    expect(Object.keys(activeAi(config, {}).models).sort()).toEqual(['bulk', 'synthesis', 'tour']);
+    // the three tiers the annotations are written with, and the chat assistant's
+    expect(Object.keys(activeAi(config, {}).models).sort()).toEqual(['bulk', 'chat', 'synthesis', 'tour']);
 
     const { synthesis, bulk } = config.ai.models;
     const older = { ...config, ai: { ...config.ai, models: { synthesis, bulk } } } as unknown as Config;
-    expect(activeAi(older, { VITE_AI_PROVIDER: 'anthropic' }).models).toEqual({ synthesis, tour: synthesis, bulk });
+    expect(activeAi(older, { VITE_AI_PROVIDER: 'anthropic' }).models).toEqual({ synthesis, tour: synthesis, chat: synthesis, bulk });
   });
 
   it('names the missing variable of the selected provider, and rejects an unknown provider', () => {

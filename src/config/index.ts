@@ -2,12 +2,13 @@
 // server functions alike. Secrets never live here.
 import raw from '../../config.json';
 
-export interface DemoRepo { name: string; path: string; location?: string }
+/** One demo: `file` is the URL of its package (`.starmap.zip`), `location` the line under its name. */
+export interface DemoRepo { name: string; file: string; location?: string }
 export type ThemeMode = 'dark' | 'light';
 export type ThemeTokens = (typeof raw)['theme']['dark'];
 
 export type Config = Omit<typeof raw, 'demo' | 'visual'> & {
-  demo: { repos: DemoRepo[] };
+  demo: { repos: DemoRepo[]; package: (typeof raw)['demo']['package'] };
   visual: Omit<(typeof raw)['visual'], 'languageColors'> & { languageColors: Record<string, string> };
 };
 
@@ -50,6 +51,9 @@ export function validateConfig(c: Config): Config {
   num('visual.importanceBoost', c.visual.importanceBoost, 0);
   num('visual.importanceCurve', c.visual.importanceCurve, 0);
   num('scheduler.workerShare', c.scheduler.workerShare, 0, 1);
+  num('scheduler.threadsPerCore', c.scheduler.threadsPerCore, 1);
+  num('scheduler.busyAppThreads', c.scheduler.busyAppThreads, 0);
+  num('scheduler.reserveCores', c.scheduler.reserveCores, 0);
   if (!['skip', 'firstParent', 'include'].includes(c.history.merges)) fail('history.merges must be skip, firstParent or include');
   num('history.progressIntervalMs', c.history.progressIntervalMs, 0);
   num('persist.snapshotDebounceMs', c.persist.snapshotDebounceMs, 0);

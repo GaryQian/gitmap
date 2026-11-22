@@ -78,6 +78,7 @@ export function fitDisc(radius: number, height: number, view: { azimuth: number;
 }
 
 interface Flight { from: CameraView; to: CameraView; start: number; ms: number; hop: number; resolve: () => void }
+interface InsetTween { from: number; to: number; start: number; ms: number }
 
 export class CameraRig {
   readonly camera: THREE.PerspectiveCamera;
@@ -96,6 +97,14 @@ export class CameraRig {
   private orbit: { pivot: Vec2; sx: number; sy: number } | null = null;
   private lastWheel = -Infinity;
   private scratch = new THREE.Vector3();
+  /**
+   * Canvas pixels on the right covered by opaque chrome (the side panel). The projection is shifted
+   * so the view's centre is the centre of what is left, and framing fits into that width only.
+   * `inset` is what is drawn now; `insetTarget` is where it is easing to.
+   */
+  private inset = 0;
+  private insetTarget = 0;
+  private insetTween: InsetTween | null = null;
 
   constructor(private limits: Config['camera']) {
     this.camera = new THREE.PerspectiveCamera(L.fovDeg, 1, 1, 10000);
@@ -108,6 +117,21 @@ export class CameraRig {
     this.height = Math.max(1, height);
     this.camera.aspect = this.width / this.height;
     this.apply();
+  }
+
+  /** Cover `px` on the right of the canvas, easing there over `ms`. */
+  setInsetRight(px: number, ms: number, nowMs: number): void {
+    const to = Math.max(0, px);
+    if (to === this.insetTarget && !this.insetTween) return;
+    this.insetTarget = to;
+    if (ms <= 0 || to === this.inset) { this.insetTween = null; this.inset = to; this.apply(); return; }
+    this.insetTween = { from: this.inset, to, start: nowMs, ms };
+    this.changed = true;
+  }
+
+  /** Width over height of the part of the canvas that is not covered, once any easing is done. */
+  private fitAspect(): number {
+    return Math.max(1, this.width - Math.min(this.insetTarget, this.width - 1)) / this.height;
   }
 
   /** Write the view into the three.js camera. */
@@ -125,6 +149,13 @@ export class CameraRig {
     cam.near = Math.max(0.1, v.distance * 0.02);
     cam.far = v.distance * 60 + this.bounds.r * 4;
     cam.updateProjectionMatrix();
+    if (this.inset > 0) {
+      // lens shift: move the principal point left by half the inset, so the look-at point lands in
+      // the middle of the uncovered part of the canvas (projectionMatrix is column-major: [8] is row 0, column 2)
+      const inset = Math.min(this.inset, this.width - 1);
+      cam.projectionMatrix.elements[8] += inset / this.width;
+      cam.projectionMatrixInverse.copy(cam.projectionMatrix).invert();
+    }
     cam.updateMatrixWorld(true);
     this.changed = true;
   }
@@ -213,7 +244,7 @@ export class CameraRig {
   /** The default framing: the whole map in view at the default tilt. */
   defaultView(): CameraView {
     const view = { azimuth: L.defaultAzimuth, elevation: Math.atan(this.limits.defaultTilt) };
-    const fit = fitDisc(Math.max(this.bounds.r, 1), this.topHeight, view, this.camera.fov, this.camera.aspect, L.fitMargin);
+    const fit = fitDisc(Math.max(this.bounds.r, 1), this.topHeight, view, this.camera.fov, this.fitAspect(), L.fitMargin);
     // the disc's centre lies `shift` toward the camera from the look-at point
     return {
       x: this.bounds.x - fit.shift * Math.cos(view.azimuth), z: this.bounds.z - fit.shift * Math.sin(view.azimuth),
@@ -230,7 +261,7 @@ export class CameraRig {
 
   /** Distance from which a ground disc of radius r fills the view at the current angles. */
   distanceToFit(r: number): number {
-    return fitDistance(Math.max(r, 1), 0, this.view, this.camera.fov, this.camera.aspect, L.fitMargin);
+    return fitDistance(Math.max(r, 1), 0, this.view, this.camera.fov, this.fitAspect(), L.fitMargin);
   }
 
   /** Jump to a view. */
@@ -268,6 +299,13 @@ export class CameraRig {
 
   /** Advance a flight. Call once per frame. */
   update(nowMs: number): void {
+    const it = this.insetTween;
+    if (it) {
+      const t = clamp((nowMs - it.start) / it.ms, 0, 1);
+      this.inset = it.from + (it.to - it.from) * easeInOutCubic(t);
+      if (t >= 1) this.insetTween = null;
+      if (!this.flight) this.apply();
+    }
     const f = this.flight;
     if (!f) return;
     const t = clamp((nowMs - f.start) / f.ms, 0, 1), e = easeInOutCubic(t);

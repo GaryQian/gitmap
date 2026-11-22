@@ -58,9 +58,35 @@ export function pinnedCity(selection: readonly NodeRef[]): NodeRef | null {
   return null;
 }
 
+/** What can pin a city's card by hand, or release it. */
+export type PinEvent =
+  /** A real click on a city pill (or Enter or Space on a focused one), never the end of a drag. */
+  | { type: 'pill'; ref: NodeRef; hasCard: boolean }
+  /** A click on the open map. */
+  | { type: 'ground' }
+  /** Escape that nothing else on screen is closing on. */
+  | { type: 'escape' };
+
+/**
+ * The city pinned by a click, after `event`. A click on a city's pill pins its card; on another
+ * pill it moves the pin there; on the pinned pill again it lets go. A city with nothing to show
+ * (no summary, none on its way) is never pinned, so no card turns up later out of nowhere. A click
+ * on the open map and Escape let go.
+ */
+export function pinAfter(pin: NodeRef | null, event: PinEvent): NodeRef | null {
+  if (event.type !== 'pill') return null;
+  if (event.ref === pin) return null;
+  return event.hasCard ? event.ref : null;
+}
+
+/** The pinned city: the one pinned by a click, and failing that the selected one. */
+export function effectivePin(clicked: NodeRef | null, selection: readonly NodeRef[]): NodeRef | null {
+  return clicked ?? pinnedCity(selection);
+}
+
 /**
  * Whose card is showing. `live` is the pill under the pointer or with keyboard focus, `pinned` the
- * selected city (pass null while its pill is off screen or being dragged). Hover or focus wins for
+ * pinned city (pass null while its pill is off screen or being dragged). Hover or focus wins for
  * as long as it lasts, then the pinned card is back; on the pinned pill itself it changes nothing.
  * A pill with nothing to say (`hasCard`) does not push the pinned card aside.
  */

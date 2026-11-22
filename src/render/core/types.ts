@@ -44,6 +44,14 @@ export interface SharedUniforms {
   /** Per-unit lookup: [radius, district slot, city slot, glow] and [r, g, b, alive]. */
   uUnitInfo: { value: THREE.DataTexture };
   uUnitColor: { value: THREE.DataTexture };
+  /**
+   * District aggregates on very large maps (gmAggregate in core/glsl.ts; written by the quality module):
+   * [strength 0..1, radius of a typical star in device pixels at distance 1, pixel radius below which a
+   * district is one aggregate, pixel radius above which its stars are all drawn]. All zero: off.
+   */
+  uAggregate: { value: THREE.Vector4 };
+  /** How much glow holds a star back from collapsing into its district's aggregate, 0..1. */
+  uAggregateKeep: { value: number };
 }
 
 /** What a module's `frame` hook receives, once per rendered frame, before the scene is drawn. */
@@ -56,6 +64,19 @@ export interface FrameState {
   dt: number;
   /** The camera is moving or a drag is in progress. */
   moving: boolean;
+  /**
+   * The frame is drawn for motion (camera, drag, hot simulation, reveal, hover, an animation a module
+   * asked for), at the full rate. False for the reduced-rate frames of a still scene.
+   */
+  active: boolean;
+  /**
+   * Milliseconds between this animation frame and the previous one, when both were drawn; 0 when the
+   * previous one was skipped, and for the first frames after a resize or the tab becoming visible.
+   * With `active`, this is what adaptive quality measures.
+   */
+  frameMs: number;
+  /** The display's frame interval as measured from animation-frame timestamps, ms. */
+  refreshMs: number;
   cameraDistance: number;
   target: Vec2;
   /** Canvas size in CSS pixels, and the pixel ratio in use. */
@@ -78,6 +99,14 @@ export interface RevealInfo {
   at: number;
   /** Length of the grow-in, ms (0 when instant). */
   durationMs: number;
+}
+
+/** What adaptive quality (PLAN.md §8.5) currently allows. Written by the quality module; 1 and Infinity mean full quality. */
+export interface QualityState {
+  /** Multiplier on the edge budget and on each level's cap, 0..1. Focus edges ignore it. */
+  edgeScale: number;
+  /** The pixel ratio never exceeds this (the display's own and config.render.maxDpr still apply). */
+  maxPixelRatio: number;
 }
 
 /** View state set through RenderApi. It refers to entities by permanent id, never by slot. */
@@ -134,8 +163,10 @@ export interface SceneContext {
   readonly pointer: PointerRouter;
   readonly bus: Emitter<SceneEvents>;
   readonly state: Readonly<ViewState>;
-  /** Numbers modules report into RenderApi.stats(). */
+  /** Numbers modules report into RenderApi.stats(). `quality` is the adaptive quality step, 0 = full. */
   readonly counters: { edgesDrawn: number; quality: number };
+  /** What adaptive quality allows right now. The core applies `maxPixelRatio`; the edges apply `edgeScale`. */
+  readonly quality: QualityState;
   /** Scene time in seconds (the clock behind uTime). */
   now(): number;
   /** World anchor of a node: a unit's centre, or a district's or city's ground centre. */

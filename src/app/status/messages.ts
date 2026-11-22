@@ -58,10 +58,10 @@ const SENTENCES = {
   // ---- 4. return visits and folder permission ----
   'folder-allow': () => ({ text: 'Viewing files needs access to the folder', action: ALLOW }),
   'folder-needed': () => ({ text: 'File contents and updates are unavailable until the folder is chosen again.', action: CHOOSE }),
-  'folder-gone': () => ({ text: 'The folder of this map has moved or been deleted. File contents and updates are unavailable until it is chosen again.', action: CHOOSE }),
-  'folder-not-allowed': () => ({ text: 'Folder access was not allowed. File contents and updates are unavailable until the folder is chosen again.', action: CHOOSE }),
+  'folder-gone': () => ({ text: 'The folder has moved or been deleted. Choose it again to view files and check for changes.', action: CHOOSE }),
+  'folder-not-allowed': () => ({ text: 'Folder access was not allowed. Choose the folder again to view files and check for changes.', action: CHOOSE }),
   'folder-mismatch': (p) => ({ text: `That folder does not look like ${named(p.name, 'the one this map was made from')}. Choose the folder this map was made from.`, action: CHOOSE }),
-  'imported-no-folder': () => ({ text: 'This is an imported map. File contents are unavailable until its folder is chosen.', action: CHOOSE }),
+  'imported-no-folder': () => ({ text: 'Files of an imported map are unavailable until its folder is chosen.', action: CHOOSE }),
   'saved-map-gone': (p) => ({ text: `The saved map of ${named(p.name, 'that repo')} can no longer be opened, and its folder is not available. Choose the folder to map it again.`, action: REMOVE }),
   'saved-list-unavailable': () => ({ text: 'The saved maps could not be listed.' }),
 

@@ -15,12 +15,14 @@ export const AMBIENT_VERT = GLSL_POSITIONS + GLSL_HASH + /* glsl */ `
 uniform float uTime; uniform float uPixelWorld; uniform float uDark; uniform vec3 uText;
 uniform vec4 uBounds;     // min x, min z, width, depth of the map
 uniform float uAmbient;   // overall strength (fade-in)
+uniform float uWind;      // strength of the stellar wind: 1, falling to 0 while an overlay shows
 attribute float aHost; attribute float aSeed;
 varying float vA; varying vec3 vCol;
 void main() {
   vec3 p; float size;
   if (aHost >= 0.0) {
     // stellar wind: leaves the surface, drifts outward and upward a few radii, and fades
+    if (uWind <= 0.0) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); gl_PointSize = 0.0; return; }
     int host = int(aHost + 0.5);
     vec4 info; vec3 c = gmUnitCenter(host, info); float r = info.x;
     if (r <= 0.0 || info.y < 0.0 || info.z < 0.0) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); gl_PointSize = 0.0; return; }
@@ -28,7 +30,7 @@ void main() {
     float th = hash11(aSeed * 911.0) * 6.2831, ph = hash11(aSeed * 373.0) * 1.3;
     vec3 dir = vec3(cos(th) * cos(ph), sin(ph), sin(th) * cos(ph));
     p = c + dir * r * (1.0 + 2.5 * life) + vec3(0.0, life * 2.5 * r, 0.0);
-    size = 0.12 * r + 0.3; vA = sin(3.14159 * life) * 0.55; vCol = gmUnitColor(host).rgb * 0.85;
+    size = 0.12 * r + 0.3; vA = sin(3.14159 * life) * 0.55 * uWind; vCol = gmUnitColor(host).rgb * 0.85;
   } else if (aHost < -1.5) {
     // no host to shed from
     gl_Position = vec4(2.0, 2.0, 2.0, 1.0); gl_PointSize = 0.0; return;

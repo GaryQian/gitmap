@@ -169,8 +169,8 @@ export interface RepoMeta {
   stats: RepoStats;
   /** How far the history walk got; absent when there is no history. */
   history?: { reachedOid: string | null; commitsWalked: number; complete: boolean };
-  /** Present on demo snapshots. */
-  demo?: { sourceUrl: string; commit: string; license: string };
+  /** Present on a map opened from the demo list; taken from the package's manifest. */
+  demo?: { sourceUrl: string; commit: string; license: string; exportedAt?: number };
   /** Display name and fallback colour of each language on the map, by LangId (from the plug-ins). */
   languages?: Record<string, { name: string; color: string }>;
   /** Hash of the AI digest the stored annotations were generated from. */

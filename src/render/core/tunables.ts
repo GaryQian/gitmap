@@ -16,6 +16,8 @@ export const RENDER_LOCAL = {
     orbitSpeed: 0.006,
     /** Share of the viewport the map may fill in the default framing. */
     fitMargin: 0.88,
+    /** How long the view takes to re-centre when the side panel opens or closes; the panel slides in over 200 ms. */
+    insetMs: 220,
     /** flyTo distance for a unit, in multiples of its radius. */
     unitFocusRadii: 16,
     /** How far past the map's bounding radius the look-at point may travel. */
@@ -32,6 +34,18 @@ export const RENDER_LOCAL = {
     idleFps: 20,
     /** Frames kept for the fps average. */
     statFrames: 90,
+    /** Frames after a resize, or after the tab became visible, whose timing is not reported for adaptive quality. */
+    settleFrames: 6,
+  },
+  staging: {
+    /**
+     * A rebuild of a map with at least this many unit slots is spread over several animation frames
+     * (config.render.patchBudgetMs each); nothing is drawn until it is whole. Smaller maps rebuild at once.
+     * SWITCHED OFF (6A stopped before this was run in a browser): the intended value is 20000.
+     */
+    minUnits: Number.POSITIVE_INFINITY,
+    /** Unit slots written to the lookup textures per step of a staged rebuild. */
+    unitChunk: 8192,
   },
   reveal: {
     /** Shares of config.reveal.growMs: spread across cities, jitter inside a city, one sphere's own growth. */

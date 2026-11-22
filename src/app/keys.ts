@@ -123,7 +123,9 @@ const TABBABLE = 'a[href], button, input, select, textarea, summary, [tabindex],
 
 function tabStops(root: HTMLElement): HTMLElement[] {
   return [...root.querySelectorAll<HTMLElement>(TABBABLE)].filter((el) =>
-    el.tabIndex >= 0 && !(el as HTMLButtonElement).disabled && !el.closest('[inert]')
+    // an editable region is a tab stop although its `tabIndex` reads -1 (the code editor)
+    (el.tabIndex >= 0 || (el.isContentEditable && !el.hasAttribute('tabindex')))
+    && !(el as HTMLButtonElement).disabled && !el.closest('[inert]')
     && (!el.checkVisibility || el.checkVisibility({ visibilityProperty: true })));
 }
 
@@ -173,3 +175,6 @@ export function installTabOrder(): () => void {
   window.addEventListener('keydown', onTab);
   return () => window.removeEventListener('keydown', onTab);
 }
+
+// This module holds state (the open layers). Hot-swapping it would leave two copies alive, so reload the page instead.
+if (import.meta.hot) import.meta.hot.accept(() => location.reload());

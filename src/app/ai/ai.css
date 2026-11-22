@@ -14,6 +14,8 @@
 
 .gm-ai-consent {
   width: min(452px, calc(100vw - 32px));
+  /* never wider than its column: with the side panel open the bottom-centre column is narrow */
+  max-width: 100%;
   padding: 15px 18px 14px;
   /* it comes in after the map has, so it does not compete with the reveal */
   animation: gm-ai-arrive 500ms var(--gm-ease) 900ms both;
@@ -65,7 +67,8 @@
   to { opacity: 0; }
 }
 .gm-pill.gm-ai-failure {
-  max-width: min(520px, 60vw);
+  /* wide enough for the longest reason the pipeline gives; the title carries it when it is cut */
+  max-width: min(680px, 60vw);
   /* full-strength text: dim text does not keep 4.5:1 on a bare pill (theme.ts) */
   animation: gm-ai-fade 600ms ease var(--gm-ai-failure-ms, 8000ms) both;
 }

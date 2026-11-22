@@ -96,7 +96,10 @@ export function createInteraction(): SceneModule {
   let lastStep = 0;
 
   const sphereApi = () => (spheres ??= ctx.service<SpheresApi>('spheres'));
-  const isShown = (slot: number) => sphereApi()?.isShown(slot) ?? true;
+  /** On a very large map, a star that has given way to its district's aggregate is not drawn (src/render/quality). */
+  let quality: { collapsed(slot: number): boolean } | undefined;
+  const collapsed = (slot: number) => (quality ??= ctx.service<{ collapsed(slot: number): boolean }>('quality'))?.collapsed(slot) ?? false;
+  const isShown = (slot: number) => (sphereApi()?.isShown(slot) ?? true) && !collapsed(slot);
   const nudge = (slot: number, x: number, z: number) => sphereApi()?.setNudge(slot, x, 0, z);
 
   function refOf(slot: number): NodeRef | null {

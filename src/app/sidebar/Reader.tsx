@@ -1,7 +1,7 @@
 // The reader and editor: header, tabs, and the body for whichever state the read is in. Edits are
 // kept per file in drafts.ts until saved: to the folder when the browser can write to it, otherwise
 // as a download.
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import type { ContentSource } from '../../contracts/git';
 import type { Session } from '../../contracts/pipeline';
 import { fileRef, type NodeRef, type RepoMeta } from '../../model/types';
@@ -20,7 +20,8 @@ import { SIDEBAR_LOCAL as T } from './tunables';
 type ReadState =
   | { status: 'no-source' }
   | { status: 'loading' }
-  | { status: 'failed' }
+  /** `notInPackage`: the file is on the map but its package does not hold it (trimmed for size). */
+  | { status: 'failed'; notInPackage?: boolean }
   | { status: 'done'; content: Decoded };
 
 /**
@@ -43,7 +44,8 @@ function useFileContent(session: Session | null, path: string): ReadState {
     try { reading = from.read(fileRef(path)); } catch (err) { reading = Promise.reject(err); }
     reading.then(
       (bytes) => settle({ status: 'done', content: decodeContent(bytes, T.maxTextBytes, T.binarySniffBytes) }),
-      () => settle({ status: 'failed' }),
+      // told apart by name: the error may come from another copy of the module, or across a worker
+      (err: unknown) => settle({ status: 'failed', notInPackage: (err as { name?: unknown } | null)?.name === 'NotInPackageError' }),
     );
     return () => { current = false; };
   }, [session, path, available]);
@@ -51,6 +53,32 @@ function useFileContent(session: Session | null, path: string): ReadState {
   if (!available) return { status: 'no-source' };
   if (!result || result.session !== session || result.path !== path) return { status: 'loading' };
   return result.state;
+}
+
+/**
+ * While a file is being read from a package whose files are still arriving (a demo, just opened):
+ * how far that download is, looked at a few times a second. Null when there is nothing to wait for.
+ */
+function useFilesDownload(session: Session | null, loading: boolean): { loaded: number; total: number | null } | null {
+  const [at, setAt] = useState<{ loaded: number; total: number | null } | null>(null);
+  useEffect(() => {
+    const source = session?.content;
+    if (!loading || !source?.progress) { setAt(null); return; }
+    const look = () => {
+      const p = source.progress!();
+      setAt(p.done ? null : { loaded: p.loaded, total: p.total });
+    };
+    look();
+    const timer = setInterval(look, 250);
+    return () => clearInterval(timer);
+  }, [session, loading]);
+  return loading ? at : null;
+}
+
+/** "Downloading the demo's files 3.1 / 8.4 MB"; megabytes as the waiting screen counts them. */
+function downloadLabel(at: { loaded: number; total: number | null }): string {
+  const mb = (bytes: number): string => (bytes / 1e6).toFixed(1);
+  return `Downloading the demo's files ${at.total ? `${mb(at.loaded)} / ${mb(at.total)}` : mb(at.loaded)} MB`;
 }
 
 function useViewportWidth(): number {
@@ -168,12 +196,20 @@ const isSaveKey = (e: KeyboardEvent<HTMLElement>) =>
   (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 's';
 
 /**
+ * What every panel shows above its content, when mount.tsx provides it: the File / Chat tab bar.
+ * The content is then that bar's tab panel, named by the tab that is showing.
+ */
+export interface PanelFrame { bar: ReactNode; tabId: string; panelId: string }
+export const PanelTop = createContext<PanelFrame | null>(null);
+
+/**
  * The panel itself, whatever is in it: width, resize handle, focus on open and back on close, and
  * Escape to close.
  */
-function Panel({ label, onClose, onKeyDown, children }: {
+export function Panel({ label, onClose, onKeyDown, children }: {
   label: string; onClose: () => void; onKeyDown?: (e: KeyboardEvent<HTMLElement>) => void; children: ReactNode;
 }) {
+  const top = useContext(PanelTop);
   const prefs = usePrefs();
   const viewport = useViewportWidth();
   const width = clampWidth(prefs.width, viewport);
@@ -189,8 +225,10 @@ function Panel({ label, onClose, onKeyDown, children }: {
       const now = document.activeElement;
       const lost = now === null || now === document.body || (el?.contains(now) ?? false);
       if (!lost) return;
-      // the button that reopened the panel was replaced while it was open: the new one is the way back in
-      const back = before instanceof HTMLElement && before.isConnected ? before : document.querySelector<HTMLElement>('.gm-reader-reopen');
+      // the tab that reopened the panel went away as it opened (so `before` is the body): the new tab is the way back in
+      const back = before instanceof HTMLElement && before !== document.body && before.isConnected
+        ? before
+        : document.querySelector<HTMLElement>('.gm-reader-handle');
       back?.focus({ preventScroll: true });
     };
   }, []);
@@ -208,7 +246,12 @@ function Panel({ label, onClose, onKeyDown, children }: {
         onResize={(next, done) => setWidth(clampWidth(next, viewport), done)}
         onReset={() => setWidth(clampWidth(T.widthDefaultPx, viewport))}
       />
-      {children}
+      {top ? (
+        <>
+          {top.bar}
+          <div className="gm-panel-body" role="tabpanel" id={top.panelId} aria-labelledby={top.tabId}>{children}</div>
+        </>
+      ) : children}
     </aside>
   );
 }
@@ -255,6 +298,9 @@ export function Reader({ openFile, target, session, meta }: ReaderProps) {
 
   const read = useFileContent(session, file.path);
   const text = read.status === 'done' && read.content.kind === 'text' ? read.content : null;
+  // a demo's files arrive after its map: a file opened before then waits for them
+  const isDemo = session?.source.kind === 'demo';
+  const arriving = useFilesDownload(session, read.status === 'loading');
 
   // What was read is what is on disk; an unsaved draft of the file is kept beside it.
   useEffect(() => { if (text) setBase(file.path, text.text); }, [text, file.path]);
@@ -324,8 +370,16 @@ export function Reader({ openFile, target, session, meta }: ReaderProps) {
 
   let body: ReactNode;
   if (read.status === 'no-source') body = <p className="gm-reader-note">Choose the repo folder to view files</p>;
-  else if (read.status === 'loading') body = <p className="gm-reader-note gm-reader-wait">Loading</p>;
-  else if (read.status === 'failed') body = <p className="gm-reader-note">This file could not be read</p>;
+  else if (read.status === 'loading') body = <p className="gm-reader-note gm-reader-wait">{isDemo && arriving ? downloadLabel(arriving) : 'Loading'}</p>;
+  else if (read.status === 'failed') {
+    body = (
+      <p className="gm-reader-note">
+        {!read.notInPackage ? 'This file could not be read'
+          : isDemo ? 'This file is not included in the demo.'
+          : 'This file is not included in this package.'}
+      </p>
+    );
+  }
   else if (!text) body = <p className="gm-reader-note">This file is not text</p>;
   else {
     const source = (

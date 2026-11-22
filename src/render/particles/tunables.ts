@@ -22,6 +22,8 @@ export const PARTICLE_LOCAL = {
   /** Column of light on 'open': height and width in sphere radii. */
   columnHeight: 26,
   columnWidth: 1.5,
+  /** Under an overlay, the burst of a star whose value is not yet known: this share of the text colour (a neutral grey). */
+  unknownBurst: 0.55,
   /** The flash as each sphere ignites at the reveal: seconds, and size in sphere radii. */
   igniteSeconds: 0.5,
   igniteRadii: 3.4,

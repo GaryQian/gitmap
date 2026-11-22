@@ -21,7 +21,7 @@ export default async function main(args: string[]): Promise<void> {
   const biases = (at >= 0 ? args[at + 1] : '0,0.5,1,2,4').split(',').map(Number);
   const keyAt = args.indexOf('--key');
   const key = keyAt >= 0 ? args[keyAt + 1] : 'pathBias';
-  if (key !== 'pathBias' && key !== 'mergePathBias') throw new Error('--key must be pathBias or mergePathBias');
+  if (!(key in config.clustering)) throw new Error(`--key must be a clustering value; got ${key}`);
   const repos = args.filter((a, i) => !a.startsWith('--') && (at < 0 || i !== at + 1) && (keyAt < 0 || i !== keyAt + 1));
   if (!repos.length) throw new Error('usage: node scripts/run.mjs scripts/bench/pathbias.ts <repo folder> [--bias 0,1,2]');
 

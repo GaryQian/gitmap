@@ -33,19 +33,28 @@ export function unfinished(progress: Partial<Record<Subsystem, ProgressEntry>>):
   return (Object.entries(progress) as [Subsystem, ProgressEntry][]).filter(([, p]) => p.total > 0 && p.done < p.total);
 }
 
+/** Progress rounded down to a quarter, so a screen reader hears four steps, not a hundred. */
+export function quarterPercent(p: Pick<ProgressEntry, 'done' | 'total'>): number {
+  return Math.floor((p.done / p.total) * 4) * 25;
+}
+
 function ProgressPill() {
   const active = unfinished(useApp((s) => s.progress));
   if (active.length === 0) return null;
   // the line is the mean of the parts: totals are in different units (files, commits, calls)
   const overall = active.reduce((sum, [, p]) => sum + p.done / p.total, 0) / active.length;
+  // What is seen changes every percent; what is announced changes only at each quarter.
   return (
-    <Pill blur className="gm-progress" role="status" aria-label="Background work">
+    <Pill blur className="gm-progress" role="group" aria-label="Background work">
       {active.map(([subsystem, p]) => (
-        <span className="gm-progress-part" key={subsystem}>
+        <span className="gm-progress-part" key={subsystem} aria-hidden="true">
           <span>{p.label ?? SUBSYSTEM_LABELS[subsystem]}</span>
           <Strong>{Math.floor((p.done / p.total) * 100)}%</Strong>
         </span>
       ))}
+      <span className="gm-visually-hidden" role="status">
+        {active.map(([subsystem, p]) => `${p.label ?? SUBSYSTEM_LABELS[subsystem]} ${quarterPercent(p)}%`).join(', ')}
+      </span>
       <ProgressLine value={overall} />
     </Pill>
   );

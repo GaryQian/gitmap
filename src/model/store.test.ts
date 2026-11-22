@@ -1,11 +1,16 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { ProposalError } from '../contracts/store';
+import { ProposalError, type ModelReplica } from '../contracts/store';
 import { syntheticMeta, syntheticTables, tablesToOps } from '../testing/synthetic';
-import { createModelStore, createReplica, edgeId, type LayerDef, type ModelPatch, type PatchBatch } from './index';
+import {
+  createModelStore, createReplica, edgeId, ENTITY_KINDS, REFERENCE_COLUMNS,
+  type Annotation, type EdgeKind, type EntityKind, type LayerDef, type LayerStatus, type ModelPatch, type PatchBatch, type RepoMeta,
+} from './index';
 import { view } from './testHelpers';
 
 const layerDef = (id: string): LayerDef => ({ id, kind: 'scalar', label: id, domain: [0, 1], colormap: 'viridis' });
+const EDGE_KINDS: EdgeKind[] = ['import', 'call', 'reference', 'inherit', 'bridge'];
+const STATUSES: LayerStatus[] = ['pending', 'partial', 'complete'];
 
 /** One random step of a scenario. The numbers are only raw material for picking rows. */
 interface Command { type: string; a: number; b: number; n: number; x: number }
@@ -21,7 +26,18 @@ class Scenario {
   units = new Map<string, string>();            // id → district or ''
   files = new Map<string, string>();            // id → unit or ''
   edges = new Map<string, [string, string]>();  // id → [src, dst]
+  contributors = new Set<string>();
   layers = new Set<string>();
+  annotations = new Map<string, Annotation>();  // type:id → value, in the order the model keeps them
+  meta: Partial<RepoMeta> | null = null;
+  /** Ids of removed units, to add again later: an id may come back in another slot. */
+  private removedUnits: string[] = [];
+  /** The most rows each kind has held at once. */
+  peak: Record<EntityKind, number> = { city: 0, district: 0, unit: 0, file: 0, edge: 0, contributor: 0 };
+
+  sizes(): Record<EntityKind, number> {
+    return { city: this.cities.length, district: this.districts.size, unit: this.units.size, file: this.files.size, edge: this.edges.size, contributor: this.contributors.size };
+  }
 
   private some<T>(from: Iterable<T>, start: number, count: number): T[] {
     const all = [...from];
@@ -30,9 +46,19 @@ class Scenario {
     return out;
   }
 
+  /** Operations for one command. Each command only adds rows of a kind or only removes them, so sizes peak between commands. */
   ops(c: Command): ModelPatch[] {
+    const out = this.build(c);
+    const sizes = this.sizes();
+    for (const kind of ENTITY_KINDS) this.peak[kind] = Math.max(this.peak[kind], sizes[kind]);
+    return out;
+  }
+
+  private build(c: Command): ModelPatch[] {
     const districtIds = [...this.districts.keys()];
     const anyDistrict = (k: number) => (districtIds.length ? districtIds[k % districtIds.length] : '');
+    const unitIdsNow = [...this.units.keys()];
+    const anyUnit = (k: number) => (unitIdsNow.length ? unitIdsNow[k % unitIdsNow.length] : '');
     switch (c.type) {
       case 'city': {
         const id = `c${this.seq++}`;
@@ -40,36 +66,56 @@ class Scenario {
         return [{ op: 'add', kind: 'city', rows: { ids: [id], cols: { name: [`city ${id}`] } } }];
       }
       case 'district': {
-        if (!this.cities.length) return this.ops({ ...c, type: 'city' });
+        if (!this.cities.length) return this.build({ ...c, type: 'city' });
         const id = `d${this.seq++}`, city = this.cities[c.a % this.cities.length];
         this.districts.set(id, city);
         return [{ op: 'add', kind: 'district', rows: { ids: [id], cols: { city: [city], name: [id] } } }];
       }
+      case 'updateDistrict': {
+        const [id] = this.some(this.districts.keys(), c.a, 1);
+        if (id === undefined) return [];
+        const city = this.cities[c.b % this.cities.length];
+        this.districts.set(id, city);
+        return [{ op: 'update', kind: 'district', rows: { ids: [id], cols: { city: [city], name: [`renamed ${c.b}`] } } }];
+      }
       case 'units': {
         const ids: string[] = [], district: string[] = [], loc: number[] = [];
         for (let k = 0; k < c.n; k++) {
-          const id = `src/f${this.seq++}.ts`;
+          // now and then an id that was removed earlier comes back
+          const id = k === 0 && c.b % 3 === 0 && this.removedUnits.length ? this.removedUnits.pop()! : `src/f${this.seq++}.ts`;
           const d = (c.a + k) % 3 ? anyDistrict(c.b + k) : '';
           ids.push(id); district.push(d); loc.push(10 + c.a + k);
           this.units.set(id, d);
-          this.files.set(id, id);
         }
-        return [
-          { op: 'add', kind: 'unit', rows: { ids, cols: { primaryFile: ids, loc, district } } },
-          { op: 'add', kind: 'file', rows: { ids, cols: { unit: ids, loc } } },
-        ];
+        const out: ModelPatch[] = [{ op: 'add', kind: 'unit', rows: { ids, cols: { primaryFile: ids, loc, district } } }];
+        const fresh = ids.filter((id) => !this.files.has(id)), kept = ids.filter((id) => this.files.has(id));
+        if (fresh.length) out.push({ op: 'add', kind: 'file', rows: { ids: fresh, cols: { unit: fresh, loc: fresh.map((id) => loc[ids.indexOf(id)]) } } });
+        if (kept.length) out.push({ op: 'update', kind: 'file', rows: { ids: kept, cols: { unit: kept } } }); // its file outlived it
+        ids.forEach((id) => this.files.set(id, id));
+        return out;
       }
       case 'edges': {
-        const unitIds = [...this.units.keys()];
         const ids: string[] = [], src: string[] = [], dst: string[] = [];
-        for (let k = 0; k < c.n && unitIds.length; k++) {
-          const s = unitIds[(c.a + k) % unitIds.length], d = unitIds[(c.b + 7 * k) % unitIds.length];
+        for (let k = 0; k < c.n && unitIdsNow.length; k++) {
+          const s = unitIdsNow[(c.a + k) % unitIdsNow.length], d = unitIdsNow[(c.b + 7 * k) % unitIdsNow.length];
           const id = edgeId(s, d);
           if (this.edges.has(id)) continue;
           this.edges.set(id, [s, d]);
           ids.push(id); src.push(s); dst.push(d);
         }
         return ids.length ? [{ op: 'add', kind: 'edge', rows: { ids, cols: { src, dst, weight: ids.map(() => 1 + c.x) } } }] : [];
+      }
+      case 'updateEdges': {
+        const ids = this.some(this.edges.keys(), c.a, c.n);
+        if (!ids.length) return [];
+        if (c.b % 5 === 0) ids.push(ids[0]);
+        const cols: { weight: number[]; kind: EdgeKind[]; dst?: string[] } = { weight: ids.map((_, k) => 1 + c.x + k), kind: ids.map((_, k) => EDGE_KINDS[(c.b + k) % EDGE_KINDS.length]) };
+        if (c.b % 2) {
+          // re-point the dependency: the store does not tie an edge's id to its endpoints
+          cols.dst = ids.map((_, k) => anyUnit(c.b + k));
+          ids.forEach((id, k) => this.edges.set(id, [this.edges.get(id)![0], cols.dst![k]]));
+        }
+        return [{ op: 'update', kind: 'edge', rows: { ids, cols } }];
       }
       case 'updateUnits': {
         const ids = this.some(this.units.keys(), c.a, c.n);
@@ -81,6 +127,18 @@ class Scenario {
           ids.forEach((id, k) => this.units.set(id, cols.district![k]));
         }
         return [{ op: 'update', kind: 'unit', rows: { ids, cols } }];
+      }
+      case 'updateFiles': {
+        const ids = this.some(this.files.keys(), c.a, c.n);
+        if (!ids.length) return [];
+        const unit = ids.map((_, k) => ((c.b + k) % 3 ? anyUnit(c.b + k) : ''));
+        ids.forEach((id, k) => this.files.set(id, unit[k]));
+        return [{ op: 'update', kind: 'file', rows: { ids, cols: { unit, bytes: ids.map((_, k) => c.a + k) } } }];
+      }
+      case 'removeFiles': {
+        const ids = this.some(this.files.keys(), c.a, c.n);
+        ids.forEach((id) => this.files.delete(id));
+        return ids.length ? [{ op: 'remove', kind: 'file', rows: { ids, cols: {} } }] : [];
       }
       case 'assign': {
         const unitIds = this.some(this.units.keys(), c.a, c.n);
@@ -95,14 +153,15 @@ class Scenario {
         ids.forEach((id) => this.edges.delete(id));
         return ids.length ? [{ op: 'remove', kind: 'edge', rows: { ids, cols: {} } }] : [];
       }
-      case 'removeUnit': {
-        const [unit] = this.some(this.units.keys(), c.a, 1);
-        if (unit === undefined) return [];
+      case 'removeUnits': {
+        // several at once, from the middle of the table: the holes are what later adds reuse
+        const gone = new Set(this.some(this.units.keys(), c.a, c.n));
+        if (!gone.size) return [];
         const out: ModelPatch[] = [];
-        const edges = [...this.edges].filter(([, [s, d]]) => s === unit || d === unit).map(([id]) => id);
+        const edges = [...this.edges].filter(([, [s, d]]) => gone.has(s) || gone.has(d)).map(([id]) => id);
         if (edges.length) out.push({ op: 'remove', kind: 'edge', rows: { ids: edges, cols: {} } });
         edges.forEach((id) => this.edges.delete(id));
-        const files = [...this.files].filter(([, u]) => u === unit).map(([id]) => id);
+        const files = [...this.files].filter(([, u]) => gone.has(u)).map(([id]) => id);
         if (files.length && c.b % 2) {
           // re-point the files instead of removing them
           out.push({ op: 'update', kind: 'file', rows: { ids: files, cols: { unit: files.map(() => '') } } });
@@ -111,8 +170,8 @@ class Scenario {
           out.push({ op: 'remove', kind: 'file', rows: { ids: files, cols: {} } });
           files.forEach((id) => this.files.delete(id));
         }
-        out.push({ op: 'remove', kind: 'unit', rows: { ids: [unit], cols: {} } });
-        this.units.delete(unit);
+        out.push({ op: 'remove', kind: 'unit', rows: { ids: [...gone], cols: {} } });
+        for (const id of gone) { this.units.delete(id); this.removedUnits.push(id); }
         return out;
       }
       case 'removeDistrict': {
@@ -133,14 +192,44 @@ class Scenario {
         }
         return out;
       }
+      case 'contributor': {
+        const [known] = this.some(this.contributors, c.a, 1);
+        if (known !== undefined && c.b % 3 === 0) {
+          this.contributors.delete(known);
+          return [{ op: 'remove', kind: 'contributor', rows: { ids: [known], cols: {} } }];
+        }
+        if (known !== undefined && c.b % 3 === 1) return [{ op: 'update', kind: 'contributor', rows: { ids: [known], cols: { commits: [c.b] } } }];
+        const id = `p${this.seq++}`;
+        this.contributors.add(id);
+        return [{ op: 'add', kind: 'contributor', rows: { ids: [id], cols: { name: [`Person ${id}`], commits: [c.a] } } }];
+      }
       case 'layer': {
         const id = `layer${c.a % 2}`;
         const unitIds = this.some(this.units.keys(), c.b, c.n);
-        const op: ModelPatch = { op: 'layer', id, unitIds, values: unitIds.map((_, k) => ((c.b + k) % 4 ? c.x : NaN)), status: 'partial', coverage: c.x };
+        const op: ModelPatch = { op: 'layer', id, unitIds, values: unitIds.map((_, k) => ((c.b + k) % 4 ? c.x : NaN)), status: STATUSES[c.a % 3], coverage: c.x };
         if (!this.layers.has(id) || c.b % 3 === 0) op.def = layerDef(id);
+        if (c.b % 4 === 1) op.extra = { [`key${c.a % 3}`]: c.b }; // merged into what the layer already carries
         this.layers.add(id);
         return [op];
       }
+      case 'annotation': {
+        const id = `a${c.a % 3}`, parent = `u:${anyUnit(c.b) || 'nothing/yet.ts'}` as const;
+        const value: Annotation = c.b % 3 === 0 ? { type: 'poi', id, parent, label: `label ${c.b}`, summary: 'why it matters', kind: 'core', evidence: 'seen', details: {} }
+          : c.b % 3 === 1 ? { type: 'summary', id, parent, text: `text ${c.b}` }
+            : { type: 'tour', id, steps: [{ parent, frame: 'file', text: `step ${c.b}`, highlights: [parent] }] };
+        const key = `${value.type}:${id}`;
+        this.annotations.delete(key); // setting one again moves it to the end
+        if (c.n === 1) return [{ op: 'annotation', action: 'remove', value }]; // removing one that is not there is allowed
+        this.annotations.set(key, value);
+        return [c.n === 2 ? { op: 'annotation', action: 'set', value } : { op: 'annotation', value }];
+      }
+      case 'meta': {
+        const value: Partial<RepoMeta> = c.b % 2 ? { name: `repo ${c.a}` } : { parsedAt: c.a, structure: c.b % 4 ? 'full' : 'imports-only' };
+        this.meta = { ...this.meta, ...value };
+        return [{ op: 'meta', value }];
+      }
+      case 'progress':
+        return [c.b % 2 ? { op: 'progress', subsystem: 'fastPass', done: c.a, total: 1000, label: 'parsing' } : { op: 'progress', subsystem: 'history', done: c.a, total: 1000 }];
       default:
         throw new Error(`unknown command ${c.type}`);
     }
@@ -148,45 +237,119 @@ class Scenario {
 }
 
 const command: fc.Arbitrary<Command> = fc.record({
-  type: fc.constantFrom('city', 'district', 'units', 'units', 'edges', 'edges', 'updateUnits', 'assign', 'removeEdges', 'removeUnit', 'removeDistrict', 'layer'),
+  type: fc.constantFrom(
+    'city', 'district', 'updateDistrict', 'units', 'units', 'units', 'edges', 'edges', 'updateEdges', 'updateUnits', 'updateFiles', 'removeFiles',
+    'assign', 'removeEdges', 'removeUnits', 'removeUnits', 'removeDistrict', 'contributor', 'layer', 'layer', 'annotation', 'meta', 'progress',
+  ),
   a: fc.nat(1000),
   b: fc.nat(1000),
   n: fc.integer({ min: 1, max: 4 }),
   x: fc.double({ min: 0, max: 1, noNaN: true }).map((v) => Math.fround(v)),
 });
 
+/** Operations that are invalid whatever the model holds. */
+const ALWAYS_INVALID: ModelPatch[] = [
+  { op: 'update', kind: 'city', rows: { ids: ['no such city'], cols: { name: ['x'] } } },
+  { op: 'add', kind: 'unit', rows: { ids: ['twice.ts', 'twice.ts'], cols: {} } },
+  { op: 'layer', id: 'never-defined', unitIds: [], values: [] },
+  { op: 'assign', unitIds: ['no such unit'], districtIds: [''] },
+  { op: 'remove', kind: 'contributor', rows: { ids: ['nobody'], cols: {} } },
+  { op: 'add', kind: 'edge', rows: { ids: ['dangling'], cols: { src: ['no such unit'], dst: ['no such unit'] } } },
+];
+
+/** The checks PLAN.md §5.1 lists for development builds: every reference column points at a live row. */
+function expectReferencesLive(replica: ModelReplica): void {
+  for (const kind of ENTITY_KINDS) {
+    const table = replica.table(kind);
+    const refs = REFERENCE_COLUMNS[kind] as Record<string, { kind: EntityKind; optional: boolean }>;
+    for (const [col, ref] of Object.entries(refs)) {
+      const target = replica.table(ref.kind);
+      const ids = (table.cols as unknown as Record<string, string[]>)[col];
+      for (const s of table.slots()) {
+        const want = ids[s] === '' ? -1 : target.slotOf(ids[s]);
+        expect(table.refSlots[col][s], `${kind}.${col} of ${table.ids[s]}`).toBe(want);
+        if (!ref.optional) expect(want).toBeGreaterThanOrEqual(0);
+      }
+    }
+  }
+}
+
 describe('ModelStore', () => {
   it('batches applied one by one equal a rebuild from the full batch', () => {
-    const proposal = fc.record({ commands: fc.array(command, { minLength: 1, maxLength: 6 }), rejectedFirst: fc.boolean() });
-    const invalid: ModelPatch = { op: 'update', kind: 'city', rows: { ids: ['no such city'], cols: { name: ['x'] } } };
-    fc.assert(fc.property(fc.array(proposal, { minLength: 1, maxLength: 12 }), (proposals) => {
+    const proposal = fc.record({ commands: fc.array(command, { minLength: 1, maxLength: 6 }), rejectedFirst: fc.option(fc.nat(ALWAYS_INVALID.length - 1), { nil: undefined }) });
+    const run = fc.record({ proposals: fc.array(proposal, { minLength: 1, maxLength: 14 }), joinAt: fc.nat(13) });
+    fc.assert(fc.property(run, ({ proposals, joinAt }) => {
       const store = createModelStore();
-      const follower = createReplica();
-      store.subscribe((batch) => { if (!follower.apply(batch)) throw new Error('the follower saw a revision gap'); });
+      const follower = createReplica();   // sees every batch as emitted
+      const wire = createReplica();       // sees a structured clone of every batch, as a worker would
+      let late: ModelReplica | null = null; // joins part-way from a full batch, then follows
+      /** Where every live row sits, from the emitted batches alone. */
+      const slotOf: Record<EntityKind, Map<string, number>> = { city: new Map(), district: new Map(), unit: new Map(), file: new Map(), edge: new Map(), contributor: new Map() };
+      store.subscribe((batch) => {
+        expect(batch.baseRev).toBe(batch.rev - 1);
+        for (const op of batch.ops) {
+          if (op.op === 'add' || op.op === 'update' || op.op === 'remove') {
+            const known = slotOf[op.kind], slots = op.rows.slots!;
+            expect(slots).toHaveLength(op.rows.ids.length);
+            op.rows.ids.forEach((id, r) => {
+              if (op.op === 'add') {
+                expect([...known.values()], `${op.kind} slot ${slots[r]} is taken`).not.toContain(slots[r]);
+                known.set(id, slots[r]);
+              } else {
+                expect(known.get(id), `${op.op} ${op.kind} ${id}`).toBe(slots[r]); // a row keeps its slot for as long as it lives
+                if (op.op === 'remove') known.delete(id);
+              }
+            });
+          } else if (op.op === 'assign') {
+            expect(op.units).toEqual(op.unitIds.map((id) => slotOf.unit.get(id)));
+            expect(op.districts).toEqual(op.districtIds.map((id) => (id === '' ? -1 : slotOf.district.get(id))));
+          } else if (op.op === 'layer') {
+            expect(op.slots).toEqual(op.unitIds.map((id) => slotOf.unit.get(id)));
+          }
+        }
+        if (!follower.apply(batch)) throw new Error('the follower saw a revision gap');
+        if (!wire.apply(structuredClone(batch))) throw new Error('the wire follower saw a revision gap');
+        if (late && !late.apply(batch)) throw new Error('the late follower saw a revision gap');
+      });
       const scenario = new Scenario();
-      for (const { commands, rejectedFirst } of proposals) {
+      proposals.forEach(({ commands, rejectedFirst }, index) => {
+        if (index === joinAt % proposals.length) {
+          late = createReplica();
+          expect(late.apply(store.fullBatch())).toBe(true);
+        }
         const ops = commands.flatMap((c) => scenario.ops(c));
         // A proposal that fails at its last operation must leave nothing behind: the same
         // operations without the bad one then go through as if it had never been tried.
-        if (rejectedFirst) expect(() => store.propose([...ops, invalid])).toThrow(ProposalError);
+        if (rejectedFirst !== undefined) expect(() => store.propose([...ops, ALWAYS_INVALID[rejectedFirst]])).toThrow(ProposalError);
         store.propose(ops);
         const rebuilt = createReplica();
         expect(rebuilt.apply(store.fullBatch())).toBe(true);
-        expect(view(follower)).toEqual(view(rebuilt));
-        expect(view(store.replica)).toEqual(view(rebuilt));
+        const expected = view(rebuilt);
+        expect(view(follower)).toEqual(expected);
+        expect(view(store.replica)).toEqual(expected);
+        expect(view(wire)).toEqual(expected);
+        if (late) expect(view(late)).toEqual(expected);
         expect(follower.rev).toBe(store.rev);
+        expectReferencesLive(follower);
+        const sizes = scenario.sizes();
+        for (const kind of ENTITY_KINDS) {
+          const table = follower.table(kind);
+          expect(table.count, kind).toBe(sizes[kind]);
+          expect(table.count).toBe(slotOf[kind].size);
+          for (const [id, slot] of slotOf[kind]) expect(table.slotOf(id)).toBe(slot);
+          // holes are filled before a table grows, so it is never larger than its fullest moment
+          expect(store.replica.table(kind).capacity, `${kind} capacity`).toBeLessThanOrEqual(scenario.peak[kind]);
+        }
         // an empty unit slot holds no layer value, so a unit that reuses the slot does not inherit one
         const unitTable = follower.table('unit');
         for (const layer of follower.layers.values()) {
           expect(layer.values).toHaveLength(unitTable.capacity);
           for (let s = 0; s < unitTable.capacity; s++) if (unitTable.ids[s] === null) expect(layer.values[s]).toBeNaN();
         }
-      }
-      expect(store.replica.table('unit').count).toBe(scenario.units.size);
-      expect(store.replica.table('file').count).toBe(scenario.files.size);
-      expect(store.replica.table('edge').count).toBe(scenario.edges.size);
-      expect(store.replica.table('district').count).toBe(scenario.districts.size);
-      expect(store.replica.table('city').count).toBe(scenario.cities.length);
+        expect(follower.meta).toEqual(scenario.meta);
+        expect(follower.annotations).toEqual([...scenario.annotations.values()]);
+        expect([...follower.layers.keys()].sort()).toEqual([...scenario.layers].sort());
+      });
       // whatever the history, something that is still pointed at cannot be removed
       const inUse: [kind: 'city' | 'district' | 'unit', ids: Iterable<string>][] = [
         ['city', scenario.districts.values()],
@@ -198,7 +361,16 @@ describe('ModelStore', () => {
           if (id !== '') expect(() => store.propose([{ op: 'remove', kind, rows: { ids: [id], cols: {} } }]), `${kind} ${id}`).toThrow(ProposalError);
         }
       }
-    }), { numRuns: 80 });
+      // saving and loading keeps everything but the slots: a loaded store is compact
+      if (store.replica.meta) {
+        const saved = store.toModel();
+        const loaded = createModelStore();
+        loaded.load(structuredClone(saved));
+        expect(loaded.toModel()).toEqual(saved);
+        for (const kind of ENTITY_KINDS) expect(loaded.replica.table(kind).capacity).toBe(store.replica.table(kind).count);
+        expectReferencesLive(loaded.replica);
+      }
+    }), { numRuns: 150 });
   });
 
   it('a replica that misses a batch refuses the next one and resyncs from a full batch', () => {

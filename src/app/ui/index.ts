@@ -5,4 +5,4 @@ export { Card } from './Card';
 export type { CardProps } from './Card';
 export { Segmented } from './Segmented';
 export type { SegmentedOption, SegmentedProps } from './Segmented';
-export { GearIcon, CloseIcon, PanelIcon, ChevronLeftIcon } from './icons';
+export { GearIcon, CloseIcon, InfoIcon, PanelIcon, ChevronLeftIcon } from './icons';

@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { createModelStore, edgeId, type StructureTables } from '../../model';
 import type { HistoryContributor } from '../../overlays';
 import { tablesToOps } from '../../testing/synthetic';
-import { announcedPercent, batchTouches, filterContributors, historyUnavailable, pillState, seedSlots, touchesOverlay } from './logic';
+import {
+  announcedPercent, batchTouches, filterContributors, historyUnavailable, overlayAccent, paletteAccents, pillState, seedSlots, touchesOverlay,
+} from './logic';
 
 const people: HistoryContributor[] = [
   { id: 1, name: 'Grace Hopper', commits: 40 },
@@ -50,6 +52,13 @@ describe('pill state', () => {
     expect(pillState(history, { status: 'partial', coverage: NaN }, false)).toEqual({ kind: 'partial', coverage: 0 });
     expect(pillState(history, { status: 'partial', coverage: 3 }, false)).toEqual({ kind: 'partial', coverage: 1 });
     expect(pillState(history, { status: 'complete', coverage: 1 }, false)).toEqual({ kind: 'complete' });
+  });
+
+  it('takes the most saturated colour of an overlay as its accent, and the red end for Dependency reach', () => {
+    expect(overlayAccent('tests', 'dark', ['#808080', '#3C9B78', '#FF6A45'])).toBe('#FF6A45');
+    expect(overlayAccent('recency', 'dark', [])).toBeNull();
+    expect(overlayAccent('reach', 'dark', [])).toBe(paletteAccents('dark').reach);
+    expect(Object.values(paletteAccents('light')).every((c) => typeof c === 'string')).toBe(true);
   });
 
   it('announces progress in quarters, not on every batch', () => {

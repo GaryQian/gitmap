@@ -91,6 +91,11 @@ export interface RenderApi {
   flyTo(ref: NodeRef, opts?: FlyOpts): Promise<void>;
   /** Fly to the default framing: the whole map in view at the default tilt. */
   resetView(opts?: FlyOpts): Promise<void>;
+  /**
+   * Canvas pixels covered by opaque chrome (the side panel on the right). Centring, flyTo and the
+   * default framing then use the uncovered part only; the change eases in over a short time.
+   */
+  setViewInset(insets: { right: number }): void;
   isDefaultView(): boolean;
   /** Screen position (CSS pixels relative to the canvas) of a node's anchor, or null if it does not exist. */
   project(ref: NodeRef): ScreenPoint | null;

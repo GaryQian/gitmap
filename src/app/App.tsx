@@ -35,7 +35,17 @@ function MapCanvas() {
     };
   }, [session]);
   if (!session) return null;
-  return <canvas key={sessionId} ref={canvas} className="gm-map-canvas" aria-label="Map of the repository" />;
+  // named by the map's heading (title/mount.tsx); the label is the fallback while there is none
+  return (
+    <canvas
+      key={sessionId}
+      ref={canvas}
+      className="gm-map-canvas"
+      role="img"
+      aria-labelledby="gm-map-heading"
+      aria-label="Map of the repository"
+    />
+  );
 }
 
 export function App() {

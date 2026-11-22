@@ -20,8 +20,8 @@
   text-align: center;
 }
 .gm-status-card-text { margin: 0; font-size: 13px; line-height: 1.5; text-wrap: balance; }
-/* the one action carries the halo, like the button segment of an action pill */
-.gm-pill.gm-status-card-action { color: var(--gm-halo); font-weight: 500; }
+/* the one action is link-coloured, like the button segment of an action pill */
+.gm-pill.gm-status-card-action { color: var(--gm-link); font-weight: 500; }
 
 /* ---- the landing page's line, when it offers something to do ---- */
 
@@ -30,7 +30,7 @@
   padding: 0;
   border: 0;
   background: none;
-  color: var(--gm-halo);
+  color: var(--gm-link);
   font: inherit;
   font-weight: 500;
   letter-spacing: inherit;

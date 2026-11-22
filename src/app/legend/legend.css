@@ -5,8 +5,8 @@
 /* ---- file-type rows ---- */
 
 .gm-legend-rows {
-  /* about eight rows, then the list scrolls inside the card */
-  max-height: 216px;
+  /* about eight rows, fewer in a short window (or a zoomed one), then the list scrolls inside the card */
+  max-height: min(216px, 28vh);
   margin: 0;
   padding: 0;
   list-style: none;

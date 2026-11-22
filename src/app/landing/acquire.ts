@@ -2,7 +2,8 @@
 //   Chromium:        showDirectoryPicker() / getAsFileSystemHandle()  → locator { kind: 'fsa' }
 //   Firefox, Safari: <input webkitdirectory> / webkitGetAsEntry()     → locator { kind: 'files' }
 //   A dropped *.starmap.json.gz                                        → { kind: 'snapshot' }
-import { importModelFile, isModelFileName } from '../../content';
+//   A dropped *.starmap.zip (a package: the map and its files)         → { kind: 'snapshot', package }
+import { importModelFile, isModelFileName, isPackageFileName, readPackage } from '../../content';
 import type { RepoSource } from '../../contracts/pipeline';
 import type { RepoLocator } from '../../contracts/git';
 import { classifyDecodeError, classifyPickError } from '../status/classify';
@@ -102,6 +103,21 @@ export function sourceFromFileList(files: ArrayLike<File>): RepoSource {
 export async function sourceFromSnapshotFile(file: File): Promise<RepoSource> {
   try {
     return { kind: 'snapshot', model: await importModelFile(file) };
+  } catch (err) {
+    throw new AcquireError(classifyDecodeError(err));
+  }
+}
+
+/**
+ * A dropped package (`.starmap.zip`, plan/DEMO-MODE.md §2). It opens as an import too, never as the
+ * demo of the same name, but with its files: they are read from the package, so no folder is needed.
+ */
+export async function sourceFromPackageFile(file: File): Promise<RepoSource> {
+  try {
+    // only the map is taken here; the session opens the package again to read files, and checks them then
+    const pkg = await readPackage(file, { oidOf: () => null });
+    const model = await importModelFile(new Blob([pkg.map as Uint8Array<ArrayBuffer>]));
+    return { kind: 'snapshot', model, package: file };
   } catch (err) {
     throw new AcquireError(classifyDecodeError(err));
   }
@@ -259,9 +275,10 @@ export async function sourceFromDrop(dropped: Dropped, onCount?: (n: number) => 
     return { kind: 'directory', locator };
   }
 
-  // not a folder: the only file accepted is a saved map
+  // not a folder: the only files accepted are a saved map and a package
   const name = handle?.name ?? entry?.name ?? dropped.file?.name ?? '';
-  if (!isSnapshotName(name)) throw new AcquireError('not-a-folder');
+  const isPackage = isPackageFileName(name);
+  if (!isPackage && !isSnapshotName(name)) throw new AcquireError('not-a-folder');
   let file: File | null;
   try {
     file = handle ? await (handle as FileSystemFileHandle).getFile()
@@ -271,5 +288,5 @@ export async function sourceFromDrop(dropped: Dropped, onCount?: (n: number) => 
     file = dropped.file;
   }
   if (!file) throw new AcquireError('saved-map-unreadable');
-  return sourceFromSnapshotFile(file);
+  return isPackage ? sourceFromPackageFile(file) : sourceFromSnapshotFile(file);
 }

@@ -37,6 +37,17 @@ export function GearIcon(props: { size?: number }) {
   );
 }
 
+/** A lowercase "i" in a circle: what this is. */
+export function InfoIcon(props: { size?: number }) {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v5.5" />
+      <path d="M12 7.6v.01" strokeWidth={2.2} />
+    </Icon>
+  );
+}
+
 export function CloseIcon(props: { size?: number }) {
   return (
     <Icon {...props}>

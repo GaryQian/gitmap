@@ -27,6 +27,12 @@ export interface SpheresApi {
   setNudge(slot: number, x: number, y: number, z: number): void;
   /** True when the unit in this slot is currently drawn (alive, revealed, not hidden by the slider). */
   isShown(slot: number): boolean;
+  /**
+   * How far the scene has gone over to the active overlay: 0 = file-type colours, 1 = overlay
+   * colours, in between while one fades in or out. The ground and the particles follow it, so the
+   * overlay's colours are the only colour signal while it shows (PLAN.md §8.6, §10).
+   */
+  overlayMix(): number;
 }
 
 const STATE_ITEMS = 2; // flags, birth time
@@ -91,6 +97,8 @@ export function createSpheres(): SceneModule {
     uLangDim: { value: null as THREE.DataTexture | null }, uRamp: { value: null as THREE.DataTexture | null },
     uCoreGain: { value: new THREE.Vector2() }, uCoreTight: { value: new THREE.Vector2() }, uLimb: { value: 0.62 }, uFlicker: { value: 0.07 },
     uGlowFalloff: { value: new THREE.Vector2() },
+    /** 0 under reduced motion: no breathing, no flicker, no surface turbulence, no glow shimmer. */
+    uMotion: { value: 1 },
   };
 
   // ---- geometry ----
@@ -202,6 +210,7 @@ export function createSpheres(): SceneModule {
     own.uCoreTight.value.set(star.coreTightness[0], star.coreTightness[1]);
     own.uLimb.value = star.limbDarkening;
     own.uFlicker.value = ctx.reducedMotion ? 0 : star.flicker;
+    own.uMotion.value = ctx.reducedMotion ? 0 : 1;
     own.uGlowFalloff.value.set(star.glowFalloff[0], star.glowFalloff[1]);
 
     const lookup = (data: Uint8Array, rows = 1) => {
@@ -218,7 +227,8 @@ export function createSpheres(): SceneModule {
 
     const uniforms = { ...ctx.uniforms, ...own };
     const dark = ctx.theme === 'dark';
-    const body = new THREE.ShaderMaterial({ uniforms, vertexShader: STAR_VERT, fragmentShader: BODY_FRAG, transparent: false, depthWrite: true, depthTest: true });
+    // alpha-to-coverage: the body's cut edge is anti-aliased by the multisampled canvas, still opaque and unsorted
+    const body = new THREE.ShaderMaterial({ uniforms, vertexShader: STAR_VERT, fragmentShader: BODY_FRAG, transparent: false, depthWrite: true, depthTest: true, alphaToCoverage: true });
     const glow = new THREE.ShaderMaterial({
       uniforms, defines: { CORONA: 1 }, vertexShader: STAR_VERT, fragmentShader: GLOW_FRAG,
       transparent: true, depthWrite: false, depthTest: true, blending: dark ? THREE.AdditiveBlending : THREE.NormalBlending,
@@ -272,6 +282,7 @@ export function createSpheres(): SceneModule {
         const selected = (stateData[slot * STATE_ITEMS] & FLAG_SELECTED) !== 0;
         return selected || !(buffers.shape[h + 2] < ctx.state.minBytes && buffers.shape[h + 1] <= 0);
       },
+      overlayMix: () => fade.mix,
     };
     ctx.provide('spheres', api);
   }

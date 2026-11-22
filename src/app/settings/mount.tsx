@@ -4,14 +4,64 @@ import { useEffect, useId, useRef, useState } from 'react';
 import type { AppMount } from '../../contracts/app';
 import { AiSettingsRow } from '../ai';
 import { LAYER, useDismissable } from '../keys';
-import { setParticles, useSettings } from '../store';
-import { Card, GearIcon, PillButton, Segmented, type SegmentedOption } from '../ui';
+import { setParticles, useSession, useSettings } from '../store';
+import { Card, GearIcon, PillButton, Segmented, Strong, type SegmentedOption } from '../ui';
+import { ExportRow } from './ExportRow';
+import { resetRepo, resetTarget } from './reset';
 import './settings.css';
 
 const PARTICLES: SegmentedOption<'on' | 'off'>[] = [
   { value: 'on', label: 'On' },
   { value: 'off', label: 'Off' },
 ];
+
+/** Re-parse the open repo from its folder, after deleting what was saved for it. Asks once first. */
+function ResetRow() {
+  const session = useSession();
+  const target = resetTarget(session);
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { setConfirming(false); setBusy(false); }, [session]);
+
+  return (
+    <div className="gm-field gm-reset">
+      <div className="gm-field-label">Repository</div>
+      {!confirming ? (
+        <PillButton
+          size="small"
+          className="gm-reset-button"
+          disabled={!target}
+          title={target ? 'Delete the saved map and parse the folder again' : 'Only a map opened from a folder can be parsed again'}
+          onClick={() => setConfirming(true)}
+        >
+          Reset and re-parse
+        </PillButton>
+      ) : (
+        <div className="gm-reset-confirm" role="group" aria-label="Confirm reset">
+          <p className="gm-reset-note">
+            Deletes the saved map, history and parse cache for <Strong>{target?.name}</Strong>, then parses the folder from scratch.
+          </p>
+          <div className="gm-reset-actions">
+            <PillButton size="small" onClick={() => setConfirming(false)} disabled={busy}>Cancel</PillButton>
+            <PillButton
+              size="small"
+              className="gm-reset-go"
+              disabled={busy || !target}
+              onClick={() => {
+                if (!target) return;
+                setBusy(true);
+                void resetRepo(target);
+              }}
+            >
+              Reset
+            </PillButton>
+          </div>
+        </div>
+      )}
+      {!target && <p className="gm-reset-note">Needs a map opened from a folder</p>}
+    </div>
+  );
+}
 
 function SettingsPill() {
   const settings = useSettings();
@@ -56,6 +106,8 @@ function SettingsPill() {
         <Card blur id={cardId} className="gm-settings-card" role="group" aria-label="Settings">
           <Segmented label="Particles" value={settings.particles ? 'on' : 'off'} options={PARTICLES} onChange={(v) => setParticles(v === 'on')} />
           <AiSettingsRow />
+          <ExportRow />
+          <ResetRow />
         </Card>
       )}
     </div>

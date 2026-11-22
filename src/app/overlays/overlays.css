@@ -13,14 +13,17 @@
 
 .gm-overlay-label.is-short { display: none; }
 
-/* On: tinted with the overlay's colour, ringed in it, with an × that turns it off again. */
+/* On: tinted with the overlay's colour, ringed in it, with an × that turns it off again. The share
+   of the colour in the fill (--gm-overlay-tint) and the colour of the ring and the dot
+   (--gm-overlay-mark: the overlay's colour, nudged toward the text colour where it would not stand
+   out 3:1 from the fill) come from theme.ts, with the colour itself. */
 :root[data-overlay] .gm-overlay-pill.is-active {
   padding-right: 8px;
-  border-color: var(--gm-overlay-accent);
-  background: color-mix(in srgb, var(--gm-overlay-accent) 22%, var(--gm-pill-bg-strong));
-  box-shadow: 0 0 0 1px var(--gm-overlay-accent), 0 0 18px color-mix(in srgb, var(--gm-overlay-accent) 35%, transparent);
+  border-color: var(--gm-overlay-mark, var(--gm-overlay-accent));
+  background: color-mix(in srgb, var(--gm-overlay-accent) var(--gm-overlay-tint, 22%), var(--gm-pill-bg-strong));
+  box-shadow: 0 0 0 1px var(--gm-overlay-mark, var(--gm-overlay-accent)), 0 0 18px color-mix(in srgb, var(--gm-overlay-accent) 35%, transparent);
 }
-:root[data-overlay] .gm-overlay-pill.is-active .gm-overlay-dot { fill: var(--gm-overlay-accent); }
+:root[data-overlay] .gm-overlay-pill.is-active .gm-overlay-dot { fill: var(--gm-overlay-mark, var(--gm-overlay-accent)); }
 .gm-overlay-off {
   display: inline-flex;
   align-items: center;
@@ -62,6 +65,7 @@
   position: absolute;
   top: 0;
   right: 0;
+  z-index: 1; /* over the side panel's tab on the right edge */
   width: min(264px, calc(100vw - 32px));
   padding: 12px 14px 13px;
 }

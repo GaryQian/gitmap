@@ -3,6 +3,7 @@ import type { Config } from '../config';
 import type { DetailQuestion } from '../contracts/ai';
 import type { AiOutcome, PipelineEvents, RepoSource, SearchHit } from '../contracts/pipeline';
 import type { SettleReport } from '../contracts/physics';
+import type { PackageManifest } from '../content';
 import type { LayoutSnapshot, RepoModel } from '../model/types';
 
 export type ToCoordinator =
@@ -29,6 +30,8 @@ export interface CoordinatorCalls {
   /** Answer one detail button. `fileText` is the file as the page could read it, or null. */
   aiDetail(poiId: string, question: DetailQuestion, fileText: string | null): AiOutcome;
   aiCancel(): void;
+  /** Session.readFiles: the bytes the map was built from, for the package export. */
+  readFiles(paths: string[]): (Uint8Array | null)[];
 }
 export type CoordinatorMethod = keyof CoordinatorCalls;
 
@@ -39,6 +42,8 @@ export interface MainCalls {
   relayout(maxMs: number): SettleReport;
   loadLayout(layout: LayoutSnapshot): void;
   getLayout(): LayoutSnapshot;
+  /** A demo's manifest and gzipped map, as soon as that much of its package has been downloaded. */
+  demoPackage(): { manifest: PackageManifest; map: Uint8Array };
 }
 export type MainMethod = keyof MainCalls;
 

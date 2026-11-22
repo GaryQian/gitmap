@@ -10,6 +10,7 @@ import { GEN_DISTRICT0 } from '../../contracts/physics';
 import type { PatchBatch } from '../../model/types';
 import { makeSlotTexture, slotTexHeight, SLOT_TEX_WIDTH } from '../core/positions';
 import type { BatchInfo, FrameState, RevealInfo, SceneContext, SceneModule } from '../core/types';
+import type { SpheresApi } from '../spheres/module';
 import type { TerritoryShape } from '../../shared/cells';
 import { districtBorders } from './borders';
 import { BORDER_FRAG, BORDER_VERT, CITY_FRAG, CITY_VERT, DISTRICT_FRAG, DISTRICT_VERT, FOOTPRINT_FRAG, FOOTPRINT_VERT, GROUND_FRAG, GROUND_VERT } from './shaders';
@@ -56,6 +57,8 @@ export function createTerritory(): SceneModule {
     uDistrictTint: { value: null as THREE.DataTexture | null }, uCityTint: { value: null as THREE.DataTexture | null },
     uFade: { value: 0 }, uFill: { value: new THREE.Vector2(T.fill[0], T.fill[1]) }, uContour: { value: new THREE.Vector2(T.contourOuter, T.contourInner) },
     uStrength: { value: new THREE.Vector3() }, uBorderStrength: { value: 0 }, uBorder: { value: new THREE.Vector2(T.borderPx, T.borderWorld) },
+    /** 0 = fills and contours in the territory tints, 1 = neutral grey: follows the overlay as it fades in and out. */
+    uNeutral: { value: 0 },
   };
 
   const additive = (uniforms: Record<string, THREE.IUniform>, vertexShader: string, fragmentShader: string) => {
@@ -290,6 +293,8 @@ export function createTerritory(): SceneModule {
     if (!shown) return;
     const fade = ctx.reducedMotion ? 1 : Math.min(1, (f.time - revealAt) / T.fadeIn);
     if (fade !== own.uFade.value) { own.uFade.value = fade; ctx.invalidate(); }
+    // under an overlay the ground goes neutral (PLAN.md §8.6, §10); the spheres module owns the fade
+    own.uNeutral.value = ctx.service<SpheresApi>('spheres')?.overlayMix() ?? 0;
     if (modelDirty) rebuildModel();
     if (bordersDirty) rebuildBorders();
     borders.visible = !!borderGeometry && borderGeometry.instanceCount > 0;

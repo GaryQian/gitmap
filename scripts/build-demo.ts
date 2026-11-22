@@ -1,38 +1,51 @@
-// Build a demo (PLAN.md §12.1): two static files per repo, served from the app's own origin.
+// Build a package (plan/DEMO-MODE.md) without the browser: the same parse, cluster and layout
+// pipeline as the app, headless, written by the same writer as the app's Export button.
 //
-//   <out>/<name>/snapshot.starmap.json.gz   the parsed model, loaded when the demo pill is clicked
-//   <out>/<name>/content.zip               the text of every file on the map at the parsed commit,
-//                                          read one entry at a time by src/content's demoSource
+//   <out>/<name>.starmap.zip     the map and the text of its files, as one package
 //
-// Usage: node scripts/run.mjs scripts/build-demo.ts <local clone> [--name demo-small] [--out public/demo]
-//          [--source-url URL] [--allow-unknown-license]
+// With --ai it also does the AI work the app's Export does: city summaries, points of interest, the
+// tour and every detail card, through the same handlers the app's /api/ai routes use. That needs the
+// provider's key in the environment, which is where the dev server reads it from too:
 //
-// The steps run in the order of `main` below. Two of them are hooks that other packages fill in:
-// `computeHistoryLayers` (history overlays) and `generateAnnotations` (AI pre-generation).
-import { mkdirSync, statSync, writeFileSync } from 'node:fs';
+//   node --env-file=.env.local scripts/run.mjs scripts/build-demo.ts ../react --ai
+//
+// Without --ai the package has no AI notes (its manifest says `ai: "none"`): a test fixture.
+//
+// Usage: node scripts/run.mjs scripts/build-demo.ts <local clone> [--name react] [--out public/demo]
+//          [--source-url URL] [--max-bytes N] [--min-lines N] [--no-history] [--history-seconds N]
+//          [--ai] [--allow-partial-ai]
+import { closeSync, mkdirSync, openSync, readFileSync, statSync, unlinkSync, writeSync } from 'node:fs';
 import path from 'node:path';
-import { zipSync, type Zippable } from 'fflate';
-import { config, type Config, type DemoRepo } from '../src/config';
-import { extractZipEntry, findZipEnd, parseZipDirectory, ZIP_END_MAX } from '../src/content';
-import { MODE_TREE, openGitRepo, parseCommit, treeEntries, type GitRepository } from '../src/git';
+import { createAiClient } from '../src/ai';
+import { createDeps, handlers, type RouteName } from '../src/ai/server';
+import { config as baseConfig, withConfig, type Config, type DemoRepo } from '../src/config';
+import { DETAIL_QUESTIONS, type DetailQuestion } from '../src/contracts/ai';
+import { licenseOf, readPackage, sourceUrlOf, writePackage, PACKAGE_SUFFIX, type PackageSink } from '../src/content';
+import type { RepoLocator } from '../src/contracts/git';
 import { openNodeRepoAccess } from '../src/git/node';
-import { encodeModel, type RepoModel } from '../src/model';
-import { runHeadless } from '../src/pipeline/node';
-import { basename, dirname, extname, gitBlobOid } from '../src/shared';
-
-// ---- command line ----
+import { decodeModel } from '../src/model';
+import type { Poi, RepoModel } from '../src/model/types';
+import type { PipelineDeps } from '../src/pipeline/core';
+import { createFileReader } from '../src/pipeline/exportFiles';
+import { runHeadless, type HeadlessResult } from '../src/pipeline/node';
 
 interface Args {
   rootPath: string;
   name: string;
   out: string;
   sourceUrl: string | null;
-  allowUnknownLicense: boolean;
+  maxBytes: number;
+  minLines: number;
+  history: boolean;
+  /** Walk history for this long instead of the app's default budget, with no commit cap. */
+  historySeconds: number | null;
+  ai: boolean;
+  allowPartialAi: boolean;
 }
 
-const USAGE = 'usage: node scripts/run.mjs scripts/build-demo.ts <local clone> [--name demo-small] [--out public/demo] [--source-url URL] [--allow-unknown-license]';
-const VALUE_FLAGS = new Set(['--name', '--out', '--source-url']);
-const BOOLEAN_FLAGS = new Set(['--allow-unknown-license']);
+const USAGE = 'usage: node scripts/run.mjs scripts/build-demo.ts <local clone> [--name react] [--out public/demo] [--source-url URL] [--max-bytes N] [--min-lines N] [--no-history] [--history-seconds N] [--ai] [--allow-partial-ai]';
+const VALUE_FLAGS = new Set(['--name', '--out', '--source-url', '--max-bytes', '--min-lines', '--history-seconds']);
+const BOOLEAN_FLAGS = new Set(['--no-history', '--ai', '--allow-partial-ai']);
 
 function parseArgs(argv: string[]): Args {
   const values = new Map<string, string>();
@@ -51,278 +64,203 @@ function parseArgs(argv: string[]): Args {
   if (positional.length !== 1) throw new Error(USAGE);
   const rootPath = path.resolve(positional[0]);
   const name = values.get('--name') ?? path.basename(rootPath);
-  // the name becomes a folder and part of a URL
+  // the name becomes a file name and part of a URL
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name)) throw new Error(`--name must be letters, digits, '.', '_' or '-': got "${name}"`);
+  const count = (flag: string, fallback: number): number => {
+    const raw = values.get(flag);
+    if (raw === undefined) return fallback;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 0) throw new Error(`${flag} must be a number, 0 or more: got "${raw}"`);
+    return Math.floor(n);
+  };
   return {
     rootPath, name,
     out: path.resolve(values.get('--out') ?? 'public/demo'),
     sourceUrl: values.get('--source-url') ?? null,
-    allowUnknownLicense: flags.has('--allow-unknown-license'),
+    maxBytes: count('--max-bytes', baseConfig.demo.package.maxBytes),
+    minLines: count('--min-lines', baseConfig.demo.package.minLines),
+    history: !flags.has('--no-history'),
+    historySeconds: values.has('--history-seconds') ? count('--history-seconds', 0) : null,
+    ai: flags.has('--ai'),
+    allowPartialAi: flags.has('--allow-partial-ai'),
   };
 }
 
-// ---- licence ----
-
-export interface DetectedLicense {
-  /** SPDX id when recognised; otherwise the file's first non-empty line ('' for an empty file). */
-  license: string;
-  recognised: boolean;
+/** The archive goes straight to disk, a chunk at a time. */
+function fileSink(file: string): PackageSink {
+  const fd = openSync(file, 'w');
+  let open = true;
+  const close = () => { if (open) { open = false; closeSync(fd); } };
+  return {
+    write(chunk) { writeSync(fd, chunk); },
+    close,
+    abort() { close(); try { unlinkSync(file); } catch { /* nothing was written */ } },
+  };
 }
 
-/** Licence files travel with the code whatever else is left out (PLAN.md §12.1). */
-const NOTICE_FILE = /^(LICEN[CS]E|NOTICE|COPYING|UNLICEN[CS]E)([.-].*)?$/i;
+// ---- the AI work (plan/DEMO-MODE.md §3, step 2) ----
 
-/** Match a licence text against the common permissive licences, by its title and then by its wording. */
-export function detectLicense(text: string): DetectedLicense {
-  const lines = text.replace(/^﻿/, '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  const title = lines.slice(0, 3).join(' ').replace(/\s+/g, ' ');
-  const whole = lines.join(' ').replace(/\s+/g, ' ');
-  const found = (license: string): DetectedLicense => ({ license, recognised: true });
-  if (/\bMIT License\b/i.test(title)) return found('MIT');
-  if (/\bApache License\b/i.test(title) && /\bVersion 2\.0\b/i.test(title)) return found('Apache-2.0');
-  if (/\bMozilla Public License,? Version 2\.0\b/i.test(title)) return found('MPL-2.0');
-  if (/\bISC License\b/i.test(title)) return found('ISC');
-  if (/\bBSD 3-Clause\b/i.test(title)) return found('BSD-3-Clause');
-  if (/\bBSD 2-Clause\b/i.test(title)) return found('BSD-2-Clause');
-  // Many licence files start with the copyright line instead of a title: go by the operative sentence.
-  if (/Permission is hereby granted, free of charge, to any person obtaining a copy of this software/i.test(whole)
-    && /THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND/i.test(whole)) return found('MIT');
-  if (/Permission to use, copy, modify, and(\/or)? distribute this software for any purpose with or without fee is hereby granted/i.test(whole)) return found('ISC');
-  if (/Redistribution and use in source and binary forms, with or without modification, are permitted/i.test(whole)) {
-    if (/must display the following acknowledge?ment/i.test(whole)) return { license: lines[0] ?? '', recognised: false }; // 4-clause
-    return found(/Neither the name of .{1,200} nor the names of|may not be used to endorse or promote products/i.test(whole) ? 'BSD-3-Clause' : 'BSD-2-Clause');
-  }
-  return { license: lines[0] ?? '', recognised: false };
-}
-
-// ---- git ----
-
-/** Every blob of a commit's tree: path → oid. Submodules are skipped. */
-function treeBlobs(repo: GitRepository, treeOid: string, prefix = '', out = new Map<string, string>()): Map<string, string> {
-  const tree = repo.readObject(treeOid);
-  if (!tree || tree.type !== 'tree') throw new Error(`git: tree ${treeOid} is missing from the clone (a shallow or partial clone?)`);
-  for (const entry of treeEntries(tree.data)) {
-    if (entry.mode === MODE_TREE) treeBlobs(repo, entry.oid, `${prefix}${entry.name}/`, out);
-    else out.set(prefix + entry.name, entry.oid);
-  }
-  return out;
-}
-
-function readBlob(repo: GitRepository, oid: string): Uint8Array | null {
-  const object = repo.readObject(oid);
-  return object && object.type === 'blob' ? object.data : null;
-}
-
-/** The repo's main licence file at the root, by preference. */
-function findLicenseFile(committed: Map<string, string>): string | null {
-  const roots = [...committed.keys()].filter((p) => !p.includes('/') && /^(LICEN[CS]E|COPYING)([.-].*)?$/i.test(p));
-  const rank = (p: string): number => (/^LICEN[CS]E$/i.test(p) ? 0 : /^LICEN[CS]E\.(md|txt)$/i.test(p) ? 1 : /^LICEN[CS]E/i.test(p) ? 2 : 3);
-  roots.sort((a, b) => rank(a) - rank(b) || (a < b ? -1 : 1));
-  return roots[0] ?? null;
-}
-
-// ---- the steps ----
-
-interface BuildContext {
-  args: Args;
-  config: Config;
-  repo: GitRepository;
-  headOid: string;
-  /** Committer time of the parsed commit, ms. */
-  commitTime: number;
-  /** path → blob oid at the parsed commit. */
-  committed: Map<string, string>;
-  /** The model being built. Steps change it in place. */
-  model: RepoModel;
-}
-
-/** Step 1: the same parse, cluster and layout pipeline as the app, headless. */
-async function runPipeline(args: Args): Promise<RepoModel> {
-  const t0 = performance.now();
-  let lastStage = '';
-  const result = await runHeadless({ kind: 'directory', locator: { kind: 'node', rootPath: args.rootPath } }, config, {
-    onEvent(evt, payload) {
-      if (evt !== 'stage') return;
-      const s = payload as { stage: string; label: string };
-      if (s.stage !== lastStage) { lastStage = s.stage; console.log(`[${((performance.now() - t0) / 1000).toFixed(2)}s] ${s.stage} ${s.label}`); }
-    },
+/** The app's own /api/ai handlers, called in this process. The key comes from the environment. */
+function aiClient(config: Config) {
+  const deps = {
+    ...createDeps(process.env, config),
+    // the limiter protects a public endpoint from strangers; this is the developer's own build
+    limiter: { hit: async () => ({ allowed: true, count: 0, retryAfterMs: 0 }) },
+  };
+  return createAiClient({
+    fetch: (async (url: unknown, init?: RequestInit) =>
+      handlers[String(url).split('/').pop() as RouteName](new Request(`http://local${String(url)}`, init), deps)) as typeof fetch,
   });
-  const { model } = result;
-  result.dispose();
-  return model;
 }
 
-/**
- * HOOK — history overlays (PLAN.md §12.1 "Building a demo", step 3; the M4 history packages).
- * Walk history once to compute the overlay layers (Recency, Ownership, Knowledge risk) and the
- * contributor table, write them into `ctx.model.layers` / `ctx.model.tables.contributor`, then
- * discard the history: no commits, trees or diffs go into the snapshot.
- * Nothing is left to do here: runHeadless (step 1) walks the history itself and returns the model
- * with the three layers and the contributor table in it, and keeps no commits. finishModel strips
- * the contributors' addresses.
- */
-async function computeHistoryLayers(_ctx: BuildContext): Promise<void> {
-  // done by the pipeline: src/pipeline/history.ts
+const QUESTIONS = Object.keys(DETAIL_QUESTIONS) as DetailQuestion[];
+const poisOf = (result: HeadlessResult): Poi[] => result.store.replica.annotations.filter((a): a is Poi => a.type === 'poi');
+const missingDetails = (result: HeadlessResult): { poi: Poi; question: DetailQuestion }[] =>
+  poisOf(result).flatMap((poi) => QUESTIONS.filter((q) => poi.details?.[q]?.status !== 'ready').map((question) => ({ poi, question })));
+
+/** How much of the AI work a model carries, for the manifest. */
+function aiState(model: RepoModel): 'complete' | 'partial' | 'none' {
+  const { summaries, pois, tours } = model.annotations;
+  const tour = tours[0] ?? null; // a model carries at most one tour
+  const some = summaries.length > 0 || pois.length > 0 || tour !== null;
+  if (!some) return 'none';
+  const details = pois.every((p) => QUESTIONS.every((q) => p.details?.[q]?.status === 'ready'));
+  return summaries.length > 0 && pois.length > 0 && tour !== null && details ? 'complete' : 'partial';
 }
 
-/**
- * HOOK — AI pre-generation (PLAN.md §12.1 "Building a demo", step 4; package 5F).
- * Generate summaries, points of interest, the tour and each point of interest's detail cards with
- * the developer's key and write them into `ctx.model.annotations` (and `meta.digestHash`), so the
- * demo makes no model calls.
- * Currently a no-op: the snapshot has no annotations.
- */
-async function generateAnnotations(_ctx: BuildContext): Promise<void> {
-  // filled in by package 5F
-}
-
-/** Step 2: what a demo snapshot may and must say about itself. */
-function finishModel(ctx: BuildContext, license: string): void {
-  const { model, args } = ctx;
-  // names stay so the Ownership picker works; addresses do not ship
-  const contributors = model.tables.contributor;
-  contributors.cols.emails = contributors.ids.map(() => '');
-  const sourceUrl = args.sourceUrl ?? (model.meta.remoteUrl && !model.meta.remoteUrl.startsWith('/') ? `https://${model.meta.remoteUrl}` : '');
-  model.meta = {
-    ...model.meta,
-    // its own id, so a demo never shares a registry or snapshot slot with the user's clone of the same repo
-    id: `demo:${args.name}`,
-    source: 'demo',
-    headOid: ctx.headOid,
-    // there is no working tree to compare against
-    indexChecksum: null,
-    demo: { sourceUrl, commit: ctx.headOid, license },
-  };
-}
-
-interface Pack {
-  zip: Uint8Array;
-  entries: number;
-  rawBytes: number;
-  skipped: { binary: number; tooLarge: number; missing: number };
-}
-
-const looksBinary = (bytes: Uint8Array): boolean => bytes.subarray(0, 8000).includes(0);
-
-/** Step 4: every file that has a sphere and is text, from the committed blobs, plus the licence files. */
-function buildPack(ctx: BuildContext): Pack {
-  const { model, repo } = ctx;
-  const binary = new Set(ctx.config.parser.binaryExtensions);
-  const maxBytes = ctx.config.parser.maxFileBytes;
-  const files = model.tables.file;
-  const input: Zippable = {};
-  const pack: Pack = { zip: new Uint8Array(0), entries: 0, rawBytes: 0, skipped: { binary: 0, tooLarge: 0, missing: 0 } };
-  // a fixed time, so the same commit always produces the same archive
-  const mtime = new Date(Math.min(Math.max(ctx.commitTime, Date.UTC(1980, 0, 2)), Date.UTC(2099, 0, 1)));
-  const add = (file: string, bytes: Uint8Array): void => {
-    input[file] = [bytes, { level: 9, mtime }];
-    pack.entries++;
-    pack.rawBytes += bytes.length;
-  };
-  const dirs = new Set<string>(['']);
-  for (let row = 0; row < files.ids.length; row++) {
-    const file = files.ids[row];
-    const oid = files.cols.oid![row];
-    if (binary.has(extname(file))) { pack.skipped.binary++; continue; }
-    const bytes = oid ? readBlob(repo, oid) : null;
-    if (!bytes) { pack.skipped.missing++; continue; }
-    if (bytes.length > maxBytes) { pack.skipped.tooLarge++; continue; }
-    if (looksBinary(bytes)) { pack.skipped.binary++; continue; }
-    add(file, bytes);
-    for (let dir = dirname(file); !dirs.has(dir); dir = dirname(dir)) dirs.add(dir);
+/** Summaries, points of interest and the tour, then every detail card, three at a time; one more pass for what failed. */
+async function writeAiNotes(result: HeadlessResult, read: (paths: string[]) => Promise<(Uint8Array | null)[]>, log: (line: string) => void): Promise<string[]> {
+  const problems: string[] = [];
+  const outcome = await result.ai.start();
+  if (outcome.failure) problems.push(`notes: ${outcome.failure.message}`);
+  const a = result.store.replica.annotations;
+  log(`AI notes: ${a.filter((x) => x.type === 'summary').length} summaries, ${poisOf(result).length} points of interest, tour ${a.some((x) => x.type === 'tour') ? 'written' : 'missing'}`);
+  for (let pass = 0; pass < 2; pass++) {
+    const jobs = missingDetails(result);
+    if (jobs.length === 0) break;
+    log(`AI detail cards: ${jobs.length} to write${pass ? ' (second try)' : ''}`);
+    let next = 0, done = 0;
+    const failures: string[] = [];
+    await Promise.all(Array.from({ length: 3 }, async () => {
+      for (;;) {
+        const job = jobs[next++];
+        if (!job) return;
+        const path = job.poi.parent.slice(2);
+        const [bytes] = await read([path]);
+        const text = bytes ? new TextDecoder().decode(bytes) : null;
+        const { failure } = await result.ai.detail(job.poi.id, job.question, text);
+        if (failure) failures.push(`${job.poi.label} / ${job.question}: ${failure.message}`);
+        if (++done % 10 === 0 || done === jobs.length) log(`AI detail cards ${done} / ${jobs.length}`);
+      }
+    }));
+    if (pass === 1) problems.push(...failures);
   }
-  // Licence and notice files of the root and of every folder that has packed code, on the map or not.
-  for (const [file, oid] of ctx.committed) {
-    if (input[file] || !NOTICE_FILE.test(basename(file)) || !dirs.has(dirname(file))) continue;
-    const bytes = readBlob(repo, oid);
-    if (bytes) add(file, bytes);
-  }
-  // demoSource reads archives without zip64 only
-  if (pack.entries > 65534) throw new Error(`${pack.entries} files are too many for the content pack (the limit without zip64 is 65,534).`);
-  pack.zip = zipSync(input);
-  if (pack.zip.length >= 0xffffffff) throw new Error('The content pack would pass 4 GB, which needs zip64.');
-  return pack;
+  const left = missingDetails(result).length;
+  if (left) problems.push(`${left} detail cards are still missing`);
+  return problems;
 }
 
-/** Read every entry back with the app's own zip reader and check it against the snapshot's blob oids. */
-async function verifyPack(ctx: BuildContext, zip: Uint8Array): Promise<void> {
-  const end = findZipEnd(zip.subarray(Math.max(0, zip.length - ZIP_END_MAX)));
-  const entries = parseZipDirectory(zip.subarray(end.cdOffset, end.cdOffset + end.cdSize), end);
-  const files = ctx.model.tables.file;
-  const oidOf = new Map(files.ids.map((id, row) => [id, files.cols.oid![row]]));
-  for (const entry of entries) {
-    const bytes = await extractZipEntry(zip.subarray(entry.offset, entry.end), entry);
-    const expected = oidOf.get(entry.path) ?? ctx.committed.get(entry.path);
-    if ((await gitBlobOid(bytes)) !== expected) throw new Error(`content pack check failed: ${entry.path} does not hash to ${expected}`);
-  }
-}
-
-const kb = (bytes: number): string => `${(bytes / 1024).toLocaleString('en-US', { maximumFractionDigits: 1 })} KB`;
+const mb = (bytes: number): string => `${(bytes / 1e6).toLocaleString('en-US', { maximumFractionDigits: 1 })} MB`;
+const count = (n: number): string => n.toLocaleString('en-US');
 
 export default async function main(argv: string[]): Promise<void> {
   const args = parseArgs(argv);
+  const config = args.historySeconds === null ? baseConfig
+    : withConfig({ history: { timeBudgetSeconds: args.historySeconds, maxCommits: 1_000_000_000 } });
+  const t0 = performance.now();
+  const at = (): string => `[${((performance.now() - t0) / 1000).toFixed(1)}s]`;
 
-  // ---- the clone and its commit ----
-  const access = await openNodeRepoAccess(args.rootPath);
-  if (!access.git) throw new Error(`${args.rootPath} is not a git clone: a demo is built from one commit.`);
-  const repo = openGitRepo(access.git);
-  const headOid = repo.head().oid;
-  const head = headOid ? repo.readObject(headOid) : null;
-  if (!headOid || !head || head.type !== 'commit') throw new Error(`${args.rootPath} has no commit checked out.`);
-  const commit = parseCommit(head.data);
-  const committed = treeBlobs(repo, commit.tree);
+  // ---- 1. parse, cluster, lay out, walk history ----
+  let lastStage = '';
+  const result = await runHeadless({ kind: 'directory', locator: { kind: 'node', rootPath: args.rootPath } }, config, {
+    history: args.history,
+    aiClient: args.ai ? aiClient(config) : undefined,
+    onEvent(evt, payload) {
+      if (evt !== 'stage') return;
+      const s = payload as { stage: string; label: string };
+      if (s.stage !== lastStage) { lastStage = s.stage; console.log(`${at()} ${s.stage} ${s.label}`); }
+    },
+  });
 
-  // ---- the licence, before any work: permissive licences require the notice to travel with the code ----
-  const licenseFile = findLicenseFile(committed);
-  const licenseText = licenseFile ? readBlob(repo, committed.get(licenseFile)!) : null;
-  const detected: DetectedLicense = licenseText ? detectLicense(new TextDecoder().decode(licenseText)) : { license: '', recognised: false };
-  if (!detected.recognised && !args.allowUnknownLicense) {
-    const seen = licenseFile ? `${licenseFile} starts with "${detected.license}", which is not one of MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC or MPL-2.0` : 'the repo has no LICENSE or COPYING file at its root';
-    throw new Error(`Licence not recognised: ${seen}.\nA demo republishes the repo's files, so check that its licence allows that, then pass --allow-unknown-license.`);
+  try {
+    const openRepo = async (locator: RepoLocator) => {
+      if (locator.kind !== 'node') throw new Error(`cannot open a '${locator.kind}' locator here`);
+      return openNodeRepoAccess(locator.rootPath);
+    };
+    // the reader needs the store (blob ids) and a way to open the folder; nothing else of the pipeline
+    const read = createFileReader({ store: result.store, openRepo } as unknown as PipelineDeps, result.state);
+
+    // ---- 1b. the AI work, when asked for ----
+    let finished = result.model;
+    if (args.ai) {
+      const problems = await writeAiNotes(result, read, (line) => console.log(`${at()} ${line}`));
+      finished = await result.finish();
+      for (const p of problems) console.log(`AI problem: ${p}`);
+      if (aiState(finished) !== 'complete' && !args.allowPartialAi) {
+        throw new Error('The AI notes are not complete (see the problems above). Nothing was written; run again, or pass --allow-partial-ai to package what there is.');
+      }
+    }
+    // the package is named for the demo, whatever the clone's folder is called
+    const model = { ...finished, meta: { ...finished.meta, name: args.name } };
+    const ai = aiState(model);
+
+    // ---- 2. the licence: a package republishes the repo's files ----
+    const license = await licenseOf(read);
+    console.log(`${at()} licence: ${license}`);
+    if (license === 'unknown') console.log('note: the licence was not recognised. Check that it allows republishing the files before shipping this package.');
+    const sourceUrl = args.sourceUrl ?? sourceUrlOf(model.meta.remoteUrl);
+    if (!sourceUrl) console.log('note: no source URL recorded (the clone has no origin remote); pass --source-url');
+
+    // ---- 3. the package ----
+    mkdirSync(args.out, { recursive: true });
+    const file = path.join(args.out, args.name + PACKAGE_SUFFIX);
+    let shown = 0;
+    const report = await writePackage({
+      model, read, sink: fileSink(file),
+      info: { sourceUrl, license, ai },
+      maxBytes: args.maxBytes, minLines: args.minLines, maxFileBytes: config.parser.maxFileBytes,
+      onProgress(done, total, bytes) {
+        const now = performance.now();
+        if (now - shown < 2000 && done < total) return;
+        shown = now;
+        console.log(`${at()} packing ${count(done)} / ${count(total)} · ${mb(bytes)}`);
+      },
+    });
+
+    // ---- 4. read it back with the app's own reader ----
+    const size = statSync(file).size;
+    const blob = new Blob([readFileSync(file)]);
+    const files = model.tables.file;
+    const oids = new Map(files.ids.map((id, row) => [id, files.cols.oid![row] ?? '']));
+    const opened = await readPackage(blob, { oidOf: (p) => oids.get(p) || null });
+    const back = await decodeModel(opened.map);
+    if (back.tables.unit.ids.length !== model.tables.unit.ids.length) throw new Error('package check failed: the map did not read back whole');
+    let checked = 0;
+    for (const id of files.ids) {
+      if (!opened.content.has(id)) continue;
+      await opened.content.read(`f:${id}`); // rejects when the bytes do not hash to the map's blob id
+      checked++;
+    }
+    if (checked !== report.packedFiles) throw new Error(`package check failed: ${report.packedFiles} files were packed but ${checked} read back`);
+
+    // ---- 5. report ----
+    const s = model.meta.stats;
+    console.log(`${args.name} @ ${(model.meta.headOid ?? '').slice(0, 10) || 'no commit'}: ${count(s.files)} files, ${count(s.units)} units, ${count(s.edges)} edges, ${model.tables.city.ids.length} cities, ${model.tables.district.ids.length} districts`);
+    console.log(`package   ${file}  ${mb(size)}  (${count(report.packedFiles)} files, ${mb(report.rawBytes)} of text; every one read back and verified)`);
+    const left: string[] = [];
+    if (report.trimmedFiles) left.push(`${count(report.trimmedFiles)} trimmed for size`);
+    if (report.skippedFiles) left.push(`${count(report.skippedFiles)} binary or over ${mb(config.parser.maxFileBytes)}`);
+    if (report.unreadableFiles) left.push(`${count(report.unreadableFiles)} unreadable or changed since the parse`);
+    if (left.length) console.log(`left out: ${left.join(', ')}`);
+    const notes = model.annotations;
+    console.log(ai === 'none'
+      ? 'AI: none (pass --ai to include summaries, points of interest, the tour and the detail cards)'
+      : `AI: ${ai} (${notes.summaries.length} summaries, ${notes.pois.length} points of interest, ${notes.tours[0]?.steps.length ?? 0} tour steps)`);
+    const entry: DemoRepo = { name: args.name, file: `/demo/${args.name}${PACKAGE_SUFFIX}` };
+    const location = sourceUrl.replace(/^[a-z]+:\/\//i, '');
+    if (location) entry.location = location;
+    console.log(`add to config.json → demo.repos:\n  ${JSON.stringify(entry)}`);
+  } finally {
+    result.dispose();
   }
-  const license = detected.license || 'unknown';
-  console.log(`licence: ${license}${detected.recognised ? '' : ' (not recognised)'}${licenseFile ? `, from ${licenseFile}` : ''}`);
-
-  // ---- 1. parse, cluster, lay out ----
-  const model = await runPipeline(args);
-  const ctx: BuildContext = { args, config, repo, headOid, commitTime: commit.committer.time * 1000, committed, model };
-
-  // The map is parsed from the index; the demo names one commit. They must be the same files.
-  const files = model.tables.file;
-  const staged = files.ids.filter((id, row) => files.cols.oid![row] !== (committed.get(id) ?? ''));
-  if (staged.length) {
-    throw new Error(`${staged.length} file(s) on the map differ from commit ${headOid.slice(0, 10)} (${staged.slice(0, 5).join(', ')}${staged.length > 5 ? ', …' : ''}).\nCommit or unstage them: a demo is built from one commit.`);
-  }
-
-  // ---- hooks other packages fill in ----
-  await computeHistoryLayers(ctx);
-  await generateAnnotations(ctx);
-
-  // ---- 2. strip e-mail addresses; record source, commit and licence ----
-  finishModel(ctx, license);
-
-  // ---- 3. the snapshot ----
-  const dir = path.join(args.out, args.name);
-  mkdirSync(dir, { recursive: true });
-  const snapshotPath = path.join(dir, 'snapshot.starmap.json.gz');
-  writeFileSync(snapshotPath, await encodeModel(model));
-
-  // ---- 4. the content pack ----
-  const pack = buildPack(ctx);
-  await verifyPack(ctx, pack.zip);
-  const zipPath = path.join(dir, 'content.zip');
-  writeFileSync(zipPath, pack.zip);
-
-  // ---- 5. report ----
-  const s = model.meta.stats;
-  const { binary, tooLarge, missing } = pack.skipped;
-  console.log(`${model.meta.name} @ ${headOid.slice(0, 10)}: ${s.files} files, ${s.units} units, ${s.edges} edges, ${model.tables.city.ids.length} cities, ${model.tables.district.ids.length} districts`);
-  console.log(`snapshot  ${snapshotPath}  ${kb(statSync(snapshotPath).size)}`);
-  console.log(`content   ${zipPath}  ${kb(statSync(zipPath).size)}  (${pack.entries} entries, ${kb(pack.rawBytes)} of text; every entry read back and verified)`);
-  if (binary || tooLarge || missing) console.log(`not packed: ${binary} binary, ${tooLarge} over ${kb(config.parser.maxFileBytes)}, ${missing} with no committed blob`);
-  if (!model.meta.demo?.sourceUrl) console.log('note: no source URL recorded (the clone has no origin remote); pass --source-url');
-  const entry: DemoRepo = { name: args.name, path: `/demo/${args.name}/` };
-  const location = model.meta.remoteUrl ?? model.meta.demo?.sourceUrl.replace(/^[a-z]+:\/\//i, '');
-  if (location) entry.location = location;
-  console.log(`add to config.json → demo.repos:\n  ${JSON.stringify(entry)}`);
 }

@@ -13,6 +13,7 @@ import { browserSupport, supportVerdict } from '../status/support';
 import '../status/status.css';
 import { setBackgroundEmphasis, setMessage, useApp } from '../store';
 import { PillButton } from '../ui';
+import { About } from './About';
 import { AcquireError, captureDrop, pickDirectory, sourceFromDrop, sourceFromFileList } from './acquire';
 
 /** Run one way of getting a source; open it, or put the reason it failed under the button. */
@@ -132,6 +133,7 @@ export function Landing() {
 
   return (
     <main className="gm-landing">
+      <About />
       <h1 className="gm-title">{config.app.title}</h1>
       {verdict.canChoose && <PillButton size="large" blur onClick={choose}>Choose a folder</PillButton>}
       <p className="gm-message" role="status">

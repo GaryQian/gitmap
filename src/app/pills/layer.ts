@@ -88,8 +88,8 @@ export function createPillLayer(container: HTMLElement, render: RenderApi, sessi
   /** Where the fixed chrome is, in scene coordinates; re-read now and then, never per frame. */
   let chrome: Rect[] = [];
   let chromeReadAt = -Infinity;
-  /** The least opacity a distance-faded pill may have, for the mode it was worked out for. */
-  let minFade = 0;
+  /** The opacity of the farthest pills, for the mode it was worked out for. */
+  let minFade = 1;
   let fadeMode: string | null = null;
 
   // ---- elements ----
@@ -232,10 +232,10 @@ export function createPillLayer(container: HTMLElement, render: RenderApi, sessi
     const now = performance.now();
     const positions = session.physics.positions;
     const cameraDistance = lastFrame?.cameraDistance ?? Infinity;
-    // a far pill fades, but never below what keeps its text readable over a bright star (theme.ts)
+    // a far pill fades as far as its text stays readable over a bright star, and no further (theme.ts)
     const mode = useApp.getState().mode;
     if (mode !== fadeMode) { fadeMode = mode; minFade = sceneFadeFloor(mode); }
-    const fade = (depth: number): number => Math.max(minFade, distanceFade(depth, cameraDistance));
+    const fade = (depth: number): number => distanceFade(depth, cameraDistance, minFade);
 
     candidates.length = 0;
     for (const city of cities) {
@@ -394,8 +394,11 @@ export function createPillLayer(container: HTMLElement, render: RenderApi, sessi
     if (!pill || order.length === 0) return;
     e.preventDefault();
     if (e.shiftKey) { nudge(pill, dx * KEY_NUDGE_PX, dy * KEY_NUDGE_PX); return; }
-    const at = order.indexOf(pill);
-    order[(at + step + order.length) % order.length]!.el.focus();
+    // In reading order on screen. `order` itself is by priority, and the focused pill is always first
+    // in it, so stepping through that would only ever swap two pills.
+    const ring = [...order].sort((a, b) => a.y - b.y || a.x - b.x);
+    const at = ring.indexOf(pill);
+    ring[(at + step + ring.length) % ring.length]!.el.focus();
   }
 
   function onFocusIn(e: FocusEvent): void {

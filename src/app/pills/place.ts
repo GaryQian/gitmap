@@ -43,10 +43,13 @@ export function keepPills<T extends PillBox>(boxes: T[], max: number, blocked: r
   return kept;
 }
 
-/** Pills fade with distance: full strength up close, down to a floor far behind the camera's target. */
-export function distanceFade(depth: number, cameraDistance: number): number {
-  const { fadeStart, fadeEnd, fadeFloor } = APP_LOCAL.pills;
+/**
+ * Pills fade with distance: full strength up close, down to `floor` far behind the camera's target.
+ * The floor is the theme's (`sceneFadeFloor(mode)`): as faint as a pill may get and stay readable.
+ */
+export function distanceFade(depth: number, cameraDistance: number, floor: number): number {
+  const { fadeStart, fadeEnd } = APP_LOCAL.pills;
   if (!(cameraDistance > 0) || !Number.isFinite(cameraDistance)) return 1;
   const t = (depth / cameraDistance - fadeStart) / (fadeEnd - fadeStart);
-  return t <= 0 ? 1 : t >= 1 ? fadeFloor : 1 - t * (1 - fadeFloor);
+  return t <= 0 ? 1 : t >= 1 ? floor : 1 - t * (1 - floor);
 }

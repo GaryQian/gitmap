@@ -125,6 +125,15 @@ export async function loadSavedHistory(persist: PipelinePersistence | undefined,
   }
 }
 
+/** The OPFS directory beside `snapshots/` that holds each repo's history facts. */
+export const HISTORY_DIR = 'history';
+
+/** Drop the walk saved for a repo, so the next open walks from the start. Never rejects. */
+export async function forgetHistory(persist: Pick<PipelinePersistence, 'aux'> | undefined, id: string): Promise<void> {
+  if (!persist?.aux) return;
+  try { await persist.aux.delete(await historyBlobName(id)); } catch { /* nothing saved, or storage gone */ }
+}
+
 /** Keep a finished walk for the next visit. Never rejects: losing it only costs a longer walk. */
 export async function saveHistory(persist: PipelinePersistence | undefined, id: string, result: HistoryResult): Promise<void> {
   if (!persist?.aux) return;

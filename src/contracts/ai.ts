@@ -5,9 +5,10 @@ import type { NodeRef, PoiKind, TourFrame, UnitRef } from '../model/types';
  * Which tier of model a call uses (config.ai.models / config.ai.openaiModels):
  *   bulk       the cheapest tier: one short summary per city
  *   tour       a mid tier: the guided tour, written in one call
+ *   chat       a mid tier: the chat assistant (src/ai/chat)
  *   synthesis  the most capable tier: points of interest and detail answers
  */
-export type ModelRole = 'synthesis' | 'tour' | 'bulk';
+export type ModelRole = 'synthesis' | 'tour' | 'chat' | 'bulk';
 
 export interface GenerateRequest {
   role: ModelRole;

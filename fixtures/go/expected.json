@@ -43,5 +43,16 @@
     ["internal/store/store.go", "internal/store/store_test.go"],
     ["internal/server/server.go", "internal/server/routes.go"],
     ["pkg/pricing/pricing.go", "pkg/pricing/format.go"]
-  ]
+  ],
+  "endToEnd": {
+    "about": "Read by src/lang/fixtures.e2e.test.ts. linked: [src, dst, symbol] joined by the symbol linker with no import statement between the two files (same package, namespace or module). ambiguous: calls whose name has several reachable definitions, so the linker drops them (PLAN.md 6.4). notLinked: a name that belongs to something outside the repo, so no edge from src to dst may carry it.",
+    "linked": [
+      ["internal/store/store.go", "internal/store/item.go", "Item"],
+      ["internal/server/routes.go", "internal/server/server.go", "Server"]
+    ],
+    "notLinked": [
+      ["internal/store/item.go", "internal/store/store.go", "New", "errors.New: the qualifier is the imported package errors"],
+      ["internal/server/routes.go", "internal/server/server.go", "Handler", "http.Handler: the qualifier is the imported package net/http"]
+    ]
+  }
 }

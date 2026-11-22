@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Annotation, NodeRef } from '../../model/types';
-import { cardContent, cardOwner, inFlight, pinnedCity, placeCard, summaryFor, titleFor, type Rect } from './logic';
+import { cardContent, cardOwner, effectivePin, inFlight, pinAfter, pinnedCity, placeCard, summaryFor, titleFor, type Rect } from './logic';
 import { SUMMARY_UI } from './tunables';
 
 const summary = (id: string, parent: NodeRef, text: string, label?: string): Annotation =>
@@ -58,6 +58,40 @@ describe('the title of the card', () => {
     expect(titleFor('API', 'api')).toBeNull();
     expect(titleFor('Request handling', 'request-handling')).toBeNull();
     expect(titleFor('Request handling.', ' Request  Handling')).toBeNull();
+  });
+});
+
+describe('pinning a card by a click on its pill', () => {
+  const click = (ref: NodeRef, hasCard = true) => ({ type: 'pill', ref, hasCard }) as const;
+
+  it('pins on a click and lets go on a second click on the same pill', () => {
+    expect(pinAfter(null, click('c:api'))).toBe('c:api');
+    expect(pinAfter('c:api', click('c:api'))).toBeNull();
+    expect(pinAfter(pinAfter(pinAfter(null, click('c:api')), click('c:api')), click('c:api'))).toBe('c:api');
+  });
+
+  it('moves the pin when another pill is clicked', () => {
+    expect(pinAfter('c:api', click('c:web'))).toBe('c:web');
+  });
+
+  it('lets go on a click on the open map and on Escape', () => {
+    expect(pinAfter('c:api', { type: 'ground' })).toBeNull();
+    expect(pinAfter('c:api', { type: 'escape' })).toBeNull();
+    expect(pinAfter(null, { type: 'ground' })).toBeNull();
+    expect(pinAfter(null, { type: 'escape' })).toBeNull();
+  });
+
+  it('never pins a city that has nothing to show, and lets go of the one that was pinned', () => {
+    expect(pinAfter(null, click('c:tools', false))).toBeNull();
+    expect(pinAfter('c:api', click('c:tools', false))).toBeNull();
+  });
+
+  it('puts a clicked pin before a selected city, and falls back to the selection when it lets go', () => {
+    expect(effectivePin('c:api', ['c:web'])).toBe('c:api');
+    expect(effectivePin(pinAfter('c:api', click('c:api')), ['c:web'])).toBe('c:web');
+    expect(effectivePin(null, ['c:web', 'c:docs', 'u:docs/intro.md'])).toBe('c:docs');
+    expect(effectivePin(null, ['u:docs/intro.md'])).toBeNull();
+    expect(effectivePin(null, [])).toBeNull();
   });
 });
 

@@ -281,5 +281,6 @@ function SearchPill() {
 }
 
 // Before the progress pill (20) and the action pills (30): search comes first in the top centre.
-const mount: AppMount = { region: 'topCenter', order: 10, Component: SearchPill };
+// Top left, beside the title (order 0); the repo pill and the selection come after, on rows below.
+const mount: AppMount = { region: 'topLeft', order: 1, Component: SearchPill };
 export default mount;

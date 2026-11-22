@@ -16,10 +16,13 @@ export type RepoSource =
    * `fresh` parses regardless and ignores cached parse facts ("parse again").
    */
   | { kind: 'directory'; locator: RepoLocator; fresh?: boolean }
-  /** A saved or imported model; `locator` is present when the folder is also available. */
-  | { kind: 'snapshot'; model: RepoModel; locator?: RepoLocator }
-  /** A demo: base URL holding snapshot.starmap.json.gz and content.zip. */
-  | { kind: 'demo'; name: string; baseUrl: string }
+  /**
+   * A saved or imported model; `locator` is present when the folder is also available. `package` is
+   * the dropped `.starmap.zip` the model came from, whose files are then readable without a folder.
+   */
+  | { kind: 'snapshot'; model: RepoModel; locator?: RepoLocator; package?: Blob }
+  /** A demo from the list in config: the URL of its package, a `.starmap.zip` (plan/DEMO-MODE.md). */
+  | { kind: 'demo'; name: string; url: string }
   | { kind: 'synthetic'; files: number; seed?: number };
 
 export interface AttachOptions { theme?: 'dark' | 'light'; particles?: boolean; reducedMotion?: boolean }
@@ -121,6 +124,12 @@ export interface Session {
   search(query: string, limit?: number): Promise<SearchHit[]>;
   /** The current model as one document (export, snapshot). */
   exportModel(): Promise<RepoModel>;
+  /**
+   * For the package export: the bytes the map was built from (the committed blob where the folder is
+   * a git repo, else the file on disk), for repo-relative paths, in order; null for one that cannot
+   * be read. Absent where there is no folder behind the map.
+   */
+  readFiles?(paths: string[]): Promise<(Uint8Array | null)[]>;
   dispose(): void;
 }
 

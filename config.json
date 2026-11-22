@@ -10,6 +10,7 @@
   },
   "scheduler": {
     "workerShare": 0.5, "maxWorkers": 14, "memoryCapMB": 2048, "memoryPerWorkerMB": 140, "deviceMemoryShare": 0.5,
+    "threadsPerCore": 2, "busyAppThreads": 2, "reserveCores": 1,
     "taskTargetMs": 40, "parseFloorWorkers": 1, "historyChunkCommits": 200, "parkWhenFrameMsOver": 20
   },
   "parser": {
@@ -67,10 +68,13 @@
     "edgePulse": { "speed": 120, "tailLength": 30, "restSeconds": [0.5, 2.4], "flickerHz": 10, "traceOpacity": 0.16 }
   },
   "legend": { "minBytesDefault": 0 },
-  "demo": { "repos": [
-    { "name": "emerge", "path": "/demo/emerge/", "location": "github.com/glato/emerge" },
-    { "name": "react", "path": "/demo/react/", "location": "github.com/facebook/react" }
-  ] },
+  "demo": {
+    "package": { "maxBytes": 95000000, "minLines": 0 },
+    "repos": [
+      { "name": "react", "file": "/demo/react.starmap.zip", "location": "github.com/facebook/react" },
+      { "name": "starmap", "file": "/demo/starmap.starmap.zip", "location": "this app" }
+    ]
+  },
   "render": { "ambientEdges": 1500, "edgeBudget": 50000, "maxPills": 150, "patchBudgetMs": 4, "adaptiveDpr": true, "maxDpr": 2 },
   "interaction": { "jiggleMax": 0.35, "jiggleSettleMs": 800, "hoverDelayMs": 80 },
   "camera": { "minDistance": 10, "maxDistance": 5000, "flyMs": 900, "defaultTilt": 0.55 },

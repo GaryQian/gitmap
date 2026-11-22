@@ -85,4 +85,11 @@ export interface ContentSource {
    * gesture (the first write asks for write permission). Rejects with a message fit to show.
    */
   write?(file: NodeRef, bytes: Uint8Array): Promise<void>;
+  /**
+   * Present on a source whose files arrive after the map (a package, plan/DEMO-MODE.md §4): how far
+   * the download of the files is. A read made before `done` waits for it.
+   */
+  progress?(): { loaded: number; total: number | null; done: boolean };
+  /** With `progress`: whether the source holds this path; null while the files are still arriving. */
+  has?(path: string): boolean | null;
 }

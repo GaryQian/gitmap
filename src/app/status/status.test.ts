@@ -149,7 +149,7 @@ describe('folder permission', () => {
     const session = (source: Parameters<typeof offerFolder>[0], content: unknown) => ({ source, content }) as never;
     expect(folderNeed(null, null)).toBeNull();
     expect(folderNeed(session(saved, {}), { source: 'git' })).toBeNull(); // files can be read
-    expect(folderNeed(session({ kind: 'demo', name: 'd', baseUrl: '/' }, null), { source: 'demo' })).toBeNull();
+    expect(folderNeed(session({ kind: 'demo', name: 'd', url: '/d.starmap.zip' }, null), { source: 'demo' })).toBeNull();
     expect(folderNeed(session(saved, null), { source: 'git' })?.status).toBe('folder-needed');
     expect(folderNeed(session(saved, null), { source: 'import' })?.status).toBe('imported-no-folder');
     offerFolder(saved, { state: 'prompt', repoId: 'r' });

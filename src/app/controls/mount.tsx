@@ -110,7 +110,10 @@ function ResetView() {
     const onKeyDown = (e: KeyboardEvent) => {
       // not gated on defaultPrevented: the renderer's own Home handler (camera only) prevents the default first
       if (e.key !== 'Home' || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || isTyping(e.target)) return;
-      if ((e.target as HTMLElement | null)?.tagName === 'INPUT') return; // Home moves a slider to its start
+      const target = e.target as HTMLElement | null;
+      if (target?.tagName === 'INPUT') return; // Home moves a slider to its start
+      // ...and goes to the first item of a toolbar, a tab row or a list, or to a splitter's smallest size
+      if (target?.closest?.('[role="toolbar"], [role="tablist"], [role="listbox"], [role="separator"]')) return;
       e.preventDefault();
       resetRef.current();
     };

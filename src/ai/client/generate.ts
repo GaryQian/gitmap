@@ -15,7 +15,8 @@
 //
 // Stored results are keyed by the digest hash (`RepoMeta.digestHash`). What is stored for the
 // current digest is never asked for again: a complete set makes no calls at all, and a run that
-// lost a stage (rate limit, network) asks only for what is missing the next time.
+// lost a stage (rate limit, network) asks only for what is missing the next time. A tour written
+// under an earlier `TOUR_VERSION` counts as missing: it alone is asked for again, and replaced.
 import type { Config } from '../../config';
 import { DETAIL_QUESTIONS } from '../../contracts/ai';
 import type { CitySummary, PoiItem, PoisRequest, TourRequest, TourResponse } from '../../contracts/ai';
@@ -101,8 +102,18 @@ export function poiId(parent: UnitRef, label: string): string {
   return `poi:${hash32(key).toString(36)}${hash32(`starmap\n${key}`).toString(36)}`;
 }
 
-/** There is one tour per map. */
-export const TOUR_ID = 'tour';
+/**
+ * The version of the tour's instructions (server/prompts.ts and the checks in server/handlers.ts).
+ * Bump it when they change enough that tours already stored should be written again: a stored tour
+ * of another version is asked for once more on the next run, without touching the summaries and
+ * the points of interest of the same digest.
+ *   1  the first tours (id `tour`); steps could narrate link counts
+ *   2  steps say what the code does and how it fits the architecture; no counts or measurements
+ */
+export const TOUR_VERSION = 2;
+
+/** There is one tour per map. Its id carries the version it was written under. */
+export const TOUR_ID = `tour:v${TOUR_VERSION}`;
 
 /** Every detail question, not asked yet. */
 export function idleDetails(): Record<string, PoiDetail> {
@@ -199,7 +210,9 @@ export async function generateAnnotations(options: GenerateOptions): Promise<Gen
   for (const a of stored) if (a.type === 'summary') summaries.set(a.parent, { parent: a.parent, label: a.label ?? '', text: a.text });
   const count = poiCount(replica, config);
   const needPois = count > 0 && !stored.some((a) => a.type === 'poi');
-  const needTour = replica.table('unit').count > 0 && !stored.some((a) => a.type === 'tour' && a.steps.length > 0);
+  const needTour = replica.table('unit').count > 0 && !stored.some((a) => a.type === 'tour' && a.id === TOUR_ID && a.steps.length > 0);
+  // Tours of this digest written under an earlier version: they stay until the new one has arrived.
+  const oldTours = stored.filter((a) => a.type === 'tour' && a.id !== TOUR_ID);
   const result: GenerateResult = { ops: [], digestHash: digest.hash, skipped: false, errors: [], failure: null };
   if (!needPois && !needTour) return { ...result, skipped: true };
 
@@ -288,7 +301,7 @@ export async function generateAnnotations(options: GenerateOptions): Promise<Gen
           const req: TourRequest = { ...shared, minSteps: config.ai.tour.minSteps, maxSteps: config.ai.tour.maxSteps };
           const res = await client.tour(req, { signal });
           const steps = stepsFromResponse(res.steps, replica);
-          if (steps.length) push([set({ type: 'tour', id: TOUR_ID, steps } satisfies Tour)]);
+          if (steps.length) push([...oldTours.map(remove), set({ type: 'tour', id: TOUR_ID, steps } satisfies Tour)]);
           else unusable('tour', 'No usable tour came back.');
         } catch (err) {
           fail('tour', err);

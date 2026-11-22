@@ -16,6 +16,9 @@ import { Card, CloseIcon, Strong } from '../ui';
 import { countLabel, percentileLabel, unitDetails, unitSummary, type Neighbor, type UnitSummary } from '../units';
 import './inspect.css';
 
+/** How often the detail card looks whether it should take the keyboard focus back after a name in it was followed. */
+const KEEP_FOCUS_MS = 100;
+
 /** A sphere's radius on screen, in CSS pixels. */
 function spherePixels(render: RenderApi, at: ScreenPoint, unit: UnitSummary, selected: boolean): number {
   const radius = unitRadius(unit.loc, unit.importancePct, config.visual) * (selected ? config.visual.selectedScale : 1);
@@ -112,8 +115,20 @@ function DetailCard() {
   // Following a name in the card replaces the button that was pressed: the keyboard focus stays in the card.
   const keepFocus = useRef(false);
   useEffect(() => {
-    if (keepFocus.current) box.current?.focus({ preventScroll: true });
+    if (!keepFocus.current) return;
     keepFocus.current = false;
+    // The card is hidden while its star is out of view, and a hidden element loses the focus: the
+    // camera may still be on its way there. So for the length of a flight, whenever the focus has
+    // fallen to the page and the card is showing, give it back; stop once the user has put it elsewhere.
+    let ticks = Math.ceil((config.camera.flyMs + 1000) / KEEP_FOCUS_MS);
+    const hold = () => {
+      const el = box.current, active = document.activeElement;
+      if (!el || ticks-- <= 0 || (active && active !== document.body && !el.contains(active))) { clearInterval(timer); return; }
+      if (!el.contains(active) && getComputedStyle(el).visibility !== 'hidden') el.focus({ preventScroll: true });
+    };
+    const timer = setInterval(hold, KEEP_FOCUS_MS);
+    hold();
+    return () => clearInterval(timer);
   }, [focus]);
 
   // Closing keeps the file selected. If the keyboard focus was in the card it goes to the file's

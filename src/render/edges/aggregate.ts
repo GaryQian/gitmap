@@ -34,26 +34,58 @@ export function forwardShare(r: Ribbon): number {
  * (−1 or undefined: none); edges inside one group, or with an endpoint in no group, are left out.
  */
 export function aggregateRibbons(edges: EdgeList, group: ArrayLike<number>): Ribbon[] {
-  const byPair = new Map<number, Ribbon>();
   let span = 0;
   for (let i = 0; i < group.length; i++) if (group[i] >= span) span = group[i] + 1;
+  const sums = new RibbonSums(span);
   for (let e = 0; e < edges.count; e++) {
-    const w = edges.weight[e];
-    if (!(w > 0)) continue;
-    const ga = group[edges.src[e]] ?? -1, gb = group[edges.dst[e]] ?? -1;
-    if (ga < 0 || gb < 0 || ga === gb) continue;
-    const a = ga < gb ? ga : gb, b = ga < gb ? gb : ga;
-    const key = a * span + b;
-    let r = byPair.get(key);
-    if (!r) byPair.set(key, (r = { a, b, weight: 0, forward: 0, count: 0, dim: 0 }));
-    r.weight += w;
-    if (ga === a) r.forward += w;
-    r.count++;
-    r.dim += w * (edges.dim ? edges.dim[e] : 0);
+    sums.add(group[edges.src[e]] ?? -1, group[edges.dst[e]] ?? -1, edges.weight[e], edges.dim ? edges.dim[e] : 0);
   }
-  const out = [...byPair.values()];
-  for (const r of out) r.dim = r.weight > 0 ? r.dim / r.weight : 0;
-  return out;
+  return sums.finish();
+}
+
+/**
+ * Ribbons summed one edge at a time, so a large edge list can be aggregated in slices across
+ * animation frames (model.ts). `span` is one more than the largest group slot.
+ */
+export class RibbonSums {
+  private byPair = new Map<number, Ribbon>();
+  constructor(private span: number) {}
+
+  /** One edge from group `ga` to group `gb`. Left out when either is negative, both are the same, or the weight is not positive. */
+  add(ga: number, gb: number, weight: number, dim = 0): void {
+    if (!(weight > 0) || ga < 0 || gb < 0 || ga === gb) return;
+    const a = ga < gb ? ga : gb, b = ga < gb ? gb : ga;
+    const key = a * this.span + b;
+    let r = this.byPair.get(key);
+    if (!r) this.byPair.set(key, (r = { a, b, weight: 0, forward: 0, count: 0, dim: 0 }));
+    r.weight += weight;
+    if (ga === a) r.forward += weight;
+    r.count++;
+    r.dim += weight * dim;
+  }
+
+  /** The ribbons, in first-seen order. Call once. */
+  finish(): Ribbon[] {
+    const out = [...this.byPair.values()];
+    for (const r of out) r.dim = r.weight > 0 ? r.dim / r.weight : 0;
+    return out;
+  }
+}
+
+/**
+ * How many instances each ambient level may draw at an edge scale (adaptive quality, PLAN.md §8.5).
+ * Every level shrinks with the scale: city ribbons to a share of what there is (never below
+ * `cityMin`), the others through their caps. Focus edges are not in here: they are never reduced.
+ */
+export function ambientCaps(
+  scale: number, limits: { cityRibbons: number; cityMin: number; districtRibbons: number; ambientEdges: number },
+): { city: number; district: number; file: number } {
+  const s = Math.min(1, Math.max(0, scale));
+  return {
+    city: s >= 1 ? limits.cityRibbons : Math.min(limits.cityRibbons, Math.max(limits.cityMin, Math.ceil(limits.cityRibbons * s))),
+    district: Math.max(1, Math.floor(limits.districtRibbons * s)),
+    file: Math.max(0, Math.floor(limits.ambientEdges * s)),
+  };
 }
 
 /**

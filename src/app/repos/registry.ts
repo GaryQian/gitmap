@@ -36,7 +36,7 @@ export interface SavedRepos {
    * snapshot nor a readable folder is left.
    */
   openSaved(id: string): Promise<SavedOpen | null>;
-  /** Forget a saved repo: its record and its snapshot. */
+  /** Forget a saved repo: its record, its snapshot and its saved history. The folder itself is never touched. */
   removeSaved(id: string): Promise<void>;
   /** Keep a newly chosen folder with a saved repo, so the next visit asks about this one. */
   rememberFolder(id: string, root: FileSystemDirectoryHandle): Promise<void>;
@@ -59,7 +59,7 @@ export const NO_SAVED_REPOS: SavedRepos = {
 const LISTED = new Set(['git', 'folder']);
 
 async function fromPersistence(): Promise<SavedRepos> {
-  const { openPersistence, probeFolder, requestPermission, SNAPSHOT_SCHEMA } = await import('../../persist');
+  const { openPersistence, opfsBlobStore, probeFolder, requestPermission, SNAPSHOT_SCHEMA } = await import('../../persist');
   const persistence = await openPersistence();
   // nothing was saved in a session that cannot keep anything (private browsing)
   if (persistence.kind !== 'durable') return NO_SAVED_REPOS;
@@ -124,6 +124,9 @@ async function fromPersistence(): Promise<SavedRepos> {
       stale.delete(id);
       await registry.remove(id);
       await snapshots.remove(id).catch(() => { /* nothing was stored, or it is already gone */ });
+      // and the history walk kept beside the snapshot (never rejects)
+      const { forgetHistory, HISTORY_DIR } = await import('../../pipeline/persist');
+      await forgetHistory({ aux: opfsBlobStore(HISTORY_DIR) }, id);
     },
     async rememberFolder(id, root) {
       const record = await registry.get(id);

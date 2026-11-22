@@ -21,11 +21,22 @@ export const EDGE_LOCAL = {
   ambientPerUnit: 0.4,
   /** Most district↔district ribbons drawn at once, strongest first. */
   districtRibbons: 400,
-  /** Each quality step-down (ctx.counters.quality) multiplies the edge caps by this. */
-  qualityStep: 0.5,
+  /**
+   * Adaptive quality (ctx.quality.edgeScale; src/render/quality) scales every ambient level. City
+   * ribbons shrink to that share of what there is, but never below this many: the far view keeps its shape.
+   */
+  cityRibbonsMin: 8,
   /** Aggregates are rebuilt once batches have been quiet for this long, or at the latest after `rebuildMaxMs`. */
   rebuildQuietMs: 180,
   rebuildMaxMs: 1200,
+  /**
+   * A model with more edge slots than this is rebuilt in slices of config.render.patchBudgetMs per
+   * animation frame (the previous aggregates keep drawing until it is whole); a smaller one at once.
+   * SWITCHED OFF (6A stopped before this was run in a browser): the intended value is 50000.
+   */
+  stagedBuildEdges: Number.POSITIVE_INFINITY,
+  /** Rows of a staged build between two points where it may pause. */
+  buildChunk: 4096,
   /** While a simulation is hot, the in-view sets are reselected at most this often. */
   hotReselectMs: 400,
   /** An edge whose endpoint is dimmed by the type filter keeps this share of its strength. */

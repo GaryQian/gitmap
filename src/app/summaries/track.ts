@@ -1,5 +1,5 @@
 // Which in-scene pill the summary card belongs to right now: the one the pointer rests on or the one
-// with keyboard focus, and otherwise the pill of the selected city, whose card is pinned. The pills
+// with keyboard focus, and otherwise the pill of the pinned city (clicked, or selected), whose card stays. The pills
 // are pooled elements owned by pills/layer.ts, so they are found by event delegation and watched from
 // outside; nothing here changes them.
 import { isNodeRef, type NodeRef } from '../../model/types';
@@ -13,7 +13,7 @@ const PILL_STATE = ['class', 'data-ref', 'hidden', 'style'];
 export interface PillTarget {
   el: HTMLElement;
   ref: NodeRef;
-  /** The card of the selected city, which stays up; false for one that lasts as long as the hover or focus. */
+  /** The card of the pinned city, which stays up; false for one that lasts as long as the hover or focus. */
   pinned: boolean;
   /** It takes the place of a card that is on screen (or was a moment ago): it appears without the fade. */
   instant: boolean;
@@ -32,8 +32,14 @@ export interface TrackOptions {
 }
 
 export interface PillTracker {
-  /** The city whose card stays up (the selected one), or null. */
+  /** The city whose card stays up, or null. */
   setPinned(ref: NodeRef | null): void;
+  /**
+   * Take down the hover or focus card (only that of `ref`, when one is named): nothing more until the
+   * pointer and the focus have left its pill. This is what Escape does to it; the key itself is the
+   * app's (keys.ts), not listened for here. A pinned card is let go by whoever pinned it.
+   */
+  dismiss(ref?: NodeRef): void;
   /**
    * Look again: drop a pill that was recycled, hidden or picked up, find the pinned city's pill if it
    * is back, and report a new target or a move. Call it on every rendered frame while there is a
@@ -49,7 +55,7 @@ export function trackPills(doc: Document, options: TrackOptions): PillTracker {
   /** The pill with keyboard focus (`:focus-visible`); a pill focused by a click is not it. */
   let focused: HTMLElement | null = null;
   let latest: 'pointer' | 'focus' = 'pointer';
-  /** Its card was dismissed (Escape, or a drag): nothing more until the pointer and the focus have left it. */
+  /** Its card was dismissed (`dismiss`, or a drag): nothing more until the pointer and the focus have left it. */
   let dismissed: HTMLElement | null = null;
   /** The hovered or focused pill, once the pointer has rested on it. */
   let live: { el: HTMLElement; ref: NodeRef } | null = null;
@@ -190,23 +196,10 @@ export function trackPills(doc: Document, options: TrackOptions): PillTracker {
     sync(false);
   };
 
-  const onKeyDown = (e: KeyboardEvent) => {
-    // only the card of the hovered or focused pill is ours to close; a pinned card that nobody is
-    // pointing at goes when the app's own Escape clears the selection
-    if (e.key !== 'Escape' || !live || !current || current.el !== live.el || !options.hasCard(current.ref)) return;
-    // Escape closes the card of the focused pill before it clears the selection (app/README.md, "Keys").
-    // A card that is only hovered goes too, but the key stays with whatever has the focus. With a
-    // city selected the key is never taken: clearing the selection is what unpins its card.
-    if (pinnedRef === null && doc.activeElement === live.el) e.stopPropagation();
-    dismissed = live.el;
-    setLive(null);
-  };
-
   doc.addEventListener('pointerover', onPointerOver);
   doc.addEventListener('pointerout', onPointerOut);
   doc.addEventListener('focusin', onFocusIn);
   doc.addEventListener('focusout', onFocusOut);
-  win.addEventListener('keydown', onKeyDown, true);
 
   return {
     setPinned(ref) {
@@ -214,6 +207,11 @@ export function trackPills(doc: Document, options: TrackOptions): PillTracker {
       pinnedRef = ref;
       pinnedEl = null;
       update();
+    },
+    dismiss(ref) {
+      if (!live || (ref !== undefined && live.ref !== ref)) return;
+      dismissed = live.el;
+      setLive(null);
     },
     check,
     dispose() {
@@ -223,7 +221,6 @@ export function trackPills(doc: Document, options: TrackOptions): PillTracker {
       doc.removeEventListener('pointerout', onPointerOut);
       doc.removeEventListener('focusin', onFocusIn);
       doc.removeEventListener('focusout', onFocusOut);
-      win.removeEventListener('keydown', onKeyDown, true);
       live = current = null;
     },
   };

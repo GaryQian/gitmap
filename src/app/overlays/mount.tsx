@@ -4,13 +4,14 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import type { AppMount } from '../../contracts/app';
 import {
-  OVERLAYS, OVERLAY_COLORS, legendFor, ownershipContributors,
+  OVERLAYS, legendFor, ownershipContributors,
   type OverlayId, type OverlayInfo, type OverlayLegend, type ReachDirection,
 } from '../../overlays';
 import { setActiveOverlay, useApp, useReplicaVersion, useSession, useThemeMode } from '../store';
 import { Card, CloseIcon, PillButton, Segmented, Strong, cx, type SegmentedOption } from '../ui';
 import { ContributorPicker } from './ContributorPicker';
-import { announcedPercent, historyUnavailable, pillState, type PillState } from './logic';
+import { accentVariables } from '../theme';
+import { announcedPercent, historyUnavailable, overlayAccent, pillState, type PillState } from './logic';
 import { setContributor, setDirection, setMaxHops, useOverlayParams } from './state';
 import { OVERLAY_UI } from './tunables';
 import { useOverlayView } from './useOverlayView';
@@ -189,28 +190,6 @@ function LegendRows({ legend }: { legend: OverlayLegend }) {
   );
 }
 
-/** Spread between the strongest and weakest channel of a #rgb / #rrggbb colour; −1 for any other form. */
-function vividness(color: string): number {
-  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(color.trim())?.[1];
-  if (!hex) return -1;
-  const full = hex.length === 3 ? [...hex].map((c) => c + c).join('') : hex;
-  const rgb = [0, 2, 4].map((i) => parseInt(full.slice(i, i + 2), 16));
-  return Math.max(...rgb) - Math.min(...rgb);
-}
-
-/** Dependency reach's accent: the red of its ramp in each mode. */
-const REACH_ACCENT = { dark: OVERLAY_COLORS.dark.reach[2], light: OVERLAY_COLORS.light.reach[0] } as const;
-
-function mostVivid(colors: string[]): string | null {
-  let best: string | null = null;
-  let score = -2;
-  for (const c of colors) {
-    const v = vividness(c);
-    if (v > score) { best = c; score = v; }
-  }
-  return best;
-}
-
 function Overlays() {
   const session = useSession();
   useReplicaVersion(); // the pills follow each layer's status and coverage as batches land
@@ -241,19 +220,20 @@ function Overlays() {
   // Dependency reach is always ringed in its red hot end, even before anything is selected.
   const mode = useThemeMode();
   const legend = active && view ? legendFor(view) : null;
-  const accent = active?.id === 'reach'
-    ? REACH_ACCENT[mode]
-    : legend ? mostVivid(legend.stops.map((st) => st.color)) : null;
+  const accent = active ? overlayAccent(active.id, mode, legend ? legend.stops.map((st) => st.color) : []) : null;
   useEffect(() => {
     const root = document.documentElement;
     if (!active || !accent) return;
+    // with the colour go how much of it tints the active pill and the colour of that pill's dot and
+    // ring, both worked out in theme.ts so the pill keeps its contrast whatever the overlay's colour
+    const variables = accentVariables(mode, accent);
     root.dataset.overlay = active.id;
-    root.style.setProperty('--gm-overlay-accent', accent);
+    for (const [name, value] of Object.entries(variables)) root.style.setProperty(name, value);
     return () => {
       delete root.dataset.overlay;
-      root.style.removeProperty('--gm-overlay-accent');
+      for (const name of Object.keys(variables)) root.style.removeProperty(name);
     };
-  }, [active, accent]);
+  }, [active, accent, mode]);
 
   // an overlay that is not on offer (hidden, or switched off in config) cannot stay selected
   const stale = replica !== null && activeId !== null && active === null;

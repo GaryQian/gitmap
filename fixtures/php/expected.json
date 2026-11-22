@@ -52,5 +52,13 @@
     ["src/Http/Controllers/OrderController.php", "src/Http/Controllers/Controller.php"],
     ["src/Services/OrderService.php", "src/Services/PaymentGateway.php"],
     ["src/Services/StripeGateway.php", "src/Services/PaymentGateway.php"]
-  ]
+  ],
+  "endToEnd": {
+    "about": "Read by src/lang/fixtures.e2e.test.ts. linked: [src, dst, symbol] joined by the symbol linker with no import statement between the two files (same package, namespace or module). ambiguous: calls whose name has several reachable definitions, so the linker drops them (PLAN.md 6.4). notLinked: a name that belongs to something outside the repo, so no edge from src to dst may carry it.",
+    "linked": [
+      ["src/Models/Order.php", "src/Models/Customer.php", "Customer"],
+      ["src/Services/OrderService.php", "src/Services/PaymentGateway.php", "PaymentGateway"],
+      ["src/Services/StripeGateway.php", "src/Services/PaymentGateway.php", "PaymentGateway"]
+    ]
+  }
 }

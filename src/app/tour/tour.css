@@ -38,6 +38,8 @@
   display: grid;
   gap: 8px;
   width: min(440px, calc(100vw - 32px));
+  /* never wider than its place in the row, so it cannot lie over the corners beside it */
+  max-width: 100%;
   padding: 12px 14px 14px 18px;
   /* starting the tour is the action this answers */
   animation: gm-tour-arrive 180ms var(--gm-ease) both;

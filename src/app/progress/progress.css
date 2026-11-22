@@ -7,14 +7,27 @@
   border-left: 1px solid var(--gm-hairline);
 }
 
-/* The quiet line: a sentence, at most one action, and a way to dismiss it. A long sentence is cut
-   with an ellipsis and can be read in full from its title. */
-.gm-info-pill { max-width: min(640px, 72vw); transition: opacity var(--gm-status-fade-ms, 600ms) ease; }
+/* The quiet line: a sentence, at most one action, and a way to dismiss it. On one line it is an
+   ordinary pill. When the row is crowded (the sidebar is open) it gives way instead of being cut or
+   pushing the row's other pills out of view: first the sentence wraps, then the buttons move under
+   it. Its smallest width is that of its buttons, so the row always has room for it. */
+.gm-info-pill {
+  flex-wrap: wrap;
+  height: auto;
+  min-height: var(--gm-pill-h);
+  min-width: 0;
+  max-width: min(660px, 100%);
+  overflow: hidden; /* the segments' hover fill follows the rounded corners */
+  border-radius: calc(var(--gm-pill-h) / 2);
+  transition: opacity var(--gm-status-fade-ms, 600ms) ease;
+}
 .gm-info-pill.is-leaving { opacity: 0; }
-.gm-info-text { overflow: hidden; text-overflow: ellipsis; }
-.gm-info-action { flex: none; }
-.gm-info-close { flex: none; color: var(--gm-text-dim); padding-left: 10px; }
+.gm-info-text { flex: 1 1 230px; min-width: 0; padding: 7px 0; line-height: 18px; white-space: normal; text-wrap: pretty; }
+.gm-info-pill .gm-pill-segment { flex: none; min-height: calc(var(--gm-pill-h) - 2px); border-radius: 0; white-space: nowrap; }
+/* the first button keeps to the right when the buttons sit under the sentence */
+.gm-info-pill .gm-info-text + .gm-pill-segment { margin-left: auto; }
+.gm-info-close { color: var(--gm-text-dim); padding-left: 10px; }
 .gm-info-close:hover { color: var(--gm-text); }
-/* after an action segment the close button is a second, narrower segment: only the last one is flush with the pill's end */
-.gm-info-pill .gm-info-action { margin-right: 0; padding-right: 12px; border-radius: 0; }
+/* after an action segment the close button is a second, narrower segment */
+.gm-info-pill .gm-info-action { margin-right: 0; padding-right: 12px; }
 .gm-info-pill .gm-info-close-after { margin-left: 0; }

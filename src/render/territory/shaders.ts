@@ -80,9 +80,18 @@ void main() {
   gl_FragColor = vec4(vTint * w, w);
 }`;
 
-/** Bicubic (B-spline) sampling in four bilinear taps: contours stay round when the camera is close. */
+/**
+ * Bicubic (B-spline) sampling in four bilinear taps: contours stay round when the camera is close.
+ * gmTint is the ground's colour at a sample: the territory's own tint, or a grey of the same
+ * lightness while an overlay shows, so the overlay's colours are the only colour on the map.
+ */
 const GLSL_TERRITORY = /* glsl */ `
 uniform sampler2D uTerr; uniform vec4 uTB; uniform float uTerrRes; uniform float uWScale;
+uniform float uNeutral;    // 0 = tinted, 1 = neutral grey (an overlay is showing)
+vec3 gmTint(vec4 t) {
+  vec3 tint = t.rgb / max(t.a, 1e-4);
+  return mix(tint, vec3(dot(tint, vec3(0.2126, 0.7152, 0.0722))), uNeutral);
+}
 vec4 gmTerritory(vec2 ground) {
   vec2 uv = (ground - uTB.xy) / uTB.zw;
   vec2 st = uv * uTerrRes - 0.5; vec2 i = floor(st), f = st - i;
@@ -112,7 +121,7 @@ void main() {
   vec4 t = gmTerritory(vW.xz);
   float dens = t.a;
   if (dens < 0.003) discard;
-  vec3 tint = t.rgb / max(dens, 1e-4);
+  vec3 tint = gmTint(t);
   float fill = smoothstep(uFill.x, uFill.y, dens);
   float fw = max(fwidth(dens), 1e-5) * 1.5;
   float outer = 1.0 - smoothstep(0.0, fw, abs(dens - uContour.x));
@@ -164,7 +173,7 @@ void main() {
   float inside = smoothstep(uContour.x - fw, uContour.x, t.a);
   float a = exp(-vSide * vSide * 6.0) * inside * uBorderStrength * uFade;
   if (a < 0.004) discard;
-  vec3 tint = t.rgb / max(t.a, 1e-4);
+  vec3 tint = gmTint(t);
   if (uDark > 0.5) gl_FragColor = vec4(mix(tint, vec3(1.0), 0.25) * a, 1.0);
   else gl_FragColor = vec4(tint * 0.6, a);
 }`;

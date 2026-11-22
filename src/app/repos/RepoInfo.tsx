@@ -1,13 +1,14 @@
 // Under the title pill: a small pill saying where the open map is from, and the card it opens with
-// the repo's details and "Export map" (PLAN.md §12, §12.1). Whatever a map does not have is left out.
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { downloadModel } from '../../content';
+// the repo's details (PLAN.md §12, §12.1); for a demo also where it is published, its commit, its
+// licence and when it was exported (plan/DEMO-MODE.md §5). Whatever a map does not have is left out.
+// Export is in the settings card.
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import type { RepoMeta } from '../../model/types';
+import { LAYER, useDismissable } from '../keys';
 import { lineFor } from '../status/actions';
 import { folderNeed, useFolderOffers } from '../status/folder';
 import { folderRunners } from '../status/folderActions';
-import { say } from '../status/messages';
-import { useApp, useReplica, useSession } from '../store';
+import { useReplica, useSession } from '../store';
 import { Card, PillButton, Strong } from '../ui';
 import { whereLabel } from './registry';
 
@@ -63,27 +64,14 @@ function InfoIcon() {
   );
 }
 
-function ExportButton() {
-  const session = useSession();
-  const [state, setState] = useState<'idle' | 'busy' | 'unavailable'>('idle');
-  if (!session) return null;
-  // a map that cannot be exported loses the button instead of keeping a dead one
-  if (state === 'unavailable') return <p className="gm-repo-note" role="status">{say('export-failed').text}</p>;
-  const run = async (): Promise<void> => {
-    setState('busy');
-    try {
-      await downloadModel(await session.exportModel());
-      setState('idle');
-    } catch (err) {
-      console.warn('starmap: export failed', err);
-      if (useApp.getState().session === session) setState('unavailable');
-    }
-  };
-  return (
-    <PillButton size="small" className="gm-repo-export" disabled={state === 'busy'} onClick={() => void run()}>
-      {state === 'busy' ? 'Preparing the file' : 'Export map'}
-    </PillButton>
-  );
+/** "21 November 2026", in the viewer's own date format; '' for a time that is not one. */
+function dateLabel(ms: number | undefined): string {
+  if (typeof ms !== 'number' || !Number.isFinite(ms) || ms <= 0) return '';
+  try {
+    return new Date(ms).toLocaleDateString(undefined, { dateStyle: 'long' });
+  } catch {
+    return '';
+  }
 }
 
 /**
@@ -116,24 +104,19 @@ export function RepoInfo() {
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
+  const cardId = useId();
+
+  // Escape closes one layer per press (keys.ts): this card, not the detail card with it
+  useDismissable(open, () => { setOpen(false); button.current?.focus(); }, { layer: LAYER.card });
 
   useEffect(() => {
     if (!open) return;
     const onPointerDown = (e: PointerEvent) => {
       if (!wrap.current?.contains(e.target as Node)) setOpen(false);
     };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      setOpen(false);
-      button.current?.focus();
-    };
     // capture: the map canvas takes pointer events for itself
     window.addEventListener('pointerdown', onPointerDown, true);
-    window.addEventListener('keydown', onKeyDown);
-    return () => {
-      window.removeEventListener('pointerdown', onPointerDown, true);
-      window.removeEventListener('keydown', onKeyDown);
-    };
+    return () => window.removeEventListener('pointerdown', onPointerDown, true);
   }, [open]);
 
   if (!meta) return null;
@@ -143,6 +126,7 @@ export function RepoInfo() {
   const source = demo?.sourceUrl || null;
   // the origin is worth its own row unless the source row already says the same thing
   const origin = meta.remoteUrl && webUrl(meta.remoteUrl) !== webUrl(source) ? meta.remoteUrl : null;
+  const exported = dateLabel(demo?.exportedAt);
 
   return (
     <div className="gm-repo-info" ref={wrap}>
@@ -153,8 +137,8 @@ export function RepoInfo() {
         active={open}
         className="gm-repo-info-pill"
         aria-label={`About this map: ${sourceLabel(meta)}`}
-        aria-haspopup="dialog"
         aria-expanded={open}
+        aria-controls={open ? cardId : undefined}
         title="About this map"
         onClick={() => setOpen((o) => !o)}
       >
@@ -162,7 +146,7 @@ export function RepoInfo() {
         <span className="gm-repo-where">{sourceLabel(meta)}</span>
       </PillButton>
       {open && (
-        <Card blur className="gm-repo-card" role="dialog" aria-label="About this map">
+        <Card blur className="gm-repo-card" id={cardId} role="group" aria-label="About this map">
           <p className="gm-repo-name"><Strong>{meta.name}</Strong></p>
           <dl className="gm-repo-facts">
             {origin && <Row label="Origin"><Address value={origin} /></Row>}
@@ -172,8 +156,8 @@ export function RepoInfo() {
             {commit && <Row label="Commit"><span title={commit}>{commit.slice(0, SHORT_OID)}</span></Row>}
             {demo?.license && <Row label="Licence">{demo.license}</Row>}
           </dl>
+          {exported && <p className="gm-repo-note">Exported on {exported}</p>}
           <FolderNote meta={meta} />
-          <ExportButton />
         </Card>
       )}
     </div>

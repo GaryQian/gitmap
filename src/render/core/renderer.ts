@@ -11,8 +11,9 @@ import { CameraRig } from './camera';
 import { createModules } from './modules';
 import { PointerRouter, type PointerHandler, type PointerInfo } from './pointer';
 import { PositionTextures } from './positions';
+import { RefreshEstimator, pump, type Steps } from './staged';
 import { RENDER_LOCAL } from './tunables';
-import type { FrameState, RevealInfo, SceneContext, SceneEvents, SceneModule, SharedUniforms, ViewState } from './types';
+import type { FrameState, QualityState, RevealInfo, SceneContext, SceneEvents, SceneModule, SharedUniforms, ViewState } from './types';
 import { UnitLookup } from './unitLookup';
 import { touchedUnits, unitReader } from './unitRow';
 
@@ -38,6 +39,7 @@ export function createSceneRenderer(init: RenderInit): RenderApi {
     uText: { value: vec() }, uHalo: { value: vec() }, uWarm: { value: vec() },
     uPosUnit: { value: noTexture }, uPosDistrict: { value: noTexture }, uPosCity: { value: noTexture },
     uUnitInfo: { value: noTexture }, uUnitColor: { value: noTexture },
+    uAggregate: { value: new THREE.Vector4(0, 0, 0, 0) }, uAggregateKeep: { value: 0 },
   };
   const applyThemeUniforms = () => {
     const t = config.theme[theme];
@@ -62,6 +64,7 @@ export function createSceneRenderer(init: RenderInit): RenderApi {
     particles: init.particles ?? config.settings.particles,
   };
   const counters = { edgesDrawn: 0, quality: 0 };
+  const quality: QualityState = { edgeScale: 1, maxPixelRatio: Infinity };
   const services = new Map<string, unknown>();
   const timers = new Set<ReturnType<typeof setTimeout>>();
   const pending = new Set<() => void>(); // resolvers of promises still open, settled on dispose
@@ -74,13 +77,17 @@ export function createSceneRenderer(init: RenderInit): RenderApi {
   let size = { w: 0, h: 0, dpr: 0 };
   const deltas: number[] = [];
   let deltaSum = 0;
+  /** What adaptive quality is told about frame timing (FrameState.active, frameMs, refreshMs). */
+  const refresh = new RefreshEstimator();
+  let prevRendered = false, skipTiming: number = RENDER_LOCAL.loop.settleFrames;
+  let hovering = false;
   /** The camera frames the whole map by itself until the reveal or the first user input. */
   let autoFrame = true;
 
   const ctx: SceneContext = {
     canvas, renderer, scene, camera: rig.camera, config, replica, reducedMotion,
     get theme() { return theme; },
-    uniforms, positions, units, rig, pointer, bus, state, counters,
+    uniforms, positions, units, rig, pointer, bus, state, counters, quality,
     now: () => (performance.now() - t0) / 1000,
     anchor: (ref) => anchorOf(ref, replica, positions.buffers, config.visual),
     emit: (evt, e) => events.emit(evt, e),
@@ -129,10 +136,13 @@ export function createSceneRenderer(init: RenderInit): RenderApi {
   };
 
   // ---- sizing ----
+  /** The display's pixel ratio, capped by config and by what adaptive quality allows. */
+  const wantedDpr = () => Math.min(window.devicePixelRatio || 1, config.render.maxDpr, Math.max(quality.maxPixelRatio, 0.5));
   function resize(): void {
     const w = canvas.clientWidth, h = canvas.clientHeight;
-    const dpr = Math.min(window.devicePixelRatio || 1, config.render.maxDpr);
+    const dpr = wantedDpr();
     if (w === size.w && h === size.h && dpr === size.dpr) return;
+    skipTiming = RENDER_LOCAL.loop.settleFrames;
     const atDefault = autoFrame || rig.isDefaultView();
     size = { w, h, dpr };
     if (!w || !h) return;
@@ -186,6 +196,71 @@ export function createSceneRenderer(init: RenderInit): RenderApi {
 
   const rebuildBatch = (): PatchBatch => ({ rev: lastRev, baseRev: lastRev, ops: [], full: true });
 
+  /**
+   * The rebuild of a large map, spread over animation frames (./staged.ts) so that no single task
+   * holds the main thread for long. While it runs nothing is drawn, so a half-applied batch is
+   * never on screen: the last frame stays up until the rebuild is whole.
+   */
+  let staged: { job: Steps; restarts: number } | null = null;
+
+  function* rebuildSteps(batch: PatchBatch): Steps {
+    const read = unitReader(replica, config.visual);
+    const capacity = replica.table('unit').capacity;
+    units.ensure(capacity);
+    units.info.fill(0); units.color.fill(0);
+    for (let from = 0; from < capacity; from += RENDER_LOCAL.staging.unitChunk) {
+      const to = Math.min(capacity, from + RENDER_LOCAL.staging.unitChunk);
+      for (let s = from; s < to; s++) units.write(s, read);
+      yield;
+    }
+    for (const m of modules) {
+      if (!m.applyBatch) continue;
+      m.applyBatch(batch, { rebuild: true });
+      yield;
+    }
+  }
+
+  /** Project a batch now; or, for the rebuild of a large map while the loop runs, over the next few frames. */
+  function beginProject(batch: PatchBatch, rebuild: boolean): void {
+    if (staged) {
+      // the model changed under a rebuild in progress: start again from the replica, once; then stop staging
+      const restarts = staged.restarts + 1;
+      staged = null;
+      if (restarts > 1) project(rebuildBatch(), true);
+      else { awaitingReplica = false; staged = { job: rebuildSteps(rebuildBatch()), restarts }; }
+      return;
+    }
+    if (rebuild && raf !== 0 && replica.table('unit').capacity >= RENDER_LOCAL.staging.minUnits) {
+      awaitingReplica = false;
+      staged = { job: rebuildSteps(batch), restarts: 0 };
+      return;
+    }
+    project(batch, rebuild);
+  }
+
+  /** One slice of the staged rebuild. True once it is complete and the scene may be drawn again. */
+  function advanceStaged(): boolean {
+    try {
+      if (!pump(staged!.job, config.render.patchBudgetMs)) return false;
+      staged = null;
+      updateBounds();
+      dirty = true;
+    } catch (err) {
+      console.error('[render] batch handler failed; resyncing from the replica', err);
+      resyncs++;
+      staged = null;
+      project(rebuildBatch(), true);
+    }
+    return true;
+  }
+
+  /** Finish a staged rebuild at once (the caller needs the scene to match the model now). */
+  function flushStaged(): void {
+    if (!staged) return;
+    staged = null;
+    project(rebuildBatch(), true);
+  }
+
   // ---- frame ----
   function tick(nowMs: number): void {
     raf = requestAnimationFrame(tick);
@@ -195,9 +270,12 @@ export function createSceneRenderer(init: RenderInit): RenderApi {
       deltas.push(delta); deltaSum += delta;
       if (deltas.length > RENDER_LOCAL.loop.statFrames) deltaSum -= deltas.shift()!;
     }
-    if (Math.min(window.devicePixelRatio || 1, config.render.maxDpr) !== size.dpr) resize();
-    if (!size.w || !size.h) return;
-    if (awaitingReplica && replica.rev >= lastRev) project(rebuildBatch(), true);
+    if (delta > 0) refresh.add(delta);
+    if (wantedDpr() !== size.dpr) resize();
+    if (!size.w || !size.h) { prevRendered = false; return; }
+    if (awaitingReplica && replica.rev >= lastRev) beginProject(rebuildBatch(), true);
+    // a large rebuild in progress: do a slice of it, and keep the last frame on screen until it is whole
+    if (staged && !advanceStaged()) { prevRendered = false; return; }
 
     const moved = positions.sync();
     if (moved) {
@@ -211,16 +289,21 @@ export function createSceneRenderer(init: RenderInit): RenderApi {
       events.emit('camera', { moving });
       bus.emit('camera', { moving });
     }
-    const active = moving || moved || rig.changed || dirty || positions.hot() || nowMs < animateUntil;
+    const active = moving || moved || rig.changed || dirty || hovering || positions.hot() || nowMs < animateUntil;
     if (!active) {
       // nothing moves: ambient shimmer only, at a reduced rate (none at all under reduced motion)
-      if (reducedMotion || nowMs - lastRender < 1000 / RENDER_LOCAL.loop.idleFps - 1) return;
+      if (reducedMotion || nowMs - lastRender < 1000 / RENDER_LOCAL.loop.idleFps - 1) { prevRendered = false; return; }
     }
+    // frame timing for adaptive quality: only between two frames that were both drawn, and not while the loop settles
+    const timed = prevRendered && skipTiming <= 0 && delta > 0 && delta < 500;
+    if (skipTiming > 0) skipTiming--;
+    prevRendered = true;
     dirty = false;
     rig.changed = false;
     const time = (nowMs - t0) / 1000;
     const frame: FrameState = {
       time, nowMs, dt: Math.min(0.1, Math.max(0, (nowMs - lastRender) / 1000)), moving,
+      active, frameMs: timed ? delta : 0, refreshMs: refresh.ms,
       cameraDistance: rig.view.distance, target: { x: rig.view.x, z: rig.view.z },
       width: size.w, height: size.h, pixelRatio: size.dpr,
     };
@@ -234,6 +317,9 @@ export function createSceneRenderer(init: RenderInit): RenderApi {
   function start(): void {
     if (raf || disposed || document.hidden) return;
     lastRaf = performance.now();
+    prevRendered = false;
+    skipTiming = RENDER_LOCAL.loop.settleFrames;
+    refresh.reset();
     dirty = true;
     raf = requestAnimationFrame(tick);
   }
@@ -271,7 +357,7 @@ export function createSceneRenderer(init: RenderInit): RenderApi {
       }
       lastRev = batch.rev;
       if (replica.rev < batch.rev) { awaitingReplica = true; dirty = true; return; }
-      project(batch, !!batch.full || gap || awaitingReplica);
+      beginProject(batch, !!batch.full || gap || awaitingReplica);
     },
 
     setPositions(buffers: PositionBuffers) {
@@ -284,6 +370,7 @@ export function createSceneRenderer(init: RenderInit): RenderApi {
       if (disposed) return Promise.resolve();
       const instant = !!opts?.instant || reducedMotion;
       if (state.revealed && !instant) return Promise.resolve();
+      flushStaged(); // the reveal starts from the whole model
       state.revealed = true;
       positions.sync();
       updateBounds(); // frames the map one last time while autoFrame is still on
@@ -333,6 +420,17 @@ export function createSceneRenderer(init: RenderInit): RenderApi {
 
     isDefaultView: () => autoFrame || rig.isDefaultView(),
 
+    setViewInset({ right }) {
+      if (disposed) return;
+      // a map that was framed whole stays framed whole in the space that is left
+      const atDefault = autoFrame || rig.isDefaultView();
+      const ms = reducedMotion ? 0 : RENDER_LOCAL.camera.insetMs;
+      rig.setInsetRight(right, ms, performance.now());
+      if (autoFrame) rig.snapTo(rig.defaultView());
+      else if (atDefault) void rig.flyTo(rig.defaultView(), ms, performance.now());
+      dirty = true;
+    },
+
     project(ref) {
       const a = ctx.anchor(ref);
       return a ? rig.project(a.x, a.y, a.z) : null;
@@ -362,6 +460,7 @@ export function createSceneRenderer(init: RenderInit): RenderApi {
       if (disposed) return;
       disposed = true;
       stop();
+      staged = null;
       document.removeEventListener('visibilitychange', onVisibility);
       canvas.removeEventListener('webglcontextlost', onContextLost);
       canvas.removeEventListener('webglcontextrestored', onContextRestored);
@@ -395,8 +494,10 @@ export function createSceneRenderer(init: RenderInit): RenderApi {
     api.dispose();
     throw err;
   }
+  // a hovered sphere's connections carry pulses: keep the full rate while one is hovered (PLAN.md §8.5)
+  bus.on('hover', (h) => { hovering = h.slot >= 0 && !reducedMotion; });
   resize();
-  if (replica.rev > 0) project(rebuildBatch(), true);
   start();
+  if (replica.rev > 0) beginProject(rebuildBatch(), true);
   return api;
 }

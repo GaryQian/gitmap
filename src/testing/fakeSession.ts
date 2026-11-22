@@ -20,7 +20,7 @@ export function createNoopRenderer(_init?: Partial<RenderInit>): RenderApi {
   return {
     applyBatch() {}, setPositions() {}, async reveal() {}, setTheme() {}, setParticles() {}, setOverlay() {},
     setSelection() {}, setHighlights() {}, setTypeFilter() {}, setMinBytes() {},
-    async flyTo() {}, async resetView() {}, isDefaultView: () => true,
+    async flyTo() {}, async resetView() {}, isDefaultView: () => true, setViewInset() {},
     project: () => null, screenToGround: () => null, visibleCounts: () => new Map(), burst() {},
     on: (evt, fn) => emitter.on(evt, fn),
     stats: () => ({ fps: 0, frameMs: 0, spheres: 0, edgesDrawn: 0, quality: 0, resyncs: 0 }),

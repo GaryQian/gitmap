@@ -22,7 +22,7 @@ Try it: `/?fake=2000` plays the whole flow on a synthetic model. Extras: `&wait=
 | `selectionState.ts` | Selection as pure transitions (click, Shift+click, marquee, remove, clear); the store's selection actions call them |
 | `anchor.ts` | `useAnchor` / `followAnchor`: keep an element beside a node of the scene, frame by frame |
 | `units.ts` | Reading units out of the replica: `unitSummary`, `unitDetails`, `unitName`, `languageName` |
-| `keys.ts` | `isTyping(target)`, for window-level shortcuts |
+| `keys.ts` | The keyboard's plumbing: `isTyping(target)` for window-level shortcuts, what Escape closes (`useDismissable`), and the Tab order of the regions; see "Keys" below |
 | `tunables.ts` | `APP_LOCAL`: chrome numbers that have no key in `config.json` yet |
 
 ## Adding a feature: mounts
@@ -99,8 +99,33 @@ View state resets when a map is opened or closed.
 - Store → renderer: `mode`, `settings.particles`, `selection`, `typeFilter`, `minBytes`, all pushed once when the renderer appears and then on change. `activeOverlay` → `session.setSelectedOverlay`. Building the `OverlayView` and calling `render.setOverlay` is left to the overlays feature.
 - Renderer → store: `hover` → `hover`; `click` → `selection` and `focus` (plain click replaces and focuses, Shift adds or removes, a click on empty space clears); `marquee` adds to `selection`; `dblclick` → `openFile`. For `frame` and `camera`, subscribe yourself: `useRender()?.on('frame', …)`.
 - Left to the renderer's interaction module, so do not repeat them here: the select and open bursts (`render.burst`), easing the camera to a clicked sphere, and redrawing a selected file that the size slider hides. Flying is the shell's job only for its own controls: a city or district pill, a selection pill, a name in the detail card, a search result.
-- Keys (window listeners in the features): Escape clears the selection (`selected/`), Home resets the view (`controls/`). Both ignore text fields (`isTyping`). **A popup that closes on Escape must take the key before it gets there**: listen in the capture phase, or in a React `onKeyDown`, and call `stopPropagation()`, as the settings card and the controls key do.
+- Keys: Escape clears the selection (`selected/`) once everything lying over it has closed, and Home resets the view (`controls/`). Both leave text fields alone (`isTyping`). **Nothing listens for Escape itself**: whatever closes on Escape registers with `useDismissable`; see "Keys" below.
 - Session → store: `stage`, `progress`, `reveal` (phase becomes `map`), `notice`, `error` (fatal: back to the landing page with the message; otherwise an info pill).
+
+## Keys (`keys.ts`)
+
+**Escape closes one thing per press, the topmost.** A feature never listens for Escape and never stops the key for others. While something of its own is open, it puts it on the stack:
+
+```tsx
+import { LAYER, useDismissable } from '../keys';
+
+useDismissable(open, () => {
+  setOpen(false);
+  button.current?.focus(); // closing gives the focus back to what opened it
+}, { layer: LAYER.card });
+```
+
+- **The order** is by layer, highest first: `LAYER.list` (an open list or picker: the search field, the contributor picker), `LAYER.card` (a card or popover: settings, the detail card, a point of interest; the default), `LAYER.tour`, `LAYER.sidebar`, `LAYER.selection`. Within a layer, the one opened most recently closes first. So with everything open, six presses close the search list, the settings card, the detail card, the tour, the sidebar and then the selection.
+- **Registering:** `useDismissable(isOpen, close, { layer, owns })` in a component, or `registerDismissable({ close, layer, owns })` outside React, which returns the function that takes it off the stack again (call it when the thing closes, however it was closed). The place among layers opened at other times is fixed when it opens.
+- **Text fields.** Escape pressed in a field the user is typing in closes only a layer that owns the field: pass `owns: (field) => …` (the search field owns its input; the sidebar owns the editor inside it). In a field nothing owns, Escape does nothing.
+- A control that uses Escape itself (the code editor closing its search bar) prevents the default, and the stack leaves that press alone. The key is not consumed by the stack, so the renderer still drops its hover on the same press.
+
+**Tab walks the regions in reading order**, not in the order the shell lays them out in the document (where the scene comes first and the sidebar last): `TAB_REGIONS` is top left → top centre → top right → scene → right edge → bottom left → bottom centre → bottom right → overlay, and document order within a region. `installTabOrder()` does it on the map screen (it is installed once, by `<Region>`); past either end the focus leaves the page as usual. Nothing in a feature needs to know, with two conditions:
+
+- A group that exists in numbers is **one tab stop** with a roving `tabindex` and arrow keys inside (the overlay toolbar, city and district pills, point-of-interest pills, a segmented control), so Tab does not walk 150 pills.
+- A control that uses Tab itself (the code editor, where Tab indents) prevents the default and is left alone; it must say how to leave (the editor's `aria-description` names Control+M).
+
+Other keys, each in its feature: "/" and Ctrl/Cmd+K reach the search; Home resets the view, except in a toolbar, tab row, list, slider or splitter, where it has its own meaning; on a city or district pill, arrows move between pills, Enter flies there and Shift+arrow moves the city or district (the keyboard's drag); Delete or Backspace on a selection pill removes it; ← → and Space step the tour.
 
 ## Chrome primitives (`ui/`)
 
@@ -168,6 +193,8 @@ Each is one folder with a `mount.tsx`; region and order are as that file declare
 | `poi/` | `scene` 20 | A label pill on every point of interest's beam, and the detail card a pill opens, with its detail buttons. |
 | `summaries/` | `scene` 30 | The AI summary of a city on a card under its pill, while the pointer rests there or the pill has focus. |
 | `tour/` | `bottomCenter` 10 | The "Tour the repo" pill, and the step card that takes its place while a tour plays. |
+| `status/` | `overlay` 0, 1 and 20 | Error and empty states that belong to no other feature: the line for a map opened without its folder, a small card while the graphics context is lost, and "The app was updated" when a part of the app can no longer be fetched. |
+| `devreload/` | `topCenter` 5; `landing` −10 | Development only: "Code changed · Reload" when the dev server held back a reload, and "Reopen <folder>" on the landing page. |
 | `ai/` | `bottomCenter` 5 (failure line) and 7 (prompt) | The "Add AI notes" prompt, always present while AI notes are off for a repo; it starts generation through `session.ai` once the answer is yes, and shows one quiet line when something fails. The settings card has the per-repo "AI notes" On / Off row. |
 
 ## CSS custom properties
@@ -178,19 +205,35 @@ Each is one folder with a `mount.tsx`; region and order are as that file declare
 |---|---|
 | `--gm-void`, `--gm-dust-cool`, `--gm-dust-warm` | background base and the two dust colours |
 | `--gm-text` | Starlight (dark) or Ink (light) |
-| `--gm-halo` | focus, links, active state |
+| `--gm-text-dim` | secondary text: an opaque mix of the text colour (72%) and the surface colour, so it holds over any backdrop |
+| `--gm-text-quiet` | the quietest text on the sidebar (comments, line numbers), kept at 4.5:1 there |
+| `--gm-halo` | focus rings, active state, marks (a progress line, a slider's fill). As text, use `--gm-link` |
+| `--gm-link` | the halo as text (a link, the action of an action pill): the halo itself where that reads at 4.5:1 on a card, otherwise moved toward the text colour until it does |
 | `--gm-warm` | selection, tour, importance: the only warm thing in the chrome |
 | `--gm-sidebar` | the opaque sidebar surface |
 | `--gm-surface` | pill material: the void colour (dark) or white (light) |
-| `--gm-pill-bg` | the surface at pill opacity; `--gm-pill-bg-strong` for hover and active |
+| `--gm-pill-bg` | the surface at pill opacity |
+| `--gm-card-bg` | the surface at card opacity: what `<Card>` uses, and a pill that holds a `PillSegment` |
+| `--gm-pill-bg-strong` | the most opaque of the three: hover and active, the cards anchored in the scene, district pills |
 | `--gm-pill-opacity`, `--gm-pill-border-opacity` | the numbers behind them |
 | `--gm-hairline` | the one-pixel border: text colour at low opacity |
 | `--gm-pill-blur`, `--gm-card-radius` | lengths |
 | `--gm-wisp-contrast` | drives the static background |
 | `--gm-font-ui`, `--gm-font-code` | font stacks |
-| `--gm-text-dim`, `--gm-text-faint`, `--gm-halo-soft`, `--gm-ease` | derived in `ui.css`: secondary text, faint fills, soft halo, the easing curve |
+| `--gm-text-faint`, `--gm-halo-soft`, `--gm-ease` | derived in `ui.css`: faint fills, soft halo, the easing curve |
+| `--gm-focus-band` | set in `ui.css`: what the focus ring is drawn on, a 5 px band of the surface colour so the halo has 3:1 whatever the scene shows behind it. `transparent` inside a card and the sidebar, where the ring already lies on their material; set it to `transparent` on an element whose ring is drawn inside it (a negative `outline-offset`) |
+| `--gm-overlay-accent`, `--gm-overlay-tint`, `--gm-overlay-mark` | written by `overlays/` while an overlay is on, from `accentVariables()` in `theme.ts`: the overlay's own colour, its share in the fill of the active pill, and that colour as the pill's dot and ring (nudged toward the text colour where it would not stand out 3:1) |
 
-**Pill opacity** is `config.theme.pill.opacity`, raised when needed so text keeps 4.5:1 over the worst thing the scene can put behind a pill: something as bright (dark mode) or as dark (light mode) as the text itself. `pillOpacity()` in `theme.ts` computes it; `theme.test.ts` checks it for both modes.
+`.gm-visually-hidden` (class, `ui.css`) is for text a screen reader needs and the page already shows another way: the map's `h1` (`#gm-map-heading`, in the title pill), and a status line that announces less often than the visible one changes.
+
+**Opacity is set by contrast** (`theme.ts`, checked for both modes by `theme.test.ts` through `contrastChecks()` and `accentChecks()`). Every ratio is measured over the worst thing the scene can put behind a translucent element: white in dark mode (the core of a bright star saturates), black in light mode.
+
+- **Pill** (`pillOpacity`): `config.theme.pill.opacity` (0.6), raised until text keeps 4.5:1 and a dim icon 3:1. That is 0.70 in both modes.
+- **Card** (`cardOpacity`): raised further until dim text keeps 4.5:1, since cards hold secondary text. 0.82 dark, 0.85 light.
+- **Strong** (`strongOpacity`): 60% of the way from the pill to opaque, and never less than a card. 0.88 in both modes.
+- **In-scene pills** fade with distance, but only down to `sceneFadeFloor(mode)` (0.76 dark, 0.67 light), where a district's name and a city's count are still at 4.5:1.
+
+The rule that follows: **no dim text and no link-coloured text on a bare pill.** A pill at 0.70 carries full-strength text and dim icons only. Secondary text and `--gm-link` text need the card material or stronger; fade nothing that is still a button (use `--gm-text-dim` for a row that recedes, not `opacity`).
 
 ## Things worth knowing
 

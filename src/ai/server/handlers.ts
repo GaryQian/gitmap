@@ -17,6 +17,8 @@ import type { Limiter } from './limiter';
 import {
   LENGTHS, SYSTEM, detailPrefix, detailPrompt, poisPrompt, reducePrefix, retryPrompt, summaryPrompt, tourPrompt,
 } from './prompts';
+import { linkCountProblem, withoutLinkCounts } from './prose';
+import type { ProseCheck } from './prose';
 import { estimateTokens } from './provider';
 import {
   DETAIL_SCHEMA, POI_KINDS, REDUCE_SCHEMA, SUMMARY_SCHEMA, TOUR_FRAMES, detailOutput, detailRequest, isUnitRef,
@@ -58,6 +60,8 @@ export const LIMITS = {
   retries: 1,
   /** Problems quoted back to the model on a retry. */
   maxProblemsQuoted: 12,
+  /** A text that lost a sentence to the "no counts" rule is still used when this many words remain. */
+  minWordsLeft: 5,
 } as const;
 
 interface Ctx {
@@ -184,6 +188,26 @@ function lengthProblem(where: string, text: string, tolerated: readonly [number,
   return `${where} has ${n} words; write ${ask}.`;
 }
 
+/**
+ * The "no counts in the prose" rule (prose.ts) for one text: summaries and tour text say what the
+ * code does, and a sentence that states how many links or dependencies something has is a rule
+ * violation. It is quoted to the model on the one retry (`problem`); a reply that still has it is
+ * used without that sentence (`text`), as long as a few words are left (`length` is then null).
+ */
+function checkProse(where: string, raw: string, tolerated: readonly [number, number], ask: string): {
+  text: string; problem: string | null; length: string | null;
+} {
+  const prose: ProseCheck = withoutLinkCounts(raw);
+  const counted = prose.removed.length > 0;
+  // what is left of a text that lost a sentence is held to "a few words", not to the usual lower bound
+  const range = counted ? [Math.min(tolerated[0], LIMITS.minWordsLeft), tolerated[1]] as const : tolerated;
+  return {
+    text: prose.text,
+    problem: counted ? linkCountProblem(where, prose.removed) : null,
+    length: lengthProblem(where, prose.text, range, ask),
+  };
+}
+
 const shapeProblem = <T>(value: T): Checked<T> => ({
   value, score: -1, problems: ['The reply did not have the requested fields.'], notes: [],
 });
@@ -208,12 +232,11 @@ function checkSummary(raw: unknown): Checked<CityLabel | null> {
   const parsed = summaryOutput.safeParse(raw);
   if (!parsed.success) return shapeProblem(null);
   const label = parsed.data.label.trim();
-  const text = parsed.data.text.trim();
-  const problems = [
-    labelProblem('label', label),
-    lengthProblem('text', text, LENGTHS.summary.tolerated, `about ${LENGTHS.summary.target} words`),
-  ].filter((p) => p !== null);
-  return problems.length ? { value: null, score: 0, problems, notes: [] } : { value: { label, text }, score: 1, problems, notes: [] };
+  const prose = checkProse('text', parsed.data.text, LENGTHS.summary.tolerated, `about ${LENGTHS.summary.target} words`);
+  const unusable = [labelProblem('label', label), prose.length].filter((p) => p !== null);
+  const problems = [...unusable, prose.problem].filter((p) => p !== null);
+  // a text that only broke the "no counts" rule is kept without the sentence, in case the retry is no better
+  return unusable.length ? { value: null, score: 0, problems, notes: [] } : { value: { label, text: prose.text }, score: 1, problems, notes: [] };
 }
 
 const summaries = route<SummariesRequest, SummariesResponse>('summaries', summariesRequest, async (body, ctx) => {
@@ -243,11 +266,14 @@ function checkPois(raw: unknown, allowed: ReadonlySet<string>, count: number): C
     }
     const kind = p.kind.trim().toLowerCase(); // enum casing is not guaranteed by structured outputs
     const label = p.label.trim();
-    const summary = p.summary.trim();
+    // the summary says what the place does; its one structural fact is the evidence, which is left as it is
+    const prose = checkProse(`${where}.summary`, p.summary, LENGTHS.summary.tolerated, `about ${LENGTHS.summary.target} words`);
+    const summary = prose.text;
     const evidence = p.evidence.trim();
+    if (prose.problem) problems.push(prose.problem);
     const itemProblems = [
       labelProblem(`${where}.label`, label),
-      lengthProblem(`${where}.summary`, summary, LENGTHS.summary.tolerated, `about ${LENGTHS.summary.target} words`),
+      prose.length,
       (POI_KINDS as readonly string[]).includes(kind) ? null : `${where}.kind must be one of ${POI_KINDS.join(', ')}.`,
       evidence ? null : `${where}.evidence is empty; give one structural fact.`,
     ].filter((x) => x !== null);
@@ -294,10 +320,13 @@ function checkTour(raw: unknown, allowed: ReadonlySet<string>, minSteps: number,
       notes.push(parentNote(where, parent, 'step'));
       return;
     }
-    const text = s.text.trim();
-    const problem = lengthProblem(`${where}.text`, text, LENGTHS.step.tolerated, `${LENGTHS.step.min} to ${LENGTHS.step.max} words`);
-    if (problem) {
-      problems.push(problem);
+    // A step that narrates link counts is a rule violation: it is quoted on the retry, and used
+    // without that sentence if it comes back the same. A step with too little left is dropped.
+    const prose = checkProse(`${where}.text`, s.text, LENGTHS.step.tolerated, `${LENGTHS.step.min} to ${LENGTHS.step.max} words`);
+    const text = prose.text;
+    if (prose.problem) problems.push(prose.problem);
+    if (prose.length) {
+      problems.push(prose.length);
       return;
     }
     // The frame only says how wide the camera looks, and the file itself is always a valid thing to

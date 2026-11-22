@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { config } from '../config';
 import { hexToRgb } from '../shared';
+import { paletteAccents } from './overlays/logic';
 import {
-  cardOpacity, contrastChecks, contrastRatio, over, pillOpacity, PILL_TEXT_CONTRAST, sceneFadeFloor, strongOpacity, surfaceColor,
-  themeVariables, worstBackdrop,
+  accentChecks, accentTint, accentVariables, cardOpacity, contrastChecks, contrastRatio, over, pillOpacity, PILL_TEXT_CONTRAST,
+  sceneFadeFloor, strongOpacity, surfaceColor, themeVariables, worstBackdrop,
 } from './theme';
 
 describe('theme tokens', () => {
@@ -29,6 +30,32 @@ describe('theme tokens', () => {
       expect(cardOpacity(mode)).toBeGreaterThanOrEqual(pillOpacity(mode));
       expect(strongOpacity(mode)).toBeGreaterThanOrEqual(cardOpacity(mode));
       expect(sceneFadeFloor(mode)).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('keeps the active overlay pill readable in the colour of every overlay, in both modes', () => {
+    for (const mode of ['dark', 'light'] as const) {
+      const accents = Object.entries(paletteAccents(mode));
+      expect(accents.length).toBeGreaterThan(0);
+      for (const [overlay, accent] of accents) {
+        expect(accent, `${mode}: ${overlay} has an accent`).toBeTruthy();
+        // text on the tinted pill at 4.5:1, and the colour as the pill's dot and ring at 3:1, over the worst backdrop
+        const short = accentChecks(mode, overlay, accent!).filter((c) => c.ratio < c.min).map((c) => `${mode}: ${c.what} is ${c.ratio.toFixed(2)}, needs ${c.min}`);
+        expect(short).toEqual([]);
+        expect(accentVariables(mode, accent!)['--gm-overlay-accent']).toBe(accent);
+      }
+    }
+  });
+
+  it('moves the mark toward the text colour when an overlay colour would not stand out from its pill', () => {
+    for (const mode of ['dark', 'light'] as const) {
+      // an overlay colour as dark (or as light) as the surface cannot be told from the pill it tints
+      const hidden = config.theme[mode].surface;
+      const [text, mark] = accentChecks(mode, 'hidden', hidden);
+      expect(text!.ratio).toBeGreaterThanOrEqual(text!.min);
+      expect(mark!.ratio).toBeGreaterThanOrEqual(mark!.min);
+      expect(accentVariables(mode, hidden)['--gm-overlay-mark']).not.toBe(accentVariables(mode, config.theme[mode].text)['--gm-overlay-mark']);
+      expect(accentTint(mode, hidden)).toBeGreaterThan(0);
     }
   });
 

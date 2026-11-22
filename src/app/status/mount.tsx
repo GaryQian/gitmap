@@ -56,8 +56,9 @@ function ContextLost() {
   const { action } = line;
   return (
     <div className="gm-status-center">
-      <Card blur className="gm-status-card" role="status">
-        <p className="gm-status-card-text">{line.text}</p>
+      <Card blur className="gm-status-card">
+        {/* the text is the alert; the card also holds a button, which is not part of the announcement */}
+        <p className="gm-status-card-text" role="alert">{line.text}</p>
         {action && <PillButton size="small" className="gm-status-card-action" onClick={() => void action.run()}>{action.label}</PillButton>}
       </Card>
     </div>

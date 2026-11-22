@@ -3,7 +3,8 @@
 import uFuzzy from '@leeoniya/ufuzzy';
 import type { ModelReplica } from '../../contracts/store';
 import { parseRef, type Layer, type NodeRef, type PatchBatch, type RepoMeta } from '../../model/types';
-import type { HistoryContributor, OverlayInfo } from '../../overlays';
+import type { ThemeMode } from '../../config';
+import { OVERLAY_COLORS, type HistoryContributor, type OverlayId, type OverlayInfo } from '../../overlays';
 
 // ---- contributors ----
 
@@ -93,6 +94,48 @@ export function pillState(
 export function announcedPercent(coverage: number): number {
   const c = coverage > 0 ? Math.min(1, coverage) : 0;
   return Math.min(75, Math.floor(c * 4) * 25);
+}
+
+// ---- the colour an overlay lends the chrome while it is on ----
+
+/** Spread between the strongest and weakest channel of a #rgb / #rrggbb colour; −1 for any other form. */
+function vividness(color: string): number {
+  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(color.trim())?.[1];
+  if (!hex) return -1;
+  const full = hex.length === 3 ? [...hex].map((c) => c + c).join('') : hex;
+  const rgb = [0, 2, 4].map((i) => parseInt(full.slice(i, i + 2), 16));
+  return Math.max(...rgb) - Math.min(...rgb);
+}
+
+function mostVivid(colors: readonly string[]): string | null {
+  let best: string | null = null;
+  let score = -2;
+  for (const c of colors) {
+    const v = vividness(c);
+    if (v > score) { best = c; score = v; }
+  }
+  return best;
+}
+
+/**
+ * An overlay's accent, for the active pill and the map's frame: the most saturated colour among
+ * `colors` (its legend's). Dependency reach is always its red hot end, even before anything is selected.
+ */
+export function overlayAccent(id: OverlayId, mode: ThemeMode, colors: readonly string[]): string | null {
+  if (id === 'reach') return (mode === 'dark' ? OVERLAY_COLORS.dark.reach[2] : OVERLAY_COLORS.light.reach[0]) ?? null;
+  return mostVivid(colors);
+}
+
+/** The accent of every overlay on the default palette: what the contrast test measures (theme.test.ts). */
+export function paletteAccents(mode: ThemeMode): Record<OverlayId, string | null> {
+  const p = OVERLAY_COLORS[mode];
+  return {
+    recency: overlayAccent('recency', mode, [p.recency]),
+    ownership: overlayAccent('ownership', mode, [p.ownership]),
+    reach: overlayAccent('reach', mode, p.reach),
+    knowledgeRisk: overlayAccent('knowledgeRisk', mode, [p.knowledgeRisk]),
+    tests: overlayAccent('tests', mode, Object.values(p.tests)),
+  };
 }
 
 // ---- Dependency reach seeds ----

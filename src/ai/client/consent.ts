@@ -49,7 +49,7 @@ export function setConsent(repoId: string, consent: Consent, storage: ConsentSto
   save(storage, answers);
 }
 
-/** Forget the answer, so the viewer is asked again. This is how "Not now" is reversed. */
+/** Forget the answer, so the viewer is asked again. ("Not now" is reversed by storing `granted`: the chrome's pill and settings row.) */
 export function resetConsent(repoId: string, storage: ConsentStorage | null = defaultStorage()): void {
   const answers = load(storage);
   if (!Object.hasOwn(answers, repoId)) return;

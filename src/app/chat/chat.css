@@ -1,0 +1,340 @@
+/* The chat assistant (PLAN.md §11.5, §17): a pill at the bottom centre, a tab bar on the side panel
+   and the Chat tab itself. The panel is the sidebar's opaque surface; everything here is neutral
+   gray from the tokens, with the halo blue for what can be pressed. No colour is written out. */
+
+/* ---- the pill at the bottom centre ---- */
+
+.gm-pill.gm-chat-button { gap: 8px; }
+
+/* Beside the tour pill instead of under it. The shell lays this region out as a column; while the
+   two pills are both there it becomes three columns, the tour pill in the middle one, so that pill
+   stays exactly where it is with or without the chat. Anything else in the region (the AI prompt,
+   a failure line) keeps a row to itself. With the tour's step card up, or with no tour, the region
+   is the shell's column again and the chat pill sits on the centre line. */
+.gm-region-bottomCenter:has(> .gm-tour-pill):has(> .gm-chat-button) {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  justify-items: center;
+  align-items: center;
+}
+.gm-region-bottomCenter:has(> .gm-tour-pill):has(> .gm-chat-button) > * { grid-column: 1 / -1; }
+.gm-region-bottomCenter:has(> .gm-tour-pill):has(> .gm-chat-button) > .gm-tour-pill { grid-column: 2; }
+.gm-region-bottomCenter:has(> .gm-tour-pill):has(> .gm-chat-button) > .gm-chat-button { grid-column: 3; justify-self: start; }
+
+/* ---- the tab bar of the side panel ---- */
+
+.gm-panel-tabs {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px 10px calc(var(--gm-reader-pad) - 10px);
+  border-bottom: 1px solid var(--gm-hairline);
+}
+.gm-panel-tablist { flex: 1 1 auto; min-width: 0; display: flex; gap: 2px; }
+.gm-panel-tab {
+  position: relative;
+  height: 28px;
+  padding: 0 13px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--gm-text-dim);
+  font: inherit;
+  font-size: 13px;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  transition: background-color 140ms var(--gm-ease), color 140ms var(--gm-ease), border-color 140ms var(--gm-ease);
+}
+.gm-panel-tab:hover { color: var(--gm-text); }
+.gm-panel-tab.is-active {
+  border-color: var(--gm-hairline);
+  background: var(--gm-reader-fill);
+  color: var(--gm-text);
+  font-weight: 500;
+}
+/* An answer is being written while the File tab is showing. */
+.gm-panel-tab-busy {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-left: 7px;
+  border-radius: 50%;
+  background: var(--gm-halo);
+  vertical-align: 2px;
+}
+.gm-panel-action, .gm-panel-close { flex: none; color: var(--gm-text); }
+.gm-panel-action { padding: 0 12px; }
+
+/* The bar holds the panel's close button, so the reader's own is not shown a second time. */
+.gm-sidebar:has(> .gm-panel-tabs) .gm-reader-close { display: none; }
+/* Turning from one tab to the other swaps the panel's content, not the panel: it does not slide in again. */
+.gm-sidebar:has(> .gm-panel-tabs.is-replacing) { animation: none; }
+
+/* ---- the Chat tab ---- */
+
+.gm-chat {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  --gm-chat-pad: var(--gm-reader-pad, 20px);
+}
+.gm-chat-scroll {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--gm-text) 24%, transparent) transparent;
+}
+.gm-chat-scroll:focus-visible { outline-offset: -2px; }
+.gm-chat-content {
+  box-sizing: border-box;
+  min-height: 100%;
+  max-width: 46rem;
+  padding: 22px 24px 20px var(--gm-chat-pad);
+  display: flex;
+  flex-direction: column;
+}
+
+.gm-chat-items { display: flex; flex-direction: column; gap: 12px; }
+
+/* What the user asked: set off by a rule and a step in from the edge, not by a bubble. */
+.gm-chat-user {
+  margin-top: 14px;
+  padding: 1px 0 1px 13px;
+  border-left: 2px solid color-mix(in srgb, var(--gm-text) 34%, transparent);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: 0.015em;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.gm-chat-items > .gm-chat-user:first-child { margin-top: 0; }
+
+/* ---- the answer: prose, as the markdown preview sets it ---- */
+
+.gm-chat-answer {
+  font-size: 14px;
+  line-height: 1.62;
+  letter-spacing: 0.012em;
+  overflow-wrap: break-word;
+}
+.gm-chat-answer.is-plain { white-space: pre-wrap; }
+.gm-chat-answer > :first-child { margin-top: 0; }
+.gm-chat-answer > :last-child { margin-bottom: 0; }
+.gm-chat-answer p, .gm-chat-answer ul, .gm-chat-answer ol, .gm-chat-answer blockquote, .gm-chat-answer pre, .gm-chat-answer .gm-chat-table { margin: 0 0 0.85em; }
+.gm-chat-answer ul, .gm-chat-answer ol { padding-left: 1.4em; }
+.gm-chat-answer ul { list-style: disc; }
+.gm-chat-answer li::marker { color: var(--gm-text-dim); }
+.gm-chat-answer li + li { margin-top: 0.25em; }
+.gm-chat-answer li > ul, .gm-chat-answer li > ol { margin: 0.25em 0 0; }
+.gm-chat-answer li > p { margin-bottom: 0.4em; }
+.gm-chat-answer strong, .gm-chat-answer b { font-weight: 500; }
+.gm-chat-answer h1, .gm-chat-answer h2, .gm-chat-answer h3, .gm-chat-answer h4, .gm-chat-answer h5, .gm-chat-answer h6 {
+  margin: 1.3em 0 0.5em;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: 0.02em;
+}
+.gm-chat-answer h1, .gm-chat-answer h2 { font-size: 16px; font-weight: 400; letter-spacing: 0.03em; }
+.gm-chat-answer a { color: var(--gm-link, var(--gm-halo)); text-decoration: underline; text-decoration-color: var(--gm-halo-soft); text-underline-offset: 3px; }
+.gm-chat-answer a:hover { text-decoration-color: currentColor; }
+.gm-chat-answer a:not([href]) { color: inherit; text-decoration: none; }
+.gm-chat-answer code {
+  font-family: var(--gm-font-code);
+  font-size: 0.86em;
+  letter-spacing: 0;
+}
+.gm-chat-answer :not(pre) > code {
+  padding: 0.12em 0.4em;
+  border-radius: 5px;
+  background: var(--gm-reader-fill);
+}
+.gm-chat-answer pre {
+  padding: 11px 13px;
+  border: 1px solid var(--gm-hairline);
+  border-radius: 10px;
+  background: var(--gm-reader-fill);
+  overflow-x: auto;
+  line-height: 1.6;
+  overflow-wrap: normal;
+  scrollbar-width: thin;
+}
+.gm-chat-answer pre code { font-size: 12px; }
+.gm-chat-answer blockquote { margin-left: 0; padding-left: 13px; border-left: 2px solid var(--gm-hairline); color: var(--gm-text-dim); }
+.gm-chat-answer hr { height: 1px; margin: 1.4em 0; border: 0; background: var(--gm-hairline); }
+.gm-chat-table { overflow-x: auto; scrollbar-width: thin; }
+.gm-chat-answer table { border-collapse: collapse; font-size: 13px; }
+.gm-chat-answer th, .gm-chat-answer td { padding: 5px 12px 5px 0; border-bottom: 1px solid var(--gm-hairline); text-align: left; vertical-align: top; }
+.gm-chat-answer th { font-weight: 500; }
+
+/* While the answer is being written: a caret after its last words. Still under reduced motion. */
+.gm-chat-answer.is-streaming > :last-child::after {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 1em;
+  margin-left: 3px;
+  vertical-align: -0.15em;
+  border-radius: 1px;
+  background: var(--gm-text-dim);
+  animation: gm-chat-caret 1s steps(2, jump-none) infinite;
+}
+.gm-chat-answer.is-streaming > pre:last-child::after,
+.gm-chat-answer.is-streaming > .gm-chat-table:last-child::after { display: block; margin: 6px 0 0; }
+@keyframes gm-chat-caret { to { opacity: 0.15; } }
+.gm-chat.is-still .gm-chat-answer.is-streaming > :last-child::after { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .gm-chat-answer.is-streaming > :last-child::after, .gm-chat-pulse { animation: none; }
+}
+
+/* ---- a file the answer names: press to select it and fly there ---- */
+
+.gm-chat-ref { white-space: nowrap; }
+.gm-chat-path {
+  margin: 0;
+  padding: 0 1px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--gm-link, var(--gm-halo));
+  /* a path is interface text, so it stays in Jost (§17.2) */
+  font: inherit;
+  letter-spacing: 0.015em;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: var(--gm-halo-soft);
+  text-underline-offset: 3px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.gm-chat-path:hover { text-decoration-color: currentColor; }
+/* the second button of the pair: open it in the File tab. A 24 px target that does not push the lines apart. */
+.gm-chat-open {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin: -4px 0 -4px 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--gm-text-dim);
+  vertical-align: -3px;
+  cursor: pointer;
+  transition: background-color 140ms var(--gm-ease), color 140ms var(--gm-ease);
+}
+.gm-chat-open:hover { background: var(--gm-text-faint); color: var(--gm-text); }
+.gm-chat-open svg { display: block; }
+.gm-chat-path:focus-visible, .gm-chat-open:focus-visible { outline-offset: 1px; }
+
+/* ---- the quiet lines: what changed on the map, what is being looked up, what went wrong ---- */
+
+.gm-chat-action, .gm-chat-note, .gm-chat-error, .gm-chat-activity {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  letter-spacing: 0.03em;
+  color: var(--gm-text-dim);
+}
+.gm-chat-action, .gm-chat-activity, .gm-chat-error { position: relative; padding-left: 17px; }
+/* a small diamond in the halo colour: the map was changed here */
+.gm-chat-action::before {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 0.52em;
+  width: 6px;
+  height: 6px;
+  background: var(--gm-halo);
+  transform: rotate(45deg);
+}
+.gm-chat-items > .gm-chat-action + .gm-chat-action { margin-top: -6px; }
+.gm-chat-activity { margin-top: 12px; }
+.gm-chat-items:empty + .gm-chat-activity { margin-top: 0; }
+.gm-chat-pulse {
+  position: absolute;
+  left: 3px;
+  top: 0.55em;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--gm-text-dim);
+  animation: gm-chat-pulse 1.2s var(--gm-ease) infinite alternate;
+}
+@keyframes gm-chat-pulse { from { opacity: 0.25; } to { opacity: 1; } }
+.gm-chat.is-still .gm-chat-pulse { animation: none; }
+
+.gm-chat-error { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.gm-chat-error::before {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 0.55em;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--gm-syn-escape, var(--gm-text-dim));
+}
+.gm-chat-retry { flex: none; padding: 0 12px; color: var(--gm-text); }
+
+/* ---- nothing asked yet ---- */
+
+.gm-chat-empty { margin: auto 0; padding: 8px 0 24px; }
+.gm-chat-empty-title {
+  margin: 0 0 8px;
+  font-size: 22px;
+  font-weight: 300;
+  line-height: 1.25;
+  letter-spacing: 0.045em;
+  overflow-wrap: anywhere;
+}
+.gm-chat-empty-text { margin: 0 0 20px; max-width: 30rem; font-size: 13px; line-height: 1.5; color: var(--gm-text-dim); }
+.gm-chat-examples { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.gm-pill.gm-chat-example { max-width: 100%; background: transparent; font-size: 13px; }
+.gm-pill.gm-chat-example:hover { background: var(--gm-reader-fill); }
+
+/* ---- the composer ---- */
+
+.gm-chat-composer {
+  flex: none;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin: 0 14px 14px var(--gm-chat-pad);
+  padding: 7px 7px 7px 15px;
+  border: 1px solid var(--gm-hairline);
+  border-radius: 20px;
+  background: var(--gm-reader-fill);
+  transition: border-color 140ms var(--gm-ease);
+}
+.gm-chat-composer:hover { border-color: color-mix(in srgb, var(--gm-text) 30%, transparent); }
+/* the ring of the field is drawn around the whole composer, which is what the field looks like */
+.gm-chat-composer:has(.gm-chat-field:focus-visible) { outline: 2px solid var(--gm-halo); outline-offset: 2px; }
+.gm-chat-field {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 3px 0;
+  border: 0;
+  background: transparent;
+  color: var(--gm-text);
+  font: inherit;
+  font-size: 14px;
+  line-height: 20px;
+  letter-spacing: 0.015em;
+  resize: none;
+  scrollbar-width: thin;
+}
+.gm-chat-field:focus-visible { outline: none; box-shadow: none !important; }
+.gm-chat-field::placeholder { color: var(--gm-text-dim); opacity: 1; }
+.gm-chat-field:disabled { color: var(--gm-text-dim); }
+.gm-pill.gm-chat-send { flex: none; color: var(--gm-text); }
+.gm-pill.gm-chat-send.is-stop { gap: 6px; padding: 0 12px 0 10px; }
+.gm-pill.gm-chat-send[aria-disabled='true'] { cursor: default; color: var(--gm-text-dim); background: transparent; box-shadow: none; }

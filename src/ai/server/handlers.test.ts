@@ -7,7 +7,8 @@ import type {
 import type { NodeRef } from '../../model/types';
 import { AiError, createCannedProvider, createMemoryLimiter, handlers } from './index';
 import type { CannedProvider, CannedScript, Deps, RouteName } from './index';
-import { LENGTHS } from './prompts';
+import { LENGTHS, SYSTEM, tourPrompt } from './prompts';
+import { statesLinkCount, withoutLinkCounts } from './prose';
 
 const REFS: NodeRef[] = ['c:1', 'c:2', 'd:1', 'u:src/main.ts', 'u:src/store.ts', 'u:src/http/server.ts'];
 const FILES = REFS.filter((r) => r.startsWith('u:'));
@@ -39,9 +40,9 @@ const poisBody = (over: Partial<PoisRequest> = {}): PoisRequest => ({
   count: 2,
   ...over,
 });
-const tourBody = (): TourRequest => {
+const tourBody = (over: Partial<TourRequest> = {}): TourRequest => {
   const { count: _count, ...shared } = poisBody();
-  return { ...shared, minSteps: config.ai.tour.minSteps, maxSteps: config.ai.tour.maxSteps };
+  return { ...shared, minSteps: config.ai.tour.minSteps, maxSteps: config.ai.tour.maxSteps, ...over };
 };
 const poi = (parent: string, refs: string[] = []) => ({
   parent, label: 'Entry point', summary: summaryText, kind: 'entry', evidence: 'Twelve units import it.', refs,
@@ -49,6 +50,44 @@ const poi = (parent: string, refs: string[] = []) => ({
 const step = (parent: string, frame = 'file', highlights: string[] = []) => ({ parent, frame, text: stepText, highlights });
 /** The fewest steps a tour may have, each standing on a file from the list. */
 const enoughSteps = () => Array.from({ length: config.ai.tour.minSteps }, (_, i) => step(FILES[i % FILES.length]));
+
+/** The step a real tour came back with: its second sentence narrates a measurement. */
+const SHELL = 'The application shell starts here and lets users open a repository.';
+const COUNTED = 'This entry point has eight outgoing links, leading into the map workflow.';
+
+describe('prose that narrates link counts', () => {
+  it('finds the sentence that counts links and leaves the rest of the text', () => {
+    expect(statesLinkCount(COUNTED)).toBe(true);
+    expect(statesLinkCount(SHELL)).toBe(false);
+    expect(withoutLinkCounts(`${SHELL} ${COUNTED}`)).toEqual({ text: SHELL, removed: [COUNTED] });
+    expect(withoutLinkCounts(COUNTED)).toEqual({ text: '', removed: [COUNTED] });
+
+    for (const counted of [
+      'Twelve units import it.', 'It has 12 imports and 3 dependents.', 'It is imported by 14 files across the map.',
+      'With a fan-in of 12 it is the hub.', 'Thirty modules depend on it.', 'It links to nine other files.', 'Five incoming and two outgoing.',
+    ]) expect(statesLinkCount(counted), counted).toBe(true);
+  });
+
+  it('leaves ordinary prose alone, numbers included', () => {
+    for (const fine of [
+      'Handles two kinds of request.', 'Retries three times before giving up.', 'Supports three import formats.',
+      'Covers two edge cases in the parser.', 'Handles two incoming requests at a time.', 'The two front ends import the shared client.',
+      'It imports the parser and hands the tree to the renderer.', 'Version 2 of the protocol links clients to the server.',
+      'It keeps references to two tables.', 'Parses main.ts first, then the 4096-byte header.',
+    ]) {
+      expect(statesLinkCount(fine), fine).toBe(false);
+      expect(withoutLinkCounts(`${SHELL} ${fine}`), fine).toEqual({ text: `${SHELL} ${fine}`, removed: [] });
+    }
+  });
+
+  it('tells the model so: tour text is about what the code does, never about counts', () => {
+    const prompt = tourPrompt(tourBody());
+    expect(prompt).toMatch(/never mention counts or measurements/i);
+    expect(prompt).toContain(COUNTED); // quoted as what not to write
+    expect(prompt).not.toMatch(/one structural fact/i);
+    expect(SYSTEM).toMatch(/never state counts or measurements/i);
+  });
+});
 
 describe('ai server handlers', () => {
   it('returns validated points of interest for a valid request', async () => {
@@ -136,6 +175,55 @@ describe('ai server handlers', () => {
     const failed = await call<SummariesResponse>('summaries', again.deps, body);
     expect(failed.body.summary).toBeNull();
     expect(again.provider.requests).toHaveLength(2);
+  });
+
+  it('retries a tour step that narrates link counts, quoting the sentence, and removes it if it comes back', async () => {
+    const good = enoughSteps();
+    const counted = { ...step(FILES[0]), text: `${SHELL} ${COUNTED}` };
+    const onlyCounts = { ...step(FILES[1]), text: COUNTED };
+
+    // fixed on the retry: the second reply is used as it is
+    const fixed = setup([
+      { value: { pois: [], steps: [counted, ...good] } },
+      { value: { pois: [], steps: [{ ...counted, text: `${SHELL} It hands the chosen folder to the parser.` }, ...good] } },
+    ]);
+    const first = await call<TourResponse>('tour', fixed.deps, tourBody());
+    expect(first.status).toBe(200);
+    expect(fixed.provider.requests).toHaveLength(2);
+    const note = fixed.provider.requests[1].prompt;
+    expect(note).toContain('rejected');
+    expect(note).toContain(`steps[0].text states a count of links or dependencies ("${COUNTED}")`);
+    expect(first.body.steps[0].text).toBe(`${SHELL} It hands the chosen folder to the parser.`);
+
+    // still there after the retry: the sentence goes, the step stays; a step with nothing else is dropped
+    const stubborn = setup([
+      { value: { pois: [], steps: [counted, onlyCounts, ...good] } },
+      { value: { pois: [], steps: [counted, onlyCounts, ...good] } },
+    ]);
+    const second = await call<TourResponse>('tour', stubborn.deps, tourBody({ maxSteps: good.length + 2 }));
+    expect(second.status).toBe(200);
+    expect(stubborn.provider.requests).toHaveLength(2); // one retry, never a third call
+    expect(second.body.steps).toHaveLength(good.length + 1);
+    expect(second.body.steps[0]).toMatchObject({ parent: FILES[0], text: SHELL });
+    expect(second.body.steps.some((s) => /outgoing links/.test(s.text))).toBe(false);
+  });
+
+  it('holds city summaries and point-of-interest summaries to the same rule, and leaves the evidence alone', async () => {
+    const body: SummariesRequest = { digestHash: 'digest-1', refs: REFS, city: 'c:1', context: 'district d:1 holds the stores.' };
+    const countedSummary = { label: 'Core', text: `${summaryText}. Twelve files import it.` };
+    const city = setup([{ value: countedSummary }, { value: countedSummary }]);
+    const res = await call<SummariesResponse>('summaries', city.deps, body);
+    expect(city.provider.requests).toHaveLength(2);
+    expect(city.provider.requests[1].prompt).toContain('"Twelve files import it."');
+    expect(res.body.summary).toEqual({ parent: 'c:1', label: 'Core', text: `${summaryText}.` });
+
+    const counted = { ...poi('u:src/main.ts'), summary: `${summaryText}. It has 12 imports.` };
+    const points = setup([{ value: { pois: [counted, poi('u:src/store.ts')], steps: [] } }, { value: { pois: [counted, poi('u:src/store.ts')], steps: [] } }]);
+    const pois = await call<PoisResponse>('pois', points.deps, poisBody());
+    expect(points.provider.requests).toHaveLength(2);
+    expect(pois.body.pois.map((p) => p.summary)).toEqual([`${summaryText}.`, summaryText]);
+    // the evidence is where a structural fact belongs
+    expect(pois.body.pois[0].evidence).toBe('Twelve units import it.');
   });
 
   it('maps a refusal to the refused error', async () => {

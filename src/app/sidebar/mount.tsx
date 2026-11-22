@@ -4,12 +4,37 @@
 // session's ContentSource, so a local folder and a demo look the same from here.
 import { useEffect, useMemo } from 'react';
 import type { AppMount } from '../../contracts/app';
+import { ChatPanel, PANEL_BODY_ID, PanelTabs, closeChatTab, panelTabId, useChatTab } from '../chat';
 import { setOpenFile, useApp, useReplica, useSession } from '../store';
 import { ChevronLeftIcon, PanelIcon, cx } from '../ui';
 import { anyDirty, bindSession, rememberFile, setEmptyOpen, useEdits } from './drafts';
 import { resolveTarget } from './files';
-import { EmptyReader, Reader } from './Reader';
+import { EmptyReader, Panel, PanelTop, Reader } from './Reader';
 import './sidebar.css';
+
+/**
+ * The canvas runs full-bleed under the panel, so tell the renderer how much of its right side the
+ * panel covers: centring and "Reset view" then frame the map in what is left. The region holds only
+ * the panel in its flow (the reopen tab is absolutely placed), so its width is the panel's width.
+ */
+function useViewInset(): void {
+  const render = useApp((s) => s.render);
+  useEffect(() => {
+    const region = document.querySelector<HTMLElement>('.gm-region-rightEdge');
+    if (!render || !region) return;
+    let last = -1;
+    const report = () => {
+      const right = Math.round(region.getBoundingClientRect().width);
+      if (right === last) return;
+      last = right;
+      try { render.setViewInset({ right }); } catch { /* a renderer without it keeps the full width */ }
+    };
+    report();
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(report) : null;
+    observer?.observe(region);
+    return () => observer?.disconnect();
+  }, [render]);
+}
 
 function Sidebar() {
   const openFile = useApp((s) => s.openFile);
@@ -22,26 +47,39 @@ function Sidebar() {
 
   useEffect(() => { bindSession(session); }, [session]);
   useEffect(() => { if (openFile && target) rememberFile(openFile); }, [openFile, target]);
+  useViewInset();
 
-  if (openFile && target) return <Reader openFile={openFile} target={target} session={session} meta={replica?.meta ?? null} />;
-  if (emptyOpen) return <EmptyReader />;
-  return null;
+  // With chat available the panel has two tabs, File (everything above) and Chat, and one close button.
+  const chat = useChatTab();
+  const close = () => { closeChatTab(); setOpenFile(null); setEmptyOpen(false); };
+  const panel = chat.active ? <Panel label="Chat" onClose={close}><ChatPanel /></Panel>
+    : openFile && target ? <Reader openFile={openFile} target={target} session={session} meta={replica?.meta ?? null} />
+    : emptyOpen ? <EmptyReader />
+    : null;
+  if (!panel || !chat.available) return panel;
+  const tab = chat.active ? 'chat' : 'file';
+  const fillFileTab = () => { if (!(openFile && target)) reopenFile(replica); };
+  const frame = { bar: <PanelTabs active={tab} onFile={fillFileTab} onClose={close} />, tabId: panelTabId(tab), panelId: PANEL_BODY_ID };
+  return <PanelTop.Provider value={frame}>{panel}</PanelTop.Provider>;
+}
+
+/** Put the last file back in the panel, or the empty reader when there is none. */
+function reopenFile(replica: ReturnType<typeof useReplica>): void {
+  const { lastFile } = useEdits.getState();
+  if (lastFile && resolveTarget(replica, lastFile)) setOpenFile(lastFile);
+  else setEmptyOpen(true);
 }
 
 /** A tab on the right edge, halfway down: brings the closed panel back. */
 function ReopenButton() {
   const openFile = useApp((s) => s.openFile);
   const replica = useReplica();
-  const lastFile = useEdits((s) => s.lastFile);
   const emptyOpen = useEdits((s) => s.emptyOpen);
   const unsaved = useEdits(anyDirty);
-  if (emptyOpen || (openFile && resolveTarget(replica, openFile))) return null;
+  const chatOpen = useChatTab().active;
+  if (chatOpen || emptyOpen || (openFile && resolveTarget(replica, openFile))) return null;
 
-  const reopen = () => {
-    const back = lastFile && resolveTarget(replica, lastFile) ? lastFile : null;
-    if (back) setOpenFile(back);
-    else setEmptyOpen(true);
-  };
+  const reopen = () => reopenFile(replica);
   return (
     <button
       type="button"
