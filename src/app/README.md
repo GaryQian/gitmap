@@ -39,7 +39,7 @@ const mount: AppMount = { region: 'bottomLeft', order: 10, Component: ResetView 
 export default mount;
 ```
 
-- `order`: lower comes first within a region. In use: title pill `topLeft` 0, selection pills `topLeft` 10; progress `topCenter` 20, action pills `topCenter` 30 (search belongs before them); settings gear `topRight` 1000 (overlay pills go before it); controls key `bottomLeft` 0, "Reset view" `bottomLeft` 10; legend `bottomRight` 10; in `scene`, the pill layer 0, the detail card 10, the tooltip 20 (later lies on top).
+- `order`: lower comes first within a region. In use: title pill `topLeft` 0, search `topLeft` 1 (beside the title), selection pills `topLeft` 10; progress `topCenter` 20, action pills `topCenter` 30; settings gear `topRight` 1000 (overlay pills go before it); controls key `bottomLeft` 0, "Reset view" `bottomLeft` 10; legend `bottomRight` 10; in `scene`, the pill layer 0, the detail card 10, the tooltip 20 (later lies on top).
 - `phases`: which screens show the mount. Default `['map']`; in the `landing` region the default is `['landing']`.
 - Each mount renders inside an error boundary, so a feature that throws disappears instead of taking the map down.
 - Import a feature's CSS from its own `mount.tsx`.
@@ -138,7 +138,7 @@ Rules from PLAN.md §17 that the primitives already follow, and yours should too
 | `pills/` | `scene` | City pills (name and file count, "visible / total" when the size slider hides some) and smaller district pills for cities near the camera. `layer.ts` is the pooled, imperative DOM layer; `place.ts` holds the pure rules (priority, overlap, distance fade, when districts show). |
 | `inspect/` | `scene` | The tooltip for `hover` and the detail card for `focus`, both anchored to their sphere. |
 | `selected/` | `topLeft` | One removable pill per selected file, "+N more", "Clear all". Escape clears. |
-| `legend/` | `bottomRight` | File-type rows (click isolates, Shift+click for several) and the minimum-lines slider. `slider.ts` is the pure part: the logarithmic mapping, the hidden count with the glow exemption, the filter transitions. |
+| `legend/` | `bottomRight` | File-type rows (click isolates, Shift+click for several) and the minimum-file-size slider. `slider.ts` is the pure part: the logarithmic mapping (bytes), the hidden count with the glow exemption, the filter transitions. |
 | `controls/` | `bottomLeft` | The controls key (opens on hover or focus) and "Reset view" (also the Home key). |
 
 **Following the scene.** Anything that tracks a node does it outside React: subscribe to `render.on('frame')` and write `transform` on the element. For one element, use `useAnchor(ref, elementRef, place, rev, obstacle?)` from `anchor.ts`: `place(at, box, view, render)` returns the top-left corner for the projected anchor `at`, or null to hide; the element is absolutely positioned at the scene's top left and starts `visibility: hidden`. Its size is measured once per anchoring, so pass something in `rev` that changes when the content does. `groundToPixels(render, at, world, 'x' | 'y')` converts a ground distance at a projected point to CSS pixels (a sphere's radius on screen, the far edge of a territory). The renderer draws at a reduced rate when nothing moves, and not at all under reduced motion, so place once immediately as well as on `frame` (`followAnchor` does).
@@ -153,7 +153,7 @@ Rules from PLAN.md §17 that the primitives already follow, and yours should too
 
 **Counts are units.** One sphere is one unit (a header + implementation pair is a single unit), so the legend's counts, the slider's "Hiding N of M files" and the city pills all count units and call them files. Language names come from `replica.meta.languages` (the id is shown when the model has none, as on the synthetic map); nothing in the app imports `src/lang`.
 
-**For the next features.** The sidebar reads `openFile`; note that the canvas and the `scene` region stay full-bleed under the sidebar, so an anchored card can end up beneath it (the pills already avoid `rightEdge`). Overlay pills go in `topRight` before 1000; the legend should give way to an overlay's own legend while one is active (not done). Search belongs in `topCenter` before 20 and can call `setSelection([ref])` then `render.flyTo(ref)`. The tour goes in `bottomCenter` and can use `render.setHighlights` plus `useAnchor` for its step card.
+**For the next features.** The sidebar reads `openFile`; note that the canvas and the `scene` region stay full-bleed under the sidebar, so an anchored card can end up beneath it (the pills already avoid `rightEdge`). Overlay pills go in `topRight` before 1000; the legend should give way to an overlay's own legend while one is active (not done). Search sits in `topLeft` beside the title and calls `setSelection([ref])` then `render.flyTo(ref)`. The tour goes in `bottomCenter` and can use `render.setHighlights` plus `useAnchor` for its step card.
 
 ## The other feature folders
 
@@ -162,13 +162,13 @@ Each is one folder with a `mount.tsx`; region and order are as that file declare
 | Folder | Region · order | What it is |
 |---|---|---|
 | `repos/` | `landing` 10; `topLeft` 5 | The landing page's repo pills (saved repos, demos), and on the map the repo info pill under the title pill, with its card and "Export map". |
-| `search/` | `topCenter` 10 | The search pill, first in the row: widens into a field on focus, "/" or Ctrl/Cmd+K, and lists matching files from `session.search`; choosing one selects it and flies to it. |
+| `search/` | `topLeft` 1 | The search pill, beside the title: widens into a field on focus, "/" or Ctrl/Cmd+K, and lists matching files from `session.search`; choosing one selects it and flies to it. |
 | `overlays/` | `topRight` 100 | One pill per overlay before the settings gear, and under them the active overlay's legend and parameters; builds the `OverlayView` and calls `render.setOverlay`. |
 | `sidebar/` | `rightEdge` 0; `topRight` 1100 | The opaque sidebar editor for `openFile`, read (and saved) through `session.content`, and the small button that brings it back while it is closed. |
 | `poi/` | `scene` 20 | A label pill on every point of interest's beam, and the detail card a pill opens, with its detail buttons. |
 | `summaries/` | `scene` 30 | The AI summary of a city on a card under its pill, while the pointer rests there or the pill has focus. |
 | `tour/` | `bottomCenter` 10 | The "Tour the repo" pill, and the step card that takes its place while a tour plays. |
-| `ai/` | `overlay` 10; `bottomCenter` 5 | The consent prompt asked once per repository, starting generation through `session.ai` once the answer is yes, and one quiet line when something fails. |
+| `ai/` | `bottomCenter` 5 (failure line) and 7 (prompt) | The "Add AI notes" prompt, always present while AI notes are off for a repo; it starts generation through `session.ai` once the answer is yes, and shows one quiet line when something fails. The settings card has the per-repo "AI notes" On / Off row. |
 
 ## CSS custom properties
 

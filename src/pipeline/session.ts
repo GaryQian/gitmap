@@ -53,6 +53,8 @@ export function createBrowserSession(source: RepoSource, config: Config): Sessio
   const onVisibility = () => { if (document.visibilityState === 'hidden') send({ type: 'hidden' }); };
 
   const send = (m: ToCoordinator) => worker?.postMessage(m);
+  /** Counts ai.cancel() calls, so a detail request whose file read straddles a cancel is dropped. */
+  let aiCancels = 0;
   let nextId = 1;
   const pending = new Map<number, { resolve(v: unknown): void; reject(e: Error): void }>();
   function call<M extends CoordinatorMethod>(method: M, ...args: Parameters<CoordinatorCalls[M]>): Promise<ReturnType<CoordinatorCalls[M]>> {
@@ -184,13 +186,19 @@ export function createBrowserSession(source: RepoSource, config: Config): Sessio
       async requestDetail(poiId, question) {
         // The file itself says more than its skeleton: read it here, where the folder is, when it can be read.
         const poi = replica.annotations.find((a) => a.type === 'poi' && a.id === poiId);
+        const asked = aiCancels;
         let text: string | null = null;
         try {
           if (poi?.type === 'poi' && content) text = new TextDecoder().decode(await content.read(poi.parent));
         } catch { /* the skeleton will do */ }
+        // AI notes were switched off while the file was being read: ask for nothing.
+        if (asked !== aiCancels) return { failure: null };
         return call('aiDetail', poiId, question, text);
       },
-      cancel() { void call('aiCancel').catch(() => { /* nothing was running */ }); },
+      cancel() {
+        aiCancels++;
+        void call('aiCancel').catch(() => { /* nothing was running */ });
+      },
     },
     async search(query, limit = 20): Promise<SearchHit[]> {
       // The index lives in the coordinator, beside the store (src/search). The substring match below

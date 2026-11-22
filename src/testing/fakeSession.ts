@@ -112,7 +112,7 @@ export function createFakeSession(config: Config, opts: FakeSessionOptions = {})
         ];
         applyOps([
           ...pois.map((value): ModelPatch => ({ op: 'annotation', value })),
-          { op: 'annotation', value: { type: 'tour', id: 'tour', steps } },
+          { op: 'annotation', value: { type: 'tour', id: 'tour:v2', steps } },
         ]);
       }
       aiDone = true;
