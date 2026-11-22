@@ -1,6 +1,6 @@
 {
   "name": "acme/orders",
-  "description": "Small order service used as the gitmap PHP fixture.",
+  "description": "Small order service used as the starmap PHP fixture.",
   "type": "project",
   "require": {
     "php": "^8.1",

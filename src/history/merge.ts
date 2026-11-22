@@ -21,8 +21,6 @@ interface ContributorAcc {
   /** Canonical email, lower-cased; 'name:<name>' for an author without an address. */
   key: string;
   name: string;
-  /** The name comes from .mailmap and is not replaced by names on commits. */
-  nameFixed: boolean;
   /** Author time of the commit `name` was taken from. */
   nameTime: number;
   email: string;
@@ -31,6 +29,7 @@ interface ContributorAcc {
   lastActive: number;
 }
 
+/** An author as written on commits: the name it has after .mailmap, and who it counts as. */
 interface RawAuthor { name: string; contributor: number }
 
 function addPair(pairs: number[], contributor: number, n: number): void {
@@ -61,20 +60,16 @@ export class HistoryAccumulator {
     this.mailmap = mailmap;
   }
 
+  /** The contributor with this canonical identity: keyed by email, or by name when there is no address. */
   private contributorFor(name: string, email: string): number {
-    const r = this.mailmap ? this.mailmap.resolve(name, email) : { name, email, nameFixed: false };
-    const canonical = r.email.toLowerCase();
-    const key = canonical || 'name:' + r.name.toLowerCase();
+    const canonical = email.toLowerCase();
+    const key = canonical || 'name:' + name.toLowerCase();
     let i = this.byKey.get(key);
     if (i === undefined) {
       i = this.contributors.length;
-      this.contributors.push({ key, name: '', nameFixed: false, nameTime: -Infinity, email: canonical, emails: new Set(), commits: 0, lastActive: -Infinity });
+      this.contributors.push({ key, name: '', nameTime: -Infinity, email: canonical, emails: new Set(), commits: 0, lastActive: -Infinity });
       this.byKey.set(key, i);
     }
-    const c = this.contributors[i];
-    if (r.nameFixed && !c.nameFixed) { c.name = r.name; c.nameFixed = true; }
-    const written = email.toLowerCase();
-    if (written && written !== canonical) c.emails.add(written);
     return i;
   }
 
@@ -82,17 +77,22 @@ export class HistoryAccumulator {
   rawAuthor(ident: string): number {
     let id = this.rawByIdent.get(ident);
     if (id === undefined) {
-      const { name, email } = splitIdent(ident);
+      const written = splitIdent(ident);
+      const who = this.mailmap ? this.mailmap.resolve(written.name, written.email) : written;
+      const contributor = this.contributorFor(who.name, who.email);
+      const c = this.contributors[contributor];
+      const address = written.email.toLowerCase();
+      if (address && address !== c.email) c.emails.add(address);
       id = this.raw.length;
-      this.raw.push({ name, contributor: this.contributorFor(name, email) });
+      this.raw.push({ name: who.name, contributor });
       this.rawByIdent.set(ident, id);
     }
     return id;
   }
 
-  /** A contributor's newest commit decides the name shown, unless .mailmap fixed it. Ties: the smaller name. */
+  /** The name shown is the one (after .mailmap) on the contributor's newest commit. Ties: the smaller name. */
   private sawCommit(c: ContributorAcc, name: string, time: number): void {
-    if (!c.nameFixed && name && (time > c.nameTime || (time === c.nameTime && name < c.name))) {
+    if (name && (time > c.nameTime || (time === c.nameTime && name < c.name))) {
       c.name = name;
       c.nameTime = time;
     }
@@ -203,8 +203,8 @@ export class HistoryAccumulator {
 export function historyToJson(r: HistoryResult): HistoryJson {
   const paths = [...r.files.keys()].sort();
   const json: HistoryJson = {
-    version: 1, merges: r.merges, headOid: r.headOid, reachedOid: r.reachedOid, commitsWalked: r.commitsWalked,
-    complete: r.complete, recencyComplete: r.recencyComplete,
+    version: 1, merges: r.merges, mailmapHash: r.mailmapHash, headOid: r.headOid, reachedOid: r.reachedOid, reachedTime: r.reachedTime,
+    commitsWalked: r.commitsWalked, complete: r.complete, recencyComplete: r.recencyComplete,
     contributors: r.contributors.map((c, id) => ({ id, name: c.name, emails: [...c.emails], commits: c.commits, lastActive: c.lastActive })),
     paths, commits: [], lastModified: [], firstSeen: [], lastAuthor: [], lastOidPrefix: [], authors: [],
   };
@@ -238,8 +238,8 @@ export function historyFromJson(json: HistoryJson | null | undefined): HistoryRe
   const r: HistoryResult = {
     files,
     contributors: json.contributors.map((c, id) => ({ id, name: c.name, emails: [...c.emails], commits: c.commits, lastActive: c.lastActive })),
-    headOid: json.headOid, reachedOid: json.reachedOid, commitsWalked: json.commitsWalked,
-    complete: json.complete, recencyComplete: json.recencyComplete, merges: json.merges,
+    headOid: json.headOid, reachedOid: json.reachedOid, reachedTime: json.reachedTime ?? null, commitsWalked: json.commitsWalked,
+    complete: json.complete, recencyComplete: json.recencyComplete, merges: json.merges, mailmapHash: json.mailmapHash ?? '',
   };
   if (json.stoppedBy) r.stoppedBy = json.stoppedBy;
   if (json.error) r.error = json.error;

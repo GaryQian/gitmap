@@ -4,7 +4,8 @@
 //
 //   bound      the target of the import that the reference's qualifier names (`x.S`, see below)
 //   named      the target of an import statement of A that lists S                      (strongest)
-//   import     the target of any import statement of A
+//   import     the target of any import statement of A, or a member of a scope A can read
+//              (Resolver.sees: one-way, the Swift module or C# namespace a file uses)
 //   re-export  behind a file A imports: one hop through any statement of that file that lists S,
 //              lists '*' or lists nothing (`__init__.py`, umbrella headers), and on through
 //              re-exporting statements (`export … from`, Dart `export` and `part`) to a capped depth
@@ -263,6 +264,23 @@ export function linkSymbols(
     fileScopes[i] = ids;
     fileScope[i] = ids.length === 1 ? ids[0] : MANY_SCOPES;
   }
+  /** Scopes a file can read without being a member (Resolver.sees), where some file is a member. */
+  const fileSees = new Array<number[] | undefined>(n);
+  for (let i = 0; i < n && scopeFiles.length > 0; i++) {
+    if (!facts[i] || facts[i]!.refs.length === 0) continue;
+    const lang = files[i].lang;
+    const resolver = lang ? resolved.resolvers.get(lang) : undefined;
+    if (!resolver?.sees) continue;
+    let keys: string[] | undefined;
+    try { keys = resolver.sees(files[i]); } catch { keys = undefined; }
+    if (!keys) continue;
+    let ids: number[] | undefined;
+    for (const key of keys) {
+      const id = scopeId.get(key);
+      if (id !== undefined && !ids?.includes(id)) (ids ??= []).push(id);
+    }
+    fileSees[i] = ids;
+  }
 
   // ---- which languages can name each other's symbols: same language, one shared resolver, or an import between them ----
   const langId = new Map<string, number>();
@@ -312,6 +330,7 @@ export function linkSymbols(
 
   let gen = 0, a = 0, ownUnit = 0, reachN = 0, nmN = 0, bdN = 0, hopN = 0, tN = 0, refStamp = 0;
   let aScope = NO_SCOPE;
+  let aSees: number[] | undefined;
   let sid = 0, qid = NO_QUALIFIER, qualified = false, bound = false, best = 0, candN = 0;
 
   const reach = (u: number, lvl: number): void => {
@@ -351,6 +370,7 @@ export function linkSymbols(
     gen++;
     ownUnit = fileUnit[a];
     aScope = fileScope[a];
+    aSees = fileSees[a];
     reachN = 0; nmN = 0; bdN = 0; hopN = 0;
     for (let k = ownFrom[a]; k < ownTo[a]; k++) localGen[ownNames[k]] = gen;
     hopSeen[a] = gen;
@@ -391,6 +411,10 @@ export function linkSymbols(
     } else {
       if (lvl < NAMED && nmGen[sid] === gen) {
         for (let j = nmHead[sid]; j >= 0; j = nmNext[j]) if (nmUnit[j] === u && nmLvl[j] > lvl) lvl = nmLvl[j];
+      }
+      if (aSees !== undefined && lvl < IMPORT) {
+        const theirs = fileScopes[dFile[k]];
+        if (theirs !== undefined && intersects(aSees, theirs)) lvl = IMPORT;
       }
       if (aScope !== NO_SCOPE && lvl < NAMED) {
         const other = fileScope[dFile[k]];
@@ -483,6 +507,12 @@ export function linkSymbols(
           for (const sc of fileScopes[a]!) {
             const mates = scopeFiles[sc];
             if (mates.length <= SCOPE_PROBE_CAP) for (const g of mates) probe(fileUnit[g], lo, hi);
+          }
+        }
+        if (aSees !== undefined) {
+          for (const sc of aSees) {
+            const members = scopeFiles[sc];
+            if (members.length <= SCOPE_PROBE_CAP) for (const g of members) probe(fileUnit[g], lo, hi);
           }
         }
       }

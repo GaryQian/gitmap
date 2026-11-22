@@ -10,6 +10,7 @@ interface Expected {
   imports: [string, string][];
   notImports: [string, string][];
   calls: [string, string, string][];
+  headerPairs: [string, string][];
 }
 
 // The registry-independent route: this plug-in for .m/.mm, the C-family plug-ins for headers and C++.
@@ -98,6 +99,34 @@ describe('objc fixture', () => {
     expect(renderer.defs.find((d) => d.name === 'SamplesForTrack')).toMatchObject({ kind: 'function', exported: false });
     expect(ref(renderer.refs, 'normalizePeaks', 'call', 'audio')).toBeDefined();
     expect(ref(renderer.refs, 'samples', 'call')).toBeUndefined(); // `std::vector<float> samples(...)` declares
+  });
+});
+
+describe('objc fixture headers', () => {
+  const files = fixtureFiles('objc');
+  const expected = fixtureExpected<Expected>('objc');
+  const cpp = cfamily.find((p) => p.id === 'cpp')!;
+
+  it('gives every header of a pair a class its source implements', () => {
+    for (const [header, source] of expected.headerPairs) {
+      const declared = facts(header, files[header]).decls?.classes ?? [];
+      const implemented = facts(source, files[source]).decls?.classes ?? [];
+      expect(facts(header, files[header]).lang, header).toBe('cpp'); // the registry's answer for .h does not change
+      expect(declared.filter((name) => implemented.includes(name)), `${header} / ${source}`).not.toEqual([]);
+    }
+  });
+
+  it('reads superclasses and protocols from the headers, where they are written', () => {
+    const symbols = (path: string) => cpp.extractSymbols!(files[path], path);
+    const inherits = (path: string) => symbols(path).refs.filter((r) => r.kind === 'inherit').map((r) => r.name);
+    expect(inherits('Core/Models/Track.h')).toEqual(['NSObject', 'NSCopying']);
+    expect(inherits('App/PlayerViewController.h')).toEqual(['UIViewController', 'TrackStoreDelegate']);
+    // The protocol PlayerViewController adopts is defined in the header it imports.
+    expect(symbols('Core/Store/TrackStore.h').defs.map((d) => `${d.kind} ${d.name}`)).toEqual(['interface TrackStoreDelegate', 'class TrackStore']);
+    // A category header defines no class; it refers to the one it extends.
+    const category = symbols('Core/Models/Track+Formatting.h');
+    expect(category.defs).toEqual([]);
+    expect(ref(category.refs, 'Track', 'reference')).toBeDefined();
   });
 });
 

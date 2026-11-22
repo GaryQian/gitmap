@@ -109,6 +109,7 @@ export function runHistoryWalk(pool: ComputePool, config: Config, opts: HistoryW
 
   const acc = new HistoryAccumulator(opts.paths);
   let headOid = '';
+  let mailmap = '';
   let frontier: PlanFrontier | null = null;
   let firstPage = true;
   let planning = false;
@@ -121,7 +122,8 @@ export function runHistoryWalk(pool: ComputePool, config: Config, opts: HistoryW
   let sinceState: 'none' | 'pending' | 'merged' | 'dropped' = since ? 'pending' : 'none';
   const buffer: PlannedCommit[] = [];
   let inFlight = 0;
-  const chunkLastOid: string[] = [];
+  /** Per chunk: its last (oldest) commit. */
+  const chunkLast: { oid: string; date: number }[] = [];
   const chunkDone: boolean[] = [];
   /** Chunks [0, prefix) are merged: the facts cover a gap-free run of commits up to there. */
   let prefix = 0;
@@ -160,13 +162,21 @@ export function runHistoryWalk(pool: ComputePool, config: Config, opts: HistoryW
     let recencyComplete: boolean;
     if (merged()) recencyComplete = all && (since!.recencyComplete || acc.allSeen());
     else recencyComplete = recencyNeeds !== null && prefix >= recencyNeeds;
+    // the oldest commit in walk order (date, then id), of this walk and of the saved result
+    let reached = prefix > 0 ? chunkLast[prefix - 1] : null;
+    if (merged() && since!.reachedOid !== null && since!.reachedTime !== null) {
+      const saved = { oid: since!.reachedOid, date: since!.reachedTime };
+      if (!reached || saved.date < reached.date || (saved.date === reached.date && saved.oid > reached.oid)) reached = saved;
+    }
     const m: ResultMeta = {
       headOid,
-      reachedOid: (merged() ? since!.reachedOid : null) ?? (prefix > 0 ? chunkLastOid[prefix - 1] : null),
+      reachedOid: reached ? reached.oid : null,
+      reachedTime: reached ? reached.date : null,
       commitsWalked: walked + (merged() ? since!.commitsWalked : 0),
       complete,
       recencyComplete: complete || recencyComplete,
       merges,
+      mailmapHash: mailmap,
     };
     if (final && !complete) {
       m.stoppedBy = stoppedBy ?? (shallow ? 'shallow' : missing > 0 ? 'missingObjects' : merged() ? since!.stoppedBy : undefined) ?? 'error';
@@ -224,7 +234,8 @@ export function runHistoryWalk(pool: ComputePool, config: Config, opts: HistoryW
 
   const submitChunk = (commits: PlannedCommit[]): void => {
     const index = stats.chunks++;
-    chunkLastOid[index] = commits[commits.length - 1].oid;
+    const oldest = commits[commits.length - 1];
+    chunkLast[index] = { oid: oldest.oid, date: oldest.date };
     inFlight++;
     pool.run<ChunkOutput, ChunkInput>({ type: HISTORY_CHUNK_TASK, lane, group, input: { commits, merges } }).then((out) => {
       inFlight--;
@@ -262,6 +273,7 @@ export function runHistoryWalk(pool: ComputePool, config: Config, opts: HistoryW
     if (firstPage) {
       firstPage = false;
       headOid = page.headOid ?? '';
+      mailmap = page.mailmapHash ?? '';
       acc.setMailmap(page.mailmap ? parseMailmap(page.mailmap) : null);
     }
     shallow ||= page.shallow;
@@ -305,7 +317,10 @@ export function runHistoryWalk(pool: ComputePool, config: Config, opts: HistoryW
       remaining: maxCommits - planned,
       useCommitGraph: opts.useCommitGraph,
     };
-    if (firstPage) input.start = opts.startOid ?? null;
+    if (firstPage) {
+      input.start = opts.startOid ?? null;
+      if (since) input.sinceMailmap = since.mailmapHash;
+    }
     const transfer = frontier ? [frontier.seen] : undefined;
     frontier = null;
     pool.run<PlanPage, PlanInput>({ type: HISTORY_PLAN_TASK, lane, group, input, transfer }).then(onPage, (e) => {

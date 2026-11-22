@@ -8,8 +8,8 @@ const NL = 10, CR = 13, LPAREN = 40, RPAREN = 41, STAR = 42, COMMA = 44, DOT = 4
 const LT = 60, GT = 62, QUESTION = 63, BACKTICK = 96, LBRACE = 123, RBRACE = 125, MINUS = 45;
 
 /** Longest `<…>` type-parameter list and `{…}` selector list the scanner follows. */
-const MAX_ANGLE_CHARS = 256;
-const MAX_SELECTOR_CHARS = 2000;
+const MAX_ANGLE_CHARS = 160;
+const MAX_SELECTOR_CHARS = 1000;
 /** Comma-separated expressions read from one Scala `import`. */
 const MAX_IMPORT_EXPRESSIONS = 64;
 /** How far back on its line a declaration's `private` modifier is looked for. */

@@ -52,7 +52,7 @@ export interface AppState {
   openFile: NodeRef | null;
 }
 
-const SETTINGS_KEY = 'gitmap.settings';
+const SETTINGS_KEY = 'starmap.settings';
 export const IDLE_STAGE: StageInfo = { stage: 'idle', label: '' };
 
 const media = (query: string): MediaQueryList | null =>

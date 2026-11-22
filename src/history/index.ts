@@ -13,11 +13,13 @@
 //   HistoryResult {
 //     files: Map<path, FileHistory>      repo-relative paths; only the `paths` given to the walk, when given
 //     contributors: Contributor[]        most commits first; a contributor's `id` is its index here
-//     headOid, reachedOid                the commit the walk started from / the oldest one processed
+//     headOid                            the commit the walk started from
+//     reachedOid, reachedTime            the oldest commit processed and its commit time: "history back to …"
 //     commitsWalked                      commits visited, skipped merges included
 //     complete                           the whole history (under `merges`) is accounted for
 //     recencyComplete                    lastModified is final for every current file
 //     merges                             'skip' | 'firstParent' | 'include'
+//     mailmapHash                        fingerprint of the .mailmap used; consumers can ignore it
 //     stoppedBy?, error?                 why `complete` is false: 'maxCommits' | 'timeBudget' | 'shallow' | …
 //   }
 //   FileHistory {
@@ -50,11 +52,12 @@
 // The same as `git log --no-renames --name-only` (with --no-merges under the default
 // `history.merges: "skip"`): a commit touches a path when the path's blob or mode differs from the
 // commit's first parent, deletions included; renames are not followed; times are author times.
-// Contributors are keyed by canonical email (after .mailmap), falling back to the name.
+// Contributors are keyed by canonical email (after .mailmap), falling back to the name; the name
+// shown is the one on the contributor's newest commit.
 export { runHistoryWalk } from './walk';
 export type { HistoryOutcome, HistoryProgress, HistoryWalkOptions, HistoryWalkStats } from './walk';
 export { historyToJson, historyFromJson } from './merge';
-export { parseMailmap, type Mailmap } from './mailmap';
+export { parseMailmap, mailmapHash, type Mailmap } from './mailmap';
 export {
   HISTORY_PLAN_TASK, HISTORY_CHUNK_TASK, HISTORY_GROUP,
   type FileHistory, type Contributor, type HistoryResult, type HistoryJson, type HistoryStop,

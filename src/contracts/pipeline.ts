@@ -10,10 +10,14 @@ import type { RepoStats, StructureTables } from '../model/types';
 
 /** Where a map comes from. */
 export type RepoSource =
-  | { kind: 'directory'; locator: RepoLocator }
+  /**
+   * A folder. When local storage holds a map of it, that map is shown instead of parsing (PLAN.md §12);
+   * `fresh` parses regardless and ignores cached parse facts ("parse again").
+   */
+  | { kind: 'directory'; locator: RepoLocator; fresh?: boolean }
   /** A saved or imported model; `locator` is present when the folder is also available. */
   | { kind: 'snapshot'; model: RepoModel; locator?: RepoLocator }
-  /** A demo: base URL holding snapshot.gitmap.json.gz and content.zip. */
+  /** A demo: base URL holding snapshot.starmap.json.gz and content.zip. */
   | { kind: 'demo'; name: string; baseUrl: string }
   | { kind: 'synthetic'; files: number; seed?: number };
 
@@ -74,6 +78,11 @@ export interface Session {
   applyRefined(): Promise<void>;
   /** "N files changed · Update": re-parse changed files and apply them in one animated step. */
   update(): Promise<void>;
+  /**
+   * "Load full history": walk the history again without the commit and time caps (PLAN.md §6.5).
+   * Resolves when the walk has ended. Absent where there is no history to walk (fakes).
+   */
+  loadFullHistory?(): Promise<void>;
   /** The overlay the user is looking at, so its producer is promoted (PLAN.md §3.1). */
   setSelectedOverlay(layer: string | null): void;
   /** Report frame time so the coordinator can park background work while the user interacts. */

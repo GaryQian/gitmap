@@ -117,23 +117,29 @@ export function overlayView(id: OverlayId, ctx: OverlayContext): OverlayViewInfo
     case 'recency': {
       const values = perSlot(layer?.values, capacity);
       const now = ctx.now ?? Date.now() / 1000;
-      const unit = OVERLAY_RAMP.recencyUnitSeconds;
-      let oldest = Infinity;
-      for (const v of values) if (v > RECENCY_OLDER && v < oldest) oldest = v;
-      const span = Math.max(unit, now - (oldest === Infinity ? now : oldest));
-      const scale = Math.log1p(span / unit);
-      let older = false;
+      const halfLife = OVERLAY_RAMP.recencyHalfLifeSeconds;
+      // Age is measured from the latest change on the map, so a dormant repo or a demo built some
+      // time ago still shows its most recent burst of work. In an active repo that is the present.
+      let newest = -Infinity;
+      for (const v of values) if (v > RECENCY_OLDER && v > newest) newest = v;
+      const reference = newest === -Infinity ? now : Math.min(now, newest);
       for (let s = 0; s < capacity; s++) {
         const v = values[s];
         if (v !== v) continue;
-        if (v <= RECENCY_OLDER) { values[s] = 0; older = true; continue; }
-        // log-scaled age: a day, a month and a year are each a clear step apart
-        const t = 1 - Math.log1p(Math.max(0, now - v) / unit) / scale;
-        values[s] = t < 0 ? 0 : t > 1 ? 1 : t;
+        if (v <= RECENCY_OLDER) { values[s] = 0; continue; }
+        // Steep on purpose: brightness halves every half-life, so the files that really changed
+        // recently stand out instead of the whole map reading as green.
+        const t = Math.pow(0.5, Math.max(0, reference - v) / halfLife);
+        values[s] = t > 1 ? 1 : t;
       }
+      const behind = Math.max(0, now - reference);
       return {
         id, values, domain: [0, 1], stops: fadedToBright(faded, palette.recency), unknown, status, coverage,
-        labels: { low: `${formatAge(span)} ago${older ? ' or more' : ''}`, high: 'Now', unknown: notYet },
+        labels: {
+          low: `${formatAge(halfLife * OVERLAY_RAMP.recencyFadedAfterHalfLives)} earlier or more`,
+          high: behind <= OVERLAY_RAMP.recencyNowSlackSeconds ? 'Now' : `Latest change, ${formatAge(behind)} ago`,
+          unknown: notYet,
+        },
       };
     }
     case 'ownership': {

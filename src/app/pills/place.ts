@@ -43,17 +43,6 @@ export function keepPills<T extends PillBox>(boxes: T[], max: number, blocked: r
   return kept;
 }
 
-/**
- * How strongly a city shows its district pills, 0..1: nothing unless the city is near the camera
- * (within `districtNear` camera distances) and large in the view (territory radius over depth).
- */
-export function districtStrength(cityRadius: number, depth: number, cameraDistance: number): number {
-  const { districtNear, districtFrom, districtFull } = APP_LOCAL.pills;
-  if (!(depth > 0) || depth > cameraDistance * districtNear) return 0;
-  const t = (cityRadius / depth - districtFrom) / (districtFull - districtFrom);
-  return t <= 0 ? 0 : t >= 1 ? 1 : t;
-}
-
 /** Pills fade with distance: full strength up close, down to a floor far behind the camera's target. */
 export function distanceFade(depth: number, cameraDistance: number): number {
   const { fadeStart, fadeEnd, fadeFloor } = APP_LOCAL.pills;

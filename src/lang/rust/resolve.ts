@@ -284,19 +284,22 @@ export function createRustResolver(index: RepoIndex): Resolver {
       } else m = crateByName(head, from);
     }
     if (!m) return [];
+    // A separate binding: the loops above defeat the compiler's narrowing of `m`.
+    let cur: Mod = m;
     for (; at < segs.length; at++) {
-      const child = m.children.get(segs[at]);
+      const child: Mod | undefined = cur.children.get(segs[at]);
       if (!child) break;
-      m = child;
+      cur = child;
     }
-    if (at < segs.length) return reexported(m, segs[at], step) ?? [m.file]; // the rest names an item of `m`
-    if (!names || names.length === 0) return [m.file];
+    const mod = cur;
+    if (at < segs.length) return reexported(mod, segs[at], step) ?? [mod.file]; // the rest names an item of `mod`
+    if (!names || names.length === 0) return [mod.file];
     const out: string[] = [];
     const add = (p: string) => { if (!out.includes(p)) out.push(p); };
     for (const name of names) {
-      const child = name === '*' ? undefined : m.children.get(name);
+      const child = name === '*' ? undefined : mod.children.get(name);
       if (child) add(child.file);
-      else for (const p of (name === '*' ? null : reexported(m, name, step)) ?? [m.file]) add(p);
+      else for (const p of (name === '*' ? null : reexported(mod, name, step)) ?? [mod.file]) add(p);
     }
     return out;
   };

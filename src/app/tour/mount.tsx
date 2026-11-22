@@ -16,7 +16,7 @@ import './tour.css';
 
 /** A renderer method may still be a stub, or the renderer disposed: the tour must survive either. */
 function attempt(fn: () => void): void {
-  try { fn(); } catch (err) { console.warn('gitmap: tour could not reach the renderer', err); }
+  try { fn(); } catch (err) { console.warn('starmap: tour could not reach the renderer', err); }
 }
 
 /** Keep the tour on offer in step with the replica: it appears the moment its annotation arrives. */

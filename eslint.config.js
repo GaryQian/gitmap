@@ -65,9 +65,9 @@ export default tseslint.config(
   {
     files: ['**/*.{ts,tsx}'],
     languageOptions: { globals: { ...globals.browser, ...globals.worker, ...globals.node } },
-    plugins: { gitmap: boundaries },
+    plugins: { starmap: boundaries },
     rules: {
-      'gitmap/module-boundary': 'error',
+      'starmap/module-boundary': 'error',
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-non-null-assertion': 'off',
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrors: 'none' }],

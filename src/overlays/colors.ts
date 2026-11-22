@@ -42,8 +42,15 @@ export const OVERLAY_RAMP = {
   unknownTowardVoid: 0.4,
   /** Share of the bright colour at the middle of a two-ended ramp. Below 0.5 keeps brightness for the top. */
   midBright: 0.42,
-  /** Recency: ages are log-scaled in units of this many seconds, so a day and a week read apart. */
-  recencyUnitSeconds: 86400,
+  /**
+   * Recency falls off fast: brightness halves every this many seconds of age (exponential decay), so
+   * only files changed in the last few weeks read as green and everything older recedes.
+   */
+  recencyHalfLifeSeconds: 14 * 86400,
+  /** Recency: after this many half-lives a file is drawn at the faded end (the legend's low label). */
+  recencyFadedAfterHalfLives: 6,
+  /** Recency: when the latest change is within this many seconds of the present, the legend says "Now". */
+  recencyNowSlackSeconds: 2 * 86400,
   /** Knowledge risk: the ramp starts at this share. Half or less means two people know the file. */
   knowledgeRiskFrom: 0.5,
   /** Reach: the ramp spans at most this many hops; units farther away take the faded end. */

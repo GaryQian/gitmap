@@ -48,6 +48,14 @@ export interface Tuning {
      * the units over the whole cell with gaps in proportion to their size: no dense core, no thin rim.
      */
     pack: number;
+    /**
+     * The settle's spreading stage, between cooling and the final relaxation: this many ticks on
+     * constraints with the pull to place at this steady strength (share of the way per tick).
+     */
+    spread: number;
+    spreadTicks: number;
+    /** Most rounds the settle's last pass spends on one district moving overlapping units apart directly. */
+    finishRounds: number;
   };
   visual: Config['visual'];
   /** Share of a parent disc's area its children's discs are expected to fill (area estimate of a radius). */
@@ -112,10 +120,10 @@ export function tuningFrom(config: Config): Tuning {
     city: { gap: p.city.gap, linkStrength: p.city.linkStrength, charge: p.city.charge, gravity: p.city.gravity },
     district: {
       pad: p.district.pad, linkStrength: p.district.linkStrength, externalPull: p.district.externalPull,
-      gravity: opt(p.district, 'gravity', 0.05),
+      gravity: opt(p.district, 'gravity', 0.1),
       lloyd: opt(p.district, 'lloyd', 0.1),
       cellWeight: Math.min(1, Math.max(0, opt(p.district, 'cellWeight', 1))),
-      reach: Math.max(1, opt(p.district, 'reach', 1.12)),
+      reach: Math.max(1, opt(p.district, 'reach', 1.08)),
       cellEps: opt(p.district, 'cellEps', 0.5),
     },
     file: {
@@ -123,8 +131,11 @@ export function tuningFrom(config: Config): Tuning {
       sizeVsConnectivity: p.file.sizeVsConnectivity,
       baseStrength: p.file.baseStrength,
       gap: opt(p.file, 'gap', 4 * p.file.pad),
-      fill: Math.min(1, Math.max(0.05, opt(p.file, 'fill', 0.8))),
-      pack: Math.min(1, Math.max(0.05, opt(p.file, 'pack', 0.8))),
+      fill: Math.min(1, Math.max(0.05, opt(p.file, 'fill', 0.72))),
+      pack: Math.min(1, Math.max(0.05, opt(p.file, 'pack', 0.72))),
+      spread: Math.max(0, opt(p.file, 'spread', 0.08)),
+      spreadTicks: Math.max(0, opt(p.file, 'spreadTicks', 40)),
+      finishRounds: Math.max(0, opt(p.file, 'finishRounds', 60)),
     },
     visual: config.visual,
     packing: opt(p, 'packing', 0.5),
@@ -141,12 +152,12 @@ export function tuningFrom(config: Config): Tuning {
     overlapTolerance: opt(p, 'overlapTolerance', 0.95),
     offFocusEvery: opt(p, 'offFocusEvery', 2),
     updateTicks: opt(p, 'updateTicks', 45),
-    relaxTicks: opt(p, 'relaxTicks', 120),
-    relaxSpeed: opt(p, 'relaxSpeed', 0.02),
+    relaxTicks: opt(p, 'relaxTicks', 200),
+    relaxSpeed: opt(p, 'relaxSpeed', 0.05),
     radiusEase: Math.min(1, Math.max(0.01, opt(p, 'radiusEase', 0.2))),
     pushTicks: opt(p, 'pushTicks', 10),
-    settleFullShare: Math.min(1, Math.max(0.1, opt(p, 'settleFullShare', 0.75))),
-    squeezeTicks: opt(p, 'squeezeTicks', 80),
+    settleFullShare: Math.min(1, Math.max(0.1, opt(p, 'settleFullShare', 0.65))),
+    squeezeTicks: opt(p, 'squeezeTicks', 150),
     squeezeAlpha: Math.min(1, Math.max(0, opt(p, 'squeezeAlpha', 0.5))),
   };
 }

@@ -1,0 +1,72 @@
+/* The consent prompt and the failure line (PLAN.md §11.4, §17.6). Chrome material only: the tokens
+   from theme.ts, the halo for the one affirmative action. No colour is written out. */
+
+/* Bottom centre of the overlay layer. Not a modal: the layer lets the pointer through, so the map
+   under and around the card stays usable. */
+.gm-ai-consent-wrap {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+@keyframes gm-ai-arrive {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.gm-ai-consent {
+  width: min(452px, 100%);
+  padding: 15px 18px 14px;
+  /* it comes in after the map has, so it does not compete with the reveal */
+  animation: gm-ai-arrive 500ms var(--gm-ease) 900ms both;
+}
+.gm-ai-consent-title {
+  margin: 0 0 5px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.35;
+  letter-spacing: 0.02em;
+}
+.gm-ai-consent-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  text-wrap: balance; /* even lines, no two words left alone on the last one */
+}
+.gm-ai-consent-text + .gm-ai-consent-text {
+  margin-top: 4px;
+  color: var(--gm-text-dim);
+}
+.gm-ai-consent-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 13px;
+}
+
+/* The affirmative action carries the halo, like the button segment of an action pill. */
+.gm-pill.gm-ai-allow {
+  color: var(--gm-halo);
+  font-weight: 500;
+  border-color: color-mix(in srgb, var(--gm-halo) 46%, var(--gm-hairline));
+}
+.gm-pill.gm-ai-allow:hover { border-color: var(--gm-halo); }
+
+/* ---- the failure line: one small pill that stays a while, then fades ---- */
+
+@keyframes gm-ai-fade {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+.gm-pill.gm-ai-failure {
+  max-width: min(520px, 60vw);
+  color: var(--gm-text-dim);
+  animation: gm-ai-fade 600ms ease var(--gm-ai-failure-ms, 8000ms) both;
+}
+.gm-ai-failure > span { overflow: hidden; text-overflow: ellipsis; }
+/* kept while the pointer rests on it or it is focused, so it can be read to the end */
+.gm-pill.gm-ai-failure:hover { animation-play-state: paused; }

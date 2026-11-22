@@ -1,6 +1,7 @@
 // Fast-pass facts for one file (PLAN.md §6.3): binary check, line count, the plug-in's import scan,
 // and the excerpt kept for manifests and docs. Runs inside the fast-pass task.
 import picomatch from 'picomatch';
+import { BRIDGE_TRIGGERS, extractBridgeKeys, type BridgeKeys } from '../bridges';
 import type { Config } from '../config';
 import type { ManifestEntry } from '../contracts/ingest';
 import type { FileFacts, LanguagePlugin, ScanResult } from '../contracts/lang';
@@ -45,6 +46,32 @@ export function skippedFacts(entry: ManifestEntry, skipped: NonNullable<FileFact
 
 const decoder = new TextDecoder('utf-8');
 
+/** Trigger words of the enabled bridge mechanisms (PLAN.md §6.4.1), per `config.parser.bridges` list. */
+const triggerWords = new WeakMap<readonly string[], string[]>();
+function bridgeTriggers(enabled: readonly string[]): string[] {
+  let words = triggerWords.get(enabled);
+  if (!words) {
+    const known = BRIDGE_TRIGGERS as Record<string, string[] | undefined>;
+    words = [...new Set(enabled.flatMap((mechanism) => known[mechanism] ?? []))];
+    triggerWords.set(enabled, words);
+  }
+  return words;
+}
+
+/**
+ * Bridge keys of one file, extracted only when a trigger word of an enabled mechanism is in the
+ * text. Undefined when the file has none: most files stop at the sweep.
+ */
+function bridgeKeys(path: string, lang: string | null, text: string, imports: FileFacts['imports'], enabled: readonly string[]): BridgeKeys | undefined {
+  if (enabled.length === 0) return undefined;
+  const words = bridgeTriggers(enabled);
+  let hit = false;
+  for (let i = 0; i < words.length && !hit; i++) hit = text.includes(words[i]);
+  if (!hit) return undefined;
+  const keys = extractBridgeKeys({ path, lang, text, imports }, enabled);
+  return keys.provides.length || keys.consumes.length ? keys : undefined;
+}
+
 /**
  * Facts for one file from its bytes. Never throws: a scanner that throws yields a file with no
  * imports, and a file that took longer than reveal.perFileTimeoutMs is marked 'timeout' and its
@@ -64,6 +91,14 @@ export function factsFromBytes(entry: ManifestEntry, bytes: Uint8Array, config: 
       if (scan.decls) facts.decls = scan.decls;
       if (scan.bridge) facts.bridge = scan.bridge;
     }
+  }
+  // Cross-language bridges are found here, at the seam, for every language at once: the plug-ins
+  // scan imports, and src/bridges reads the same text for JNI names and generated-stub imports.
+  const bridge = bridgeKeys(entry.path, entry.lang, text, facts.imports, config.parser.bridges);
+  if (bridge) {
+    facts.bridge = facts.bridge
+      ? { provides: [...new Set([...(facts.bridge.provides ?? []), ...bridge.provides])], consumes: [...new Set([...(facts.bridge.consumes ?? []), ...bridge.consumes])] }
+      : bridge;
   }
   if (now() - started > config.reveal.perFileTimeoutMs) return { ...skippedFacts(entry, 'timeout'), bytes: bytes.length };
   const kind = excerptKind(entry.path);

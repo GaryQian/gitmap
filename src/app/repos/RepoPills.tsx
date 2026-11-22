@@ -41,7 +41,7 @@ export function RepoPills() {
         registry.current = found;
         setSaved(list.slice(0, MAX_SAVED));
       } catch (err) {
-        console.warn('gitmap: could not list saved repos', err);
+        console.warn('starmap: could not list saved repos', err);
       }
     })();
     return () => { live = false; };

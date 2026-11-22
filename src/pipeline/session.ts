@@ -1,12 +1,14 @@
 // The main-thread Session: a view replica, the physics client, the renderer once a canvas is
 // attached, and a coordinator worker that does everything else (PLAN.md §3). Lead-owned.
 import type { Config } from '../config';
-import type { ContentSource, RepoLocator } from '../contracts/git';
+import { demoSource, directorySource } from '../content';
+import type { ContentSource } from '../contracts/git';
 import type { PhysicsApi } from '../contracts/physics';
 import type { PipelineEvents, RepoSource, SearchHit, Session, StageInfo } from '../contracts/pipeline';
 import type { RenderApi } from '../contracts/render';
+import type { ModelReplica } from '../contracts/store';
 import { createReplica } from '../model';
-import { parseRef, type NodeRef, type PatchBatch, type RepoModel } from '../model/types';
+import type { PatchBatch, RepoModel } from '../model/types';
 import { createPhysicsClient } from '../physics';
 import { createRenderer } from '../render';
 import { Emitter } from '../shared';
@@ -19,39 +21,22 @@ function appearance(config: Config): 'dark' | 'light' {
   return 'dark';
 }
 
-/** Read working-tree files straight from the picked folder (sidebar reader, AI detail buttons). */
-function directoryContent(locator: RepoLocator): ContentSource | null {
-  if (locator.kind === 'fsa') {
-    const dirs = new Map<string, Promise<FileSystemDirectoryHandle>>([['', Promise.resolve(locator.root)]]);
-    const dir = (path: string): Promise<FileSystemDirectoryHandle> => {
-      let d = dirs.get(path);
-      if (!d) {
-        const i = path.lastIndexOf('/');
-        const parent = dir(i < 0 ? '' : path.slice(0, i));
-        d = parent.then((p) => p.getDirectoryHandle(i < 0 ? path : path.slice(i + 1)));
-        dirs.set(path, d);
-      }
-      return d;
-    };
-    return {
-      async read(ref: NodeRef) {
-        const path = parseRef(ref).id;
-        const i = path.lastIndexOf('/');
-        const d = await dir(i < 0 ? '' : path.slice(0, i));
-        const file = await (await d.getFileHandle(i < 0 ? path : path.slice(i + 1))).getFile();
-        return new Uint8Array(await file.arrayBuffer());
+/**
+ * Where file contents come from (PLAN.md §12.1): the user's folder, or a demo's content pack read one
+ * entry at a time and checked against the blob ids the map recorded. Null when there is neither.
+ */
+function contentFor(source: RepoSource, replica: ModelReplica): ContentSource | null {
+  if (source.kind === 'directory') return directorySource(source.locator);
+  if (source.kind === 'snapshot') return source.locator ? directorySource(source.locator) : null;
+  if (source.kind === 'demo') {
+    const files = replica.table('file');
+    const base = typeof location === 'undefined' ? source.baseUrl : new URL(source.baseUrl, location.href).href;
+    return demoSource(base, {
+      oidOf(path) {
+        const slot = files.slotOf(path);
+        return slot >= 0 ? files.cols.oid[slot] || null : null;
       },
-    };
-  }
-  if (locator.kind === 'files') {
-    const byPath = new Map(locator.files.map((f) => [f.path, f.file]));
-    return {
-      async read(ref: NodeRef) {
-        const file = byPath.get(parseRef(ref).id);
-        if (!file) throw new Error('That file is not in the chosen folder.');
-        return new Uint8Array(await file.arrayBuffer());
-      },
-    };
+    });
   }
   return null;
 }
@@ -70,7 +55,9 @@ export function createBrowserSession(source: RepoSource, config: Config): Sessio
   let disposed = false;
   let worker: Worker | null = null;
   let started: Promise<void> | null = null;
-  let content: ContentSource | null = source.kind === 'directory' ? directoryContent(source.locator) : source.kind === 'snapshot' && source.locator ? directoryContent(source.locator) : null;
+  let content: ContentSource | null = contentFor(source, replica);
+  /** Tell the coordinator the page was hidden, so a snapshot that is waiting gets written (PLAN.md §12). */
+  const onVisibility = () => { if (document.visibilityState === 'hidden') send({ type: 'hidden' }); };
 
   const send = (m: ToCoordinator) => worker?.postMessage(m);
   let nextId = 1;
@@ -86,6 +73,7 @@ export function createBrowserSession(source: RepoSource, config: Config): Sessio
 
   const mainCalls: { [M in keyof MainCalls]: (...args: Parameters<MainCalls[M]>) => Promise<ReturnType<MainCalls[M]>> | ReturnType<MainCalls[M]> } = {
     settle: (maxMs) => physics.settle(maxMs),
+    relayout: (maxMs) => physics.relayout(maxMs),
     // loadLayout is a message to the physics worker; a round trip makes sure the positions have
     // landed before the coordinator goes on to the reveal.
     loadLayout: async (layout) => { physics.loadLayout(layout); await physics.getLayout(); },
@@ -179,6 +167,12 @@ export function createBrowserSession(source: RepoSource, config: Config): Sessio
           }
         };
         send({ type: 'start', source, config });
+        if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisibility);
+        // A parsed folder is saved for the next visit: ask the browser not to evict it. Only the page
+        // can ask (navigator.storage.persist is not exposed in workers), and nothing waits for the answer.
+        if (source.kind === 'directory') {
+          void import('../persist').then((p) => p.requestPersistentStorage()).catch(() => { /* storage stays best-effort */ });
+        }
       });
       return started;
     },
@@ -187,8 +181,11 @@ export function createBrowserSession(source: RepoSource, config: Config): Sessio
     update: () => call('update'),
     setSelectedOverlay(layer) { send({ type: 'selectedOverlay', layer }); },
     reportFrame(frameMs, interacting) { send({ type: 'frame', frameMs, interacting }); },
+    loadFullHistory: () => call('loadFullHistory'),
     async search(query, limit = 20): Promise<SearchHit[]> {
-      // Plain substring match until the search package (4E) replaces it.
+      // The index lives in the coordinator, beside the store (src/search). The substring match below
+      // only answers while no coordinator is running: before start() and after dispose().
+      if (worker) return call('search', query, limit);
       const q = query.trim().toLowerCase();
       if (!q) return [];
       const units = replica.table('unit');
@@ -205,6 +202,7 @@ export function createBrowserSession(source: RepoSource, config: Config): Sessio
     },
     dispose() {
       disposed = true;
+      if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisibility);
       worker?.terminate();
       worker = null;
       for (const p of pending.values()) p.reject(new Error('closed'));

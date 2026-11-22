@@ -51,16 +51,24 @@ export function representatives(ctx: Ctx): { district: number[]; city: number[][
     const { units, districts, cities } = ctx.view;
     const best = (pool: UnitInfo[], links: (u: UnitInfo) => number) =>
       pool.sort((a, b) => links(b) - links(a) || b.importance - a.importance || a.index - b.index);
+    // Whether a file may be named is checked only for those about to be picked: it scans what was kept of the file.
     const district = districts.map((d) => {
       const pool = best(d.units.map((i) => units[i]).filter((u) => ctx.citable(u)), (u) => u.linksInDistrict);
-      return pool.length ? pool[0].index : -1;
+      return pool.find((u) => ctx.nameable(u))?.index ?? -1;
     });
+    const want = LOCAL.structure.cityRepresentatives;
     const city = cities.map((c) => {
       const pool = best(c.districts.flatMap((d) => districts[d].units).map((i) => units[i]).filter((u) => ctx.citable(u)), (u) => u.linksInCity);
       const picked: UnitInfo[] = [];
       // One per district first, then whoever is next.
-      for (const u of pool) if (picked.length < LOCAL.structure.cityRepresentatives && !picked.some((p) => p.district === u.district)) picked.push(u);
-      for (const u of pool) if (picked.length < LOCAL.structure.cityRepresentatives && !picked.includes(u)) picked.push(u);
+      for (const u of pool) {
+        if (picked.length >= want) break;
+        if (!picked.some((p) => p.district === u.district) && ctx.nameable(u)) picked.push(u);
+      }
+      for (const u of pool) {
+        if (picked.length >= want) break;
+        if (!picked.includes(u) && ctx.nameable(u)) picked.push(u);
+      }
       return picked.map((u) => u.index);
     });
     return { district, city };
@@ -153,8 +161,17 @@ export function entryPoints(ctx: Ctx): EntryPoint[][] {
       const score = (how ? 100 : 0) + (strong ? 40 : 0) + (weak ? 10 : 0) + Math.min(u.fanOut, 50) - 5 * u.fanIn;
       byCity[u.city].push({ unit: u.index, score, why: why.join('; ') });
     }
-    for (const list of byCity) list.sort((a, b) => b.score - a.score || cmpStr(units[a.unit].id, units[b.unit].id));
-    return byCity;
+    // Only as many as can be shown, and only files that may be named (checked for these few alone).
+    const keep = Math.max(LOCAL.structure.entryPointsPerCity, LOCAL.city.entryPoints);
+    return byCity.map((list) => {
+      list.sort((a, b) => b.score - a.score || cmpStr(units[a.unit].id, units[b.unit].id));
+      const kept: EntryPoint[] = [];
+      for (const ep of list) {
+        if (kept.length >= keep) break;
+        if (ctx.nameable(units[ep.unit])) kept.push(ep);
+      }
+      return kept;
+    });
   });
 }
 

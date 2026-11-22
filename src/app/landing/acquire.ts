@@ -1,12 +1,12 @@
 // Turning what the user picked or dropped into a RepoSource (PLAN.md §6.1).
 //   Chromium:        showDirectoryPicker() / getAsFileSystemHandle()  → locator { kind: 'fsa' }
 //   Firefox, Safari: <input webkitdirectory> / webkitGetAsEntry()     → locator { kind: 'files' }
-//   A dropped *.gitmap.json.gz                                        → { kind: 'snapshot' }
+//   A dropped *.starmap.json.gz                                        → { kind: 'snapshot' }
 import type { RepoSource } from '../../contracts/pipeline';
 import type { RepoLocator } from '../../contracts/git';
 import { decodeModel } from '../../model';
 
-export const SNAPSHOT_SUFFIX = '.gitmap.json.gz';
+export const SNAPSHOT_SUFFIX = '.starmap.json.gz';
 
 export const MESSAGES = {
   unsupported: 'This browser cannot open folders. Try a desktop version of Chrome, Edge, Firefox or Safari.',
@@ -68,7 +68,7 @@ export async function pickDirectory(): Promise<RepoSource | null> {
   const pick = (window as PickerWindow).showDirectoryPicker;
   if (!pick) throw new AcquireError(MESSAGES.unsupported);
   try {
-    const root = await pick.call(window, { id: 'gitmap', mode: 'read' });
+    const root = await pick.call(window, { id: 'starmap', mode: 'read' });
     return { kind: 'directory', locator: { kind: 'fsa', root } };
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') return null;

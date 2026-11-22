@@ -2,7 +2,7 @@
 
 Three screens over one background: **landing → waiting → map** (PLAN.md §17). The shell owns the store, the theme, the chrome primitives and the regions; every feature is a folder with a `mount.tsx`. Read this before adding a legend, pills, tooltips, the sidebar, overlays, search or the tour.
 
-Try it: `/?fake=2000` plays the whole flow on a synthetic model. Extras: `&wait=<ms>` (time on the waiting screen), `&refined=<ms>` (raise "Refined structure ready" after the reveal), `&seed=<n>`, `&appearance=dark|light|system` (this visit only). In a dev build `window.__gitmapApp` is `{ store, open(source), close() }`.
+Try it: `/?fake=2000` plays the whole flow on a synthetic model. Extras: `&wait=<ms>` (time on the waiting screen), `&refined=<ms>` (raise "Refined structure ready" after the reveal), `&seed=<n>`, `&appearance=dark|light|system` (this visit only). In a dev build `window.__starmapApp` is `{ store, open(source), close() }`.
 
 ## Files
 
@@ -72,7 +72,7 @@ export default mount;
 | `progress` | per `Subsystem`: `{ done, total, label? }` | latest report from each |
 | `notices` | `Notice[]` without `'cleared'` | what the action pills show |
 | `message` | `string \| null` | the quiet line under "Choose a folder" |
-| `settings` | `{ appearance, particles }` | saved in `localStorage` under `gitmap.settings` |
+| `settings` | `{ appearance, particles }` | saved in `localStorage` under `starmap.settings` |
 | `mode` | `'dark' \| 'light'` | `appearance` resolved against the system setting |
 | `reducedMotion` | `boolean` | follows `prefers-reduced-motion` |
 | `selection` | `NodeRef[]` | pushed to `render.setSelection` |
@@ -98,6 +98,7 @@ View state resets when a map is opened or closed.
 
 - Store → renderer: `mode`, `settings.particles`, `selection`, `typeFilter`, `minLines`, all pushed once when the renderer appears and then on change. `activeOverlay` → `session.setSelectedOverlay`. Building the `OverlayView` and calling `render.setOverlay` is left to the overlays feature.
 - Renderer → store: `hover` → `hover`; `click` → `selection` and `focus` (plain click replaces and focuses, Shift adds or removes, a click on empty space clears); `marquee` adds to `selection`; `dblclick` → `openFile`. For `frame` and `camera`, subscribe yourself: `useRender()?.on('frame', …)`.
+- Left to the renderer's interaction module, so do not repeat them here: the select and open bursts (`render.burst`), easing the camera to a clicked sphere, and redrawing a selected file that the size slider hides. Flying is the shell's job only for its own controls: a city or district pill, a selection pill, a name in the detail card, a search result.
 - Keys (window listeners in the features): Escape clears the selection (`selected/`), Home resets the view (`controls/`). Both ignore text fields (`isTyping`). **A popup that closes on Escape must take the key before it gets there**: listen in the capture phase, or in a React `onKeyDown`, and call `stopPropagation()`, as the settings card and the controls key do.
 - Session → store: `stage`, `progress`, `reveal` (phase becomes `map`), `notice`, `error` (fatal: back to the landing page with the message; otherwise an info pill).
 

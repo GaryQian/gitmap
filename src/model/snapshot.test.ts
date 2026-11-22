@@ -78,8 +78,8 @@ describe('snapshot format', () => {
   });
 
   it('rejects a file with an unknown schema', async () => {
-    await expect(decodeModel(await gzipJson({ format: 'gitmap', schema: 2, strings: [], tables: {} }))).rejects.toThrow(/schema 2/);
-    await expect(decodeModel(new TextEncoder().encode('plain text'))).rejects.toThrow(/Not a gitmap file/);
+    await expect(decodeModel(await gzipJson({ format: 'starmap', schema: 2, strings: [], tables: {} }))).rejects.toThrow(/schema 2/);
+    await expect(decodeModel(new TextEncoder().encode('plain text'))).rejects.toThrow(/Not a starmap file/);
   });
 });
 

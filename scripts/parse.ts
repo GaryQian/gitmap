@@ -1,5 +1,5 @@
 // Run the pipeline headless on a local folder and write a snapshot.
-// Usage: npm run parse -- <repo folder> [out.gitmap.json.gz] [--synthetic N]
+// Usage: npm run parse -- <repo folder> [out.starmap.json.gz] [--synthetic N]
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { config } from '../src/config';
@@ -17,12 +17,12 @@ export default async function main(args: string[]): Promise<void> {
     source = { kind: 'synthetic', files };
     name = `synthetic-${files}`;
   } else {
-    if (!positional[0]) throw new Error('usage: npm run parse -- <repo folder> [out.gitmap.json.gz]');
+    if (!positional[0]) throw new Error('usage: npm run parse -- <repo folder> [out.starmap.json.gz]');
     const rootPath = path.resolve(positional[0]);
     source = { kind: 'directory', locator: { kind: 'node', rootPath } };
     name = path.basename(rootPath);
   }
-  const out = path.resolve(positional[synthetic >= 0 ? 0 : 1] ?? `out/${name}.gitmap.json.gz`);
+  const out = path.resolve(positional[synthetic >= 0 ? 0 : 1] ?? `out/${name}.starmap.json.gz`);
 
   const t0 = performance.now();
   let lastStage = '';

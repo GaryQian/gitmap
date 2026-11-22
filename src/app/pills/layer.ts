@@ -7,7 +7,7 @@ import type { FrameInfo, RenderApi, ScreenPoint } from '../../contracts/render';
 import { cityRef, districtRef, type NodeRef } from '../../model/types';
 import { clamp, groundToPixels, sceneObstacles } from '../anchor';
 import { APP_LOCAL } from '../tunables';
-import { distanceFade, districtStrength, keepPills, type PillBox, type Rect } from './place';
+import { distanceFade, keepPills, type PillBox, type Rect } from './place';
 
 type Kind = 'city' | 'district';
 
@@ -104,6 +104,8 @@ export function createPillLayer(container: HTMLElement, render: RenderApi, sessi
 
   function bind(pill: Pill, label: Label): void {
     pill.label = label;
+    // Other features (the city summary card) read this to tell which node a pooled pill stands for.
+    pill.el.dataset.ref = label.ref;
     if (pill.sig === label.sig) return;
     pill.sig = label.sig;
     pill.el.className = `gm-scene-pill gm-scene-pill-${label.kind}`;
@@ -229,12 +231,11 @@ export function createPillLayer(container: HTMLElement, render: RenderApi, sessi
       if (!at) continue;
       const radius = positions.city[3 * city.slot + 2] ?? 0;
       if (at.visible) offer(city, at, radius, distanceFade(at.depth, cameraDistance));
-      // a city near the camera also names its districts, even when its own centre is off screen
-      const strength = districtStrength(radius, at.depth, cameraDistance);
-      if (strength <= 0) continue;
+      // districts are always named, even when their city's centre is off screen; where pills would
+      // overlap, the city's wins (keepPills)
       for (const district of city.districts) {
         const dAt = render.project(district.ref);
-        if (dAt?.visible) offer(district, dAt, positions.district[3 * district.slot + 2] ?? 0, strength * distanceFade(dAt.depth, cameraDistance));
+        if (dAt?.visible) offer(district, dAt, positions.district[3 * district.slot + 2] ?? 0, distanceFade(dAt.depth, cameraDistance));
       }
     }
 
@@ -334,7 +335,7 @@ export function createPillLayer(container: HTMLElement, render: RenderApi, sessi
     // where the node's anchor should now be on screen, taken down to the ground
     const ground = render.screenToGround(p.x - drag.offsetX, p.y - drag.offsetY);
     if (ground) {
-      try { session.physics.drag(drag.ref, ground.x, ground.z); } catch (err) { console.warn('gitmap: physics.drag failed', err); }
+      try { session.physics.drag(drag.ref, ground.x, ground.z); } catch (err) { console.warn('starmap: physics.drag failed', err); }
     }
     schedule();
   }
@@ -348,7 +349,7 @@ export function createPillLayer(container: HTMLElement, render: RenderApi, sessi
     if (!moved) return;
     suppressClick = true; // the click that follows a drag is not a "fly to"
     setTimeout(() => { suppressClick = false; }, 0);
-    try { session.physics.release(ref); } catch (err) { console.warn('gitmap: physics.release failed', err); }
+    try { session.physics.release(ref); } catch (err) { console.warn('starmap: physics.release failed', err); }
     schedule();
   }
 

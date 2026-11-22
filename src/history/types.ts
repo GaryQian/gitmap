@@ -59,6 +59,8 @@ export interface HistoryResult {
   headOid: string;
   /** The oldest commit the walk has processed (in walk order); null before the first chunk lands. */
   reachedOid: string | null;
+  /** Commit time of `reachedOid` in seconds: the facts cover the history back to this moment. */
+  reachedTime: number | null;
   /** Commits visited, including merges that were skipped. */
   commitsWalked: number;
   /** True when every commit reachable from `headOid` (under `merges`) is accounted for. */
@@ -66,6 +68,8 @@ export interface HistoryResult {
   /** True when `lastModified` is final for every current file (Recency needs nothing more). */
   recencyComplete: boolean;
   merges: MergeMode;
+  /** Fingerprint of the .mailmap the contributors were resolved with ('' for none). */
+  mailmapHash: string;
   /** Set when `complete` is false. */
   stoppedBy?: HistoryStop;
   /** Detail for stoppedBy 'error'. */
@@ -76,8 +80,10 @@ export interface HistoryResult {
 export interface HistoryJson {
   version: 1;
   merges: MergeMode;
+  mailmapHash: string;
   headOid: string;
   reachedOid: string | null;
+  reachedTime: number | null;
   commitsWalked: number;
   complete: boolean;
   recencyComplete: boolean;
@@ -113,6 +119,8 @@ export interface HistoryUnavailable { reason: HistoryUnavailableReason; message:
 /** One commit as the planner hands it to a chunk. */
 export interface PlannedCommit {
   oid: string;
+  /** Commit time in seconds: what the walk is ordered by. */
+  date: number;
   tree: string;
   /** Tree of the first parent; null for a root commit. */
   parentTree: string | null;
@@ -157,6 +165,11 @@ export interface PlanInput {
    * page until the page's `stop` is 'reached' or 'abandoned'.
    */
   stopAt?: string | null;
+  /**
+   * First page, with stopAt: the mailmap fingerprint of the saved result. When the working tree's
+   * .mailmap no longer matches, stopAt is ignored and the page's `stop` is 'abandoned'.
+   */
+  sinceMailmap?: string;
   /** Follow first parents only (merges: 'firstParent'). */
   firstParentOnly: boolean;
   /** Most commits an ordinary page may return. */
@@ -187,8 +200,9 @@ export interface PlanPage {
   unavailable?: HistoryUnavailable;
   /** First page: the resolved start commit. */
   headOid: string | null;
-  /** First page: text of `.mailmap` at the working tree root, or null. */
+  /** First page: text of `.mailmap` at the working tree root, or null, and its fingerprint. */
   mailmap?: string | null;
+  mailmapHash?: string;
   shallow: boolean;
   /** Newest first. */
   commits: PlannedCommit[];

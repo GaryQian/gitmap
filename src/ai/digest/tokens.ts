@@ -1,6 +1,7 @@
-// The one place the digest learns how tokens are counted: the server's own estimate, so a digest
-// that fits its budget here also passes the server's size check.
-import { estimateTokens } from '../server';
+// The one place the digest learns how tokens are counted: the estimate the server also uses, so a
+// digest that fits its budget here also passes the server's size check. Imported from ../tokens, not
+// ../server, so the provider SDK never reaches the browser bundle.
+import { estimateTokens } from '../tokens';
 
 export { estimateTokens };
 

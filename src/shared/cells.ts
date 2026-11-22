@@ -90,3 +90,79 @@ export function cellCentroid(cell: Cell): { x: number; z: number; area: number }
   if (Math.abs(a) < 1e-12) return null;
   return { x: cx / (3 * a), z: cz / (3 * a), area: Math.abs(a) / 2 };
 }
+
+// ---- territories as physics lays them out (src/physics/cells.ts) ----
+//
+// Physics does not use the plain Voronoi cells above. A district's territory is its own reach (a
+// 32-sided polygon of radius `bound`) cut by the power-diagram edge toward every sibling, with
+// weight = shape.weight · r², where r is the district's content radius: bound = reach · r + pad / 2.
+// The edge between two districts then sits between their discs when they touch, instead of halfway
+// between their centres. territoryCells reproduces that construction from what the position buffers
+// carry (x, z, bound), so drawn borders coincide with where files are contained.
+
+export interface TerritorySite { x: number; z: number; /** Bounding radius of the territory: the `r` of the district's position row. */ bound: number }
+export interface TerritoryShape { /** physics.district.reach */ reach: number; /** physics.district.pad */ pad: number; /** physics.district.cellWeight */ weight: number }
+export interface TerritoryCell {
+  /** The ring as [x0, z0, x1, z1, …], not closed, counter-clockwise, in the sites' coordinates. */
+  ring: number[];
+  /** Per edge i (from vertex i to i + 1): the index of the sibling whose power edge it lies on, or −1 for the cell's own reach. */
+  neighbour: number[];
+}
+
+const REACH_SIDES = 32;
+
+/** Keep the part of a tagged convex ring where ax·x + az·z ≤ b; the new edge along the cut gets `tag`. */
+function clipTagged(ring: number[], tags: number[], ax: number, az: number, b: number, tag: number): { ring: number[]; tags: number[] } {
+  const out: number[] = [], outTags: number[] = [];
+  const n = ring.length / 2;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    const x1 = ring[2 * i], z1 = ring[2 * i + 1], x2 = ring[2 * j], z2 = ring[2 * j + 1];
+    const s1 = b - (ax * x1 + az * z1), s2 = b - (ax * x2 + az * z2);
+    if (s1 >= 0) { out.push(x1, z1); outTags.push(tags[i]); }
+    if ((s1 >= 0) !== (s2 >= 0)) {
+      const k = s1 / (s1 - s2);
+      out.push(x1 + (x2 - x1) * k, z1 + (z2 - z1) * k);
+      // leaving the kept side: the next edge runs along the cut; entering it: the rest of this edge
+      outTags.push(s1 >= 0 ? tag : tags[i]);
+    }
+  }
+  return { ring: out, tags: outTags };
+}
+
+/** One territory per site, in site order; an empty ring for a district wholly covered by its neighbours. */
+export function territoryCells(sites: readonly TerritorySite[], shape: TerritoryShape): TerritoryCell[] {
+  const n = sites.length;
+  const radius = sites.map((s) => Math.max(0, (s.bound - shape.pad / 2) / shape.reach));
+  const order = sites.map((_, i) => i);
+  const cells: TerritoryCell[] = [];
+  for (let i = 0; i < n; i++) {
+    const d = sites[i];
+    const wi = shape.weight * radius[i] * radius[i];
+    order.sort((p, q) => {
+      const dp = (sites[p].x - d.x) ** 2 + (sites[p].z - d.z) ** 2, dq = (sites[q].x - d.x) ** 2 + (sites[q].z - d.z) ** 2;
+      return dp - dq || p - q;
+    });
+    let ring: number[] = [], tags: number[] = [];
+    for (let v = 0; v < REACH_SIDES; v++) {
+      const a = (v / REACH_SIDES) * 2 * Math.PI;
+      ring.push(d.x + Math.cos(a) * d.bound, d.z + Math.sin(a) * d.bound);
+      tags.push(-1);
+    }
+    let reach = d.bound;
+    for (let k = 0; k < n && ring.length >= 6; k++) {
+      const j = order[k];
+      if (j === i) continue;
+      const o = sites[j];
+      const dx = o.x - d.x, dz = o.z - d.z, dist2 = dx * dx + dz * dz;
+      if (dist2 < 1e-9) continue;
+      const wj = shape.weight * radius[j] * radius[j];
+      if ((dist2 + wi - wj) / (2 * Math.sqrt(dist2)) >= reach) continue;
+      ({ ring, tags } = clipTagged(ring, tags, 2 * dx, 2 * dz, o.x * o.x + o.z * o.z - d.x * d.x - d.z * d.z + wi - wj, j));
+      reach = 0;
+      for (let v = 0; v < ring.length; v += 2) reach = Math.max(reach, Math.hypot(ring[v] - d.x, ring[v + 1] - d.z));
+    }
+    cells.push(ring.length >= 6 ? { ring, neighbour: tags } : { ring: [], neighbour: [] });
+  }
+  return cells;
+}

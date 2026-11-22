@@ -2,16 +2,18 @@
 // would silently corrupt the map, never tunable values or timings. Overlap and settle time are printed.
 import { describe, expect, it } from 'vitest';
 import { config } from '../config';
-import { GEN_HOT, GEN_REV, type PhysicsEngine } from '../contracts/physics';
+import { GEN_HOT, GEN_REV } from '../contracts/physics';
 import { createReplica } from '../model';
+import { unitRadius } from '../shared';
 import type { PatchBatch } from '../model/types';
+import { pointInCell } from '../shared/cells';
 import { syntheticBatch } from '../testing/synthetic';
-import { createPhysicsEngine } from './index';
+import { createPhysicsEngine, type PhysicsEngineInternal } from './index';
 
 const CAP_MS = 60_000; // generous: determinism holds only while the cap is not reached
 const FILES = 600;
 
-function build(batch: PatchBatch, capacity = { units: 1024, districts: 128, cities: 32 }): PhysicsEngine {
+function build(batch: PatchBatch, capacity = { units: 1024, districts: 128, cities: 32 }): PhysicsEngineInternal {
   const engine = createPhysicsEngine({ config, capacity });
   engine.applyBatch(batch);
   return engine;
@@ -176,16 +178,136 @@ describe('physics engine', () => {
     engine.dispose();
   });
 
-  it('reports settle time and overlap at 2,000 and 10,000 files (printed, not asserted)', async () => {
+  it('keeps every unit inside the cell of its district, and cities at least the gap apart', async () => {
+    const engine = build(batch);
+    await engine.settle(CAP_MS);
+    const { unit, city } = engine.positions;
+    const rings = new Map<number, number[]>();
+    for (const d of model.districts.slots()) {
+      const ring = engine.territory(d);
+      expect(ring && ring.length >= 6).toBe(true);
+      rings.set(d, ring!.slice());
+    }
+    for (const u of model.units.slots()) {
+      const ring = rings.get(model.units.refSlots.district[u])!;
+      const x = unit[2 * u], z = unit[2 * u + 1];
+      // the centre is inside, and so is the sphere, to within the collide padding
+      expect(pointInCell(ring, x, z)).toBe(true);
+      const r = Math.max(0, unitRadius(model.units.cols.loc[u], model.units.cols.importancePct[u], config.visual) - config.physics.file.pad);
+      for (let k = 0; k < 8; k++) {
+        const a = (k / 8) * 2 * Math.PI;
+        expect(pointInCell(ring, x + r * Math.cos(a), z + r * Math.sin(a))).toBe(true);
+      }
+    }
+    // the gap between two cities is a hard minimum, not a force's tolerance
+    const cs = model.cities.slots();
+    for (const a of cs) {
+      for (const b of cs) {
+        if (b <= a) continue;
+        const outlines = Math.hypot(city[3 * a] - city[3 * b], city[3 * a + 1] - city[3 * b + 1]) - city[3 * a + 2] - city[3 * b + 2];
+        expect(outlines).toBeGreaterThanOrEqual(config.physics.city.gap * (1 - 1e-4));
+      }
+    }
+    engine.dispose();
+  });
+
+  it('moves nothing before the first settle', () => {
+    const engine = build(batch);
+    const before = { unit: Array.from(engine.positions.unit), district: Array.from(engine.positions.district), city: Array.from(engine.positions.city) };
+    for (let i = 0; i < 50; i++) expect(engine.step(config.physics.sliceMs)).toBe(0);
+    expect(engine.positions.gen[GEN_HOT]).toBe(0);
+    expect(Array.from(engine.positions.unit)).toEqual(before.unit);
+    expect(Array.from(engine.positions.district)).toEqual(before.district);
+    expect(Array.from(engine.positions.city)).toEqual(before.city);
+    engine.dispose();
+  });
+
+  it('keeps an update local: other cities move only to make room, and no further than the room needed', async () => {
+    const engine = build(batch, { units: FILES + 64, districts: 128, cities: 32 });
+    await engine.settle(CAP_MS);
+    const d0 = model.districts.slots()[0];
+    const c0 = model.districts.refSlots.city[d0];
+    const districtId = model.districts.ids[d0]!;
+    const cityBefore = Array.from(engine.positions.city);
+    const districtBefore = Array.from(engine.positions.district);
+    const unitBefore = Array.from(engine.positions.unit);
+
+    const run = async (ops: PatchBatch['ops'], rev: number, eachSlice: () => void) => {
+      engine.applyBatch({ rev, baseRev: rev - 1, ops });
+      const done = engine.relayout(CAP_MS);
+      let report: Awaited<typeof done> | undefined;
+      void done.then((r) => { report = r; });
+      for (let guard = 0; !report; guard++) {
+        expect(guard).toBeLessThan(5000);
+        engine.step(1000);
+        eachSlice();
+        await Promise.resolve();
+      }
+      expect(report.atRest).toBe(true);
+      expect(engine.positions.gen[GEN_HOT]).toBe(0);
+      expect(engine.isAtHome()).toBe(true); // the re-layout marked home where things came to rest
+    };
+    const others = model.cities.slots().filter((c) => c !== c0);
+    const shift = (c: number) => Math.hypot(engine.positions.city[3 * c] - cityBefore[3 * c], engine.positions.city[3 * c + 1] - cityBefore[3 * c + 1]);
+
+    // One small file: the district barely changes size, so nothing above the file tier wakes and
+    // every city, this one included, is exactly where it was at every slice.
+    await run(
+      [{ op: 'add', kind: 'unit', rows: { ids: ['new/small.ts'], slots: [FILES], cols: { loc: [5], importancePct: [0], district: [districtId] } } }],
+      batch.rev + 1,
+      () => { expect(Array.from(engine.positions.city)).toEqual(cityBefore); },
+    );
+
+    // Enough large files for the district, and with it the city, to grow. Cities sit exactly the gap
+    // apart, so the ones it touches are pushed (and they, possibly, the next): but only pushed. None
+    // moves further than the city grew, where a reheat of the whole tier would send them wandering.
+    const ids = Array.from({ length: 12 }, (_, i) => `new/f${i}.ts`);
+    const slots = ids.map((_, i) => FILES + 1 + i);
+    let farthest = 0;
+    await run(
+      [{ op: 'add', kind: 'unit', rows: { ids, slots, cols: { loc: ids.map(() => 2000), importancePct: ids.map(() => 0.5), district: ids.map(() => districtId) } } }],
+      batch.rev + 2,
+      () => { for (const c of others) farthest = Math.max(farthest, shift(c)); },
+    );
+    const grew = engine.positions.city[3 * c0 + 2] - cityBefore[3 * c0 + 2];
+    expect(grew).toBeGreaterThan(0);
+    expect(farthest).toBeLessThanOrEqual(2 * grew);
+    const cityAfter = engine.positions.city;
+    for (const a of model.cities.slots()) {
+      for (const b of model.cities.slots()) {
+        if (b <= a) continue;
+        const outlines = Math.hypot(cityAfter[3 * a] - cityAfter[3 * b], cityAfter[3 * a + 1] - cityAfter[3 * b + 1]) - cityAfter[3 * a + 2] - cityAfter[3 * b + 2];
+        expect(outlines).toBeGreaterThanOrEqual(config.physics.city.gap * (1 - 1e-4));
+      }
+    }
+    // the district grew
+    expect(engine.positions.district[3 * d0 + 2]).toBeGreaterThan(districtBefore[3 * d0 + 2]);
+    console.log(`[physics] update: the city grew by ${grew.toFixed(1)}; the other city that moved most moved ${farthest.toFixed(1)}`);
+    // districts and units of every other city are untouched: a pushed city carries them along unchanged
+    for (const d of model.districts.slots()) {
+      if (model.districts.refSlots.city[d] === c0) continue;
+      expect(Array.from(engine.positions.district.subarray(3 * d, 3 * d + 3))).toEqual(districtBefore.slice(3 * d, 3 * d + 3));
+    }
+    for (const u of model.units.slots()) {
+      if (model.districts.refSlots.city[model.units.refSlots.district[u]] === c0) continue;
+      expect(engine.positions.unit[2 * u]).toBe(unitBefore[2 * u]);
+      expect(engine.positions.unit[2 * u + 1]).toBe(unitBefore[2 * u + 1]);
+    }
+    engine.dispose();
+  });
+
+  it('reports settle time, overlap and evenness of fill at 2,000 and 10,000 files (printed, not asserted)', async () => {
     for (const files of [2000, 10000]) {
       const big = syntheticBatch({ files });
       const t0 = performance.now();
       const engine = build(big, { units: files, districts: 256, cities: 32 });
       const buildMs = performance.now() - t0;
       const report = await engine.settle(CAP_MS);
+      const q = engine.quality();
       console.log(
         `[physics] ${files} files: build ${buildMs.toFixed(0)} ms, settle ${report.ms.toFixed(0)} ms, ${report.ticks} ticks, ` +
-        `atRest ${report.atRest}, overlapShare ${(report.overlapShare * 100).toFixed(1)}% (sizeVsConnectivity ${config.physics.file.sizeVsConnectivity})`,
+        `atRest ${report.atRest}, overlapShare ${(report.overlapShare * 100).toFixed(2)}% (sizeVsConnectivity ${config.physics.file.sizeVsConnectivity}), ` +
+        `cover of the inner / middle / outer third of a district ${q.innerCover.toFixed(2)} / ${q.middleCover.toFixed(2)} / ${q.outerCover.toFixed(2)}`,
       );
       expect(Number.isFinite(report.overlapShare)).toBe(true);
       engine.dispose();

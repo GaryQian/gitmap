@@ -10,7 +10,7 @@ import type { BlobStore } from './blobStore';
  */
 export const SNAPSHOT_SCHEMA: RepoModel['schema'] = 1;
 
-const SUFFIX = '.gitmap.json.gz';
+const SUFFIX = '.starmap.json.gz';
 /** Longest escaped id used as a file name; a longer id is stored under its SHA-256 instead. */
 const MAX_ESCAPED = 120;
 const HASHED_PREFIX = '~';

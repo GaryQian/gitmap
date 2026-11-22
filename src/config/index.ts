@@ -48,6 +48,14 @@ export function validateConfig(c: Config): Config {
   num('visual.importanceCurve', c.visual.importanceCurve, 0);
   num('scheduler.workerShare', c.scheduler.workerShare, 0, 1);
   if (!['skip', 'firstParent', 'include'].includes(c.history.merges)) fail('history.merges must be skip, firstParent or include');
+  num('history.progressIntervalMs', c.history.progressIntervalMs, 0);
+  num('persist.snapshotDebounceMs', c.persist.snapshotDebounceMs, 0);
+  if (typeof c.parser.version !== 'string' || !c.parser.version) fail('parser.version must be a non-empty string');
+  const strings = (path: string, v: unknown) => {
+    if (!Array.isArray(v) || v.some((x) => typeof x !== 'string' || !x)) fail(`${path} must be a list of non-empty strings`);
+  };
+  strings('parser.bridges', c.parser.bridges);
+  strings('ai.excludePaths', c.ai.excludePaths);
   const split = c.ai.budgetSplit.structure + c.ai.budgetSplit.skeletons + c.ai.budgetSplit.docs;
   if (Math.abs(split - 1) > 1e-6) fail('ai.budgetSplit must sum to 1');
   if (c.ai.tour.minSteps > c.ai.tour.maxSteps) fail('ai.tour.minSteps must not exceed maxSteps');

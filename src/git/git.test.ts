@@ -156,7 +156,7 @@ describe('repo', () => {
       const date = `2024-01-${10 + n}T00:00:00Z`;
       git(dir, ['-c', 'user.name=T', '-c', 'user.email=t@example.com', 'commit', '-q', '-m', `edit ${n}`], { GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date });
     };
-    if (existsSync(path.join(dir, '.git', 'gitmap-delta-ready'))) {
+    if (existsSync(path.join(dir, '.git', 'starmap-delta-ready'))) {
       // reuse the repo of an earlier run, without the extra commit that run added in step 3
       git(dir, ['reset', '-q', '--hard', 'base']);
       git(dir, ['reflog', 'expire', '--expire=now', '--all']);
@@ -166,7 +166,7 @@ describe('repo', () => {
       git(dir, ['init', '-q', '-b', 'main']);
       for (let n = 0; n < 8; n++) commit(n);
       git(dir, ['tag', 'base']);
-      writeFileSync(path.join(dir, '.git', 'gitmap-delta-ready'), '');
+      writeFileSync(path.join(dir, '.git', 'starmap-delta-ready'), '');
     }
     const packDir = path.join(dir, '.git', 'objects', 'pack');
     /** Type code in the pack entry header of an object: 6 = OFS_DELTA, 7 = REF_DELTA. */

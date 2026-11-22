@@ -223,7 +223,7 @@ export function planPage(repo: HistoryRepo, input: PlanInput, budgetMs: number):
         authorIndex.set(n.ident, author);
       } else author = known;
     }
-    const c: PlannedCommit = { oid: n.oid, tree: n.tree, parentTree: n.parentTree ?? null, author, time: n.authorTime, isMerge: n.parents.length > 1 };
+    const c: PlannedCommit = { oid: n.oid, date: n.date, tree: n.tree, parentTree: n.parentTree ?? null, author, time: n.authorTime, isMerge: n.parents.length > 1 };
     if (n.boundary) c.boundary = true;
     return c;
   });

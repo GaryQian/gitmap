@@ -21,7 +21,7 @@ export const POI_LOCAL = {
     /** Half-width of the quad in star radii, and its floor in world units. */
     perRadius: 0.85,
     minWorld: 1.6,
-    /** Clamp on screen, device pixels: far beams stay a thin line, near ones never become a wall. */
+    /** Clamp on screen, CSS pixels: far beams stay a thin line, near ones never become a wall. */
     minPx: 5,
     maxPx: 26,
   },
@@ -31,7 +31,7 @@ export const POI_LOCAL = {
   shimmerSpeed: 0.11,
   /** Overall strength in dark mode (additive) and light mode (alpha blended). */
   gainDark: 1.25,
-  gainLight: 1.0,
+  gainLight: 1.5,
   /** After the sphere glows (1.5), before edges and particles (2, 3). */
   renderOrder: 1.6,
 } as const;

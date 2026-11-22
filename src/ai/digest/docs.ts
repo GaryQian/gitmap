@@ -160,7 +160,7 @@ function cityOrder(ctx: Ctx, city: number): DocInfo[] {
 }
 
 /** One doc within `cap` tokens: what it speaks for, its outline, then as many leading lines as fit. */
-function docEntry(ctx: Ctx, d: DocInfo, cap: number, pos: readonly number[]): { entry: Entry; cut: boolean } {
+function docEntry(ctx: Ctx, d: DocInfo, cap: number, pos: readonly number[]): { entry: Entry; cut: boolean; need: number } {
   const { view } = ctx;
   const cite = new Cite();
   const u = view.units[d.unit];
@@ -189,7 +189,7 @@ function docEntry(ctx: Ctx, d: DocInfo, cap: number, pos: readonly number[]): { 
     used += cost;
     shown++;
   }
-  return { entry: entry(`doc:${d.path}`, pos, out.join('\n'), cite.refs), cut: shown < d.lines.length };
+  return { entry: entry(`doc:${d.path}`, pos, out.join('\n'), cite.refs), cut: shown < d.lines.length, need: used };
 }
 
 /** `city` is a canonical city index, or null for the whole repository. */
@@ -207,7 +207,7 @@ export function docsSection(ctx: Ctx, city: number | null): Section {
       const room = budget - heading.cost;
       const { minTokens } = LOCAL.docs;
       const shown = ordered.slice(0, Math.max(0, Math.floor(room / minTokens)));
-      for (const d of shown) d.full ??= docEntry(ctx, d, Infinity, []).entry.cost;
+      for (const d of shown) d.full ??= docEntry(ctx, d, Infinity, []).need;
 
       // Water-filling: short docs take what they need, and the rest is shared among the long ones.
       // What a doc does not use of its cap (docs are cut at line ends) rolls on to the next one.

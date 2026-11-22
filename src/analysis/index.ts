@@ -4,13 +4,16 @@
 //   resolve.ts     FileFacts            → RawEdge[]   (file → file, kind 'import')
 //   units.ts       files (+ UnitMapper) → UnitTable   (file → unit mapping; link/pairs.ts pairs headers)
 //   link/          SyntaxFacts          → RawEdge[]   (file → file, kinds 'call' / 'reference' / 'inherit')
+//   ../bridges     FileFacts.bridge     → RawEdge[]   (file → file, kind 'bridge': JNI, Protobuf stubs)
 //   edges.ts       RawEdge[], UnitTable → UnitEdges   (one edge per ordered unit pair, fan-in/out)
 //   importance.ts  UnitEdges            → Importance  (PageRank, then percentile)
 //   cluster/       UnitTable, UnitEdges → ClusterResult (cities and districts)
 //   assemble.ts    all of the above     → StructureTables
+// Beside it, ./layers turns structure and history facts into overlay `layer` operations.
 import type { Config } from '../config';
 import type { LanguagePlugin } from '../contracts/lang';
 import type { AnalysisInput, AnalysisResult, Analyze } from '../contracts/pipeline';
+import { bridgeRawEdges, linkBridges } from '../bridges';
 import { now } from '../shared';
 import { assembleTables } from './assemble';
 import { cluster as defaultCluster, type Cluster } from './cluster';
@@ -30,6 +33,7 @@ export type { Cluster, ClusterResult } from './cluster';
 export type { LinkResult } from './link/symbols';
 export { LINK_CONFIDENCE } from './link/symbols';
 export { pairHeaders } from './link/pairs';
+export * from './layers';
 
 /** Seams for tests and for the stages that later packages replace. */
 export interface AnalyzeOptions {
@@ -61,7 +65,13 @@ export function analyze(input: AnalysisInput, config: Config, options: AnalyzeOp
   const linked = input.syntax ? linkSymbols(files, input.syntax, resolved, units, config.analysis.topSymbolsPerEdge) : null;
   lap('link');
 
-  const edges = aggregateEdges(linked ? resolved.edges.concat(linked.edges) : resolved.edges, units, linked?.symbols);
+  // Cross-language bridges (PLAN.md §6.4.1): keys the fast pass left on each file, joined by name.
+  const bridges = linkBridges(files);
+  const raw = linked ? resolved.edges.concat(linked.edges) : resolved.edges.slice();
+  for (const edge of bridgeRawEdges(bridges)) raw.push(edge);
+  lap('bridges');
+
+  const edges = aggregateEdges(raw, units, linked?.symbols);
   lap('edges');
 
   const importance = computeImportance(units.count, edges, config.importance);
@@ -85,7 +95,7 @@ export function analyze(input: AnalysisInput, config: Config, options: AnalyzeOp
       importsResolved: resolved.importsResolved,
       refsLinked: linked?.refsLinked ?? 0,
       refsDropped: linked?.refsDropped ?? 0,
-      bridges: 0,
+      bridges: bridges.length,
       ms,
     },
   };

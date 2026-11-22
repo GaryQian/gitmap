@@ -3,7 +3,7 @@
 //
 //   directorySource(locator)        → ContentSource | null   the user's folder ('fsa', 'files')   (directory.ts)
 //   demoSource(baseUrl, { oidOf })  → DemoSource             content.zip, one entry per range     (demo.ts)
-//   exportModelFile / downloadModel / importModelFile        the .gitmap.json.gz file             (modelFile.ts)
+//   exportModelFile / downloadModel / importModelFile        the .starmap.json.gz file             (modelFile.ts)
 //   findZipEnd / parseZipDirectory / extractZipEntry         the zip reader behind demoSource     (zip.ts)
 //
 // Every source's read() takes 'f:path' or 'u:path' (a unit's primary file) and rejects otherwise.

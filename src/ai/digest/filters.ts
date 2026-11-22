@@ -13,18 +13,50 @@ export interface PathRules {
   secret(path: string): boolean;
 }
 
-export function pathRules(config: Config): PathRules {
+// A matcher for a whole list of globs with picomatch's meaning, built for testing every path of a
+// repository against every list. The two common shapes are answered without a full-path regular
+// expression: "**/name/**" is "some path segment is `name`", and "**/pattern" with no further slash
+// is a test of the basename alone. Anything else, and any list that cannot be compiled this way,
+// goes through picomatch as written.
+export function matcher(globs: readonly string[], nocase: boolean): (path: string) => boolean {
   // Paths are always '/'-separated, whatever the platform.
-  const opts = { dot: true, windows: false };
-  const configured = picomatch(config.parser.exclude, opts);
-  const generated = picomatch([...LOCAL.generated], { ...opts, nocase: true });
-  const test = picomatch(config.overlays.tests.patterns, opts);
-  const secretGlobs = (config.ai as { excludePaths?: string[] }).excludePaths ?? LOCAL.excludePaths;
-  const secret = picomatch([...secretGlobs], { ...opts, nocase: true });
+  const opts = { dot: true, windows: false, nocase };
+  const union = (list: string[]) =>
+    (list.length ? new RegExp(list.map((g) => `(?:${picomatch.makeRe(g, opts).source})`).join('|'), nocase ? 'i' : '') : null);
+  try {
+    const segments = new Set<string>();
+    const basenames: string[] = [], rest: string[] = [];
+    for (const g of globs) {
+      if (g.startsWith('!')) throw new Error('negated glob');
+      const segment = /^\*\*\/([\w.@-]+)\/\*\*$/.exec(g);
+      if (segment) segments.add(nocase ? segment[1].toLowerCase() : segment[1]);
+      else if (/^\*\*\/[^/]+$/.test(g) && !g.slice(3).includes('**')) basenames.push(g.slice(3));
+      else rest.push(g);
+    }
+    const byBasename = union(basenames), byPath = union(rest);
+    return (path) => {
+      const cut = path.lastIndexOf('/');
+      if (byBasename?.test(cut < 0 ? path : path.slice(cut + 1))) return true;
+      if (segments.size) {
+        for (const s of (nocase ? path.toLowerCase() : path).split('/')) if (segments.has(s)) return true;
+      }
+      return byPath !== null && byPath.test(path);
+    };
+  } catch {
+    return picomatch([...globs], opts);
+  }
+}
+
+export function pathRules(config: Config): PathRules {
+  const configured = matcher(config.parser.exclude, false);
+  const generated = matcher(LOCAL.generated, true);
+  // PLAN.md §11.2 writes the secret patterns as bare names (`.env*`, `*.pem`): they apply in any folder.
+  const secretGlobs = ((config.ai as { excludePaths?: string[] }).excludePaths ?? LOCAL.excludePaths)
+    .map((g) => (g.includes('/') ? g : `**/${g}`));
   return {
     excluded: (path) => configured(path) || generated(path),
-    test,
-    secret,
+    test: matcher(config.overlays.tests.patterns, false),
+    secret: matcher(secretGlobs, true),
   };
 }
 

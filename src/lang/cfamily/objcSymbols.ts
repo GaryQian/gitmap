@@ -8,7 +8,7 @@
 //
 // The pass is conservative: where the text is ambiguous it reports nothing.
 import type { RefKind, SymbolDef, SymbolKind, SymbolRef } from '../../contracts/lang';
-import { blankComments } from '../cfamily';
+import { blankComments } from './scan';
 
 const SIGNATURE_CHARS = 200;
 const DOC_CHARS = 300;

@@ -154,13 +154,18 @@ describe('at 100k paths', () => {
     const lines: string[] = [];
     for (const query of queries) {
       index.search(query, 20); // warm the JIT
-      const runs = 5;
-      t0 = performance.now();
+      // the median of several runs: the machine is usually busy with other work while tests run
+      const times: number[] = [];
       let found = 0;
-      for (let r = 0; r < runs; r++) found = index.search(query, 20).length;
-      lines.push(`${JSON.stringify(query).padEnd(16)} ${((performance.now() - t0) / runs).toFixed(2).padStart(7)} ms  ${found} results`);
+      for (let r = 0; r < 9; r++) {
+        t0 = performance.now();
+        found = index.search(query, 20).length;
+        times.push(performance.now() - t0);
+      }
+      times.sort((a, b) => a - b);
+      lines.push(`${JSON.stringify(query).padEnd(16)} ${times[4]!.toFixed(2).padStart(7)} ms (best ${times[0]!.toFixed(2)})  ${found} results`);
     }
-    console.log(`search over ${index.size.toLocaleString('en')} paths (index built in ${buildMs.toFixed(0)} ms)\n${lines.join('\n')}`);
+    console.log(`search over ${index.size.toLocaleString('en')} paths (index built in ${buildMs.toFixed(0)} ms); median of 9\n${lines.join('\n')}`);
     expect(index.search('store', 20)).toHaveLength(20);
   });
 });

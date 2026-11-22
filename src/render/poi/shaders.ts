@@ -16,10 +16,10 @@ varying float vSlender; // height over half-width, so the shimmer keeps its grai
  *   aBirth = scene time (s) at which the beam starts to rise           (view)
  */
 export const BEAM_VERT = GLSL_POSITIONS + /* glsl */ `
-uniform float uTime; uniform float uPixelWorld;
+uniform float uTime; uniform float uPixelWorld; uniform float uPixelRatio;
 uniform float uRise;
 uniform vec4 uBeamHeight;   // share of the view depth, min world, max world, min star radii
-uniform vec4 uBeamWidth;    // half-width per star radius, min world, min device px, max device px
+uniform vec4 uBeamWidth;    // half-width per star radius, min world, min CSS px, max CSS px
 uniform float uFarFloor;
 attribute vec2 aBeam; attribute float aBirth;
 ` + BEAM_VARYINGS + /* glsl */ `
@@ -37,7 +37,7 @@ void main() {
   float rise = 1.0 - (1.0 - k) * (1.0 - k) * (1.0 - k);
 
   float depth = max(-(viewMatrix * vec4(base, 1.0)).z, 1e-3);
-  float px = uPixelWorld * depth;                       // world units per device pixel at the foot
+  float px = uPixelWorld * uPixelRatio * depth;         // world units per CSS pixel at the foot
   float want = max(uBeamWidth.y, r * uBeamWidth.x);
   float half_ = clamp(want, uBeamWidth.z * px, uBeamWidth.w * px);
   // A far beam keeps a line's width and gives up brightness instead: thin, never a wall.
@@ -95,7 +95,7 @@ void main() {
     // Additive light is invisible on a pale background: a saturated tint, alpha blended, that
     // deepens toward the filament instead of brightening.
     vec3 deep = uWarm * vec3(0.96, 0.80, 0.52);
-    vec3 col = mix(uWarm, deep, clamp(core * along * 1.4, 0.0, 1.0));
+    vec3 col = mix(uWarm, deep, 0.3 + 0.7 * clamp(core * along * 1.4, 0.0, 1.0));
     gl_FragColor = vec4(col, clamp(light * uGain.y, 0.0, 0.92));
   }
 }`;

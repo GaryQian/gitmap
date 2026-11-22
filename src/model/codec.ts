@@ -1,4 +1,4 @@
-// The `.gitmap.json.gz` format (PLAN.md §5, §12): one JSON document, gzipped.
+// The `.starmap.json.gz` format (PLAN.md §5, §12): one JSON document, gzipped.
 //
 // Inside the JSON, every string held in a table (ids and string columns) and every id in the layout
 // is replaced by its index in one shared `strings` table: a path is written once however many
@@ -7,7 +7,7 @@
 // `fileCount` of 1) is written as that value. Everything else (meta, layers, annotations, numbers)
 // is plain JSON.
 //
-//   { "format": "gitmap", "schema": 1, "strings": [...], "meta": {...},
+//   { "format": "starmap", "schema": 1, "strings": [...], "meta": {...},
 //     "tables": { "<kind>": { "n": rows, "ids": [string index] | null,
 //                             "cols": { "<col>": { "s": [string index] } | { "k": the one value } | { "v": [value] } } } },
 //     "layers": {...}, "annotations": {...},
@@ -20,7 +20,7 @@
 // Uses CompressionStream / DecompressionStream, present in browsers, workers and Node 18+.
 import { edgeId, EDGE_SEP, type ColumnChunk, type LayoutSnapshot, type RepoModel } from './types';
 
-const FORMAT = 'gitmap';
+const FORMAT = 'starmap';
 const SCHEMA = 1;
 
 type EncodedColumn = { s: number[] } | { k: string | number } | { v: unknown[] };
@@ -127,7 +127,7 @@ function toDocument(model: RepoModel): EncodedModel {
 
 function fromDocument(doc: EncodedModel): RepoModel {
   const strings = doc.strings;
-  if (!Array.isArray(strings) || typeof doc.tables !== 'object' || doc.tables === null) throw new Error('Not a gitmap file: the string table or the tables are missing.');
+  if (!Array.isArray(strings) || typeof doc.tables !== 'object' || doc.tables === null) throw new Error('Not a starmap file: the string table or the tables are missing.');
   const lookUp = (indexes: number[]): string[] => {
     const out = new Array<string>(indexes.length);
     for (let r = 0; r < indexes.length; r++) out[r] = strings[indexes[r]];
@@ -143,7 +143,7 @@ function fromDocument(doc: EncodedModel): RepoModel {
     if (table.ids) ids = lookUp(table.ids);
     else {
       const src = cols.src as string[], dst = cols.dst as string[];
-      if (!Array.isArray(src) || !Array.isArray(dst)) throw new Error(`Not a gitmap file: table '${kind}' has no ids.`);
+      if (!Array.isArray(src) || !Array.isArray(dst)) throw new Error(`Not a starmap file: table '${kind}' has no ids.`);
       ids = new Array<string>(src.length);
       for (let r = 0; r < src.length; r++) ids[r] = edgeId(src[r], dst[r]);
     }
@@ -173,38 +173,38 @@ async function pipeThrough(bytes: Uint8Array, transform: CompressionStream | Dec
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
-/** Columnar JSON, gzipped: the `.gitmap.json.gz` format. */
+/** Columnar JSON, gzipped: the `.starmap.json.gz` format. */
 export async function encodeModel(model: RepoModel): Promise<Uint8Array> {
   if (model.schema !== SCHEMA) throw new Error(`Cannot write a model with schema ${JSON.stringify(model.schema)}: this build writes schema ${SCHEMA}.`);
   const json = JSON.stringify(toDocument(model));
   return pipeThrough(new TextEncoder().encode(json), new CompressionStream('gzip'));
 }
 
-/** Inverse of encodeModel. Rejects when the bytes are not a gitmap file or the schema is not one this build reads. */
+/** Inverse of encodeModel. Rejects when the bytes are not a starmap file or the schema is not one this build reads. */
 export async function decodeModel(bytes: Uint8Array): Promise<RepoModel> {
   let json: string;
   if (bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b) {
     try {
       json = new TextDecoder().decode(await pipeThrough(bytes, new DecompressionStream('gzip')));
     } catch {
-      throw new Error('Not a gitmap file: it is not gzip data, or it is cut short.');
+      throw new Error('Not a starmap file: it is not gzip data, or it is cut short.');
     }
   } else if (bytes[0] === 0x7b /* { */) {
     // A host that serves .gz with Content-Encoding: gzip hands the browser the JSON already inflated.
     json = new TextDecoder().decode(bytes);
   } else {
-    throw new Error('Not a gitmap file: it is not gzip data, or it is cut short.');
+    throw new Error('Not a starmap file: it is not gzip data, or it is cut short.');
   }
   let doc: EncodedModel;
   try {
     doc = JSON.parse(json);
   } catch {
-    throw new Error('Not a gitmap file: its contents are not JSON.');
+    throw new Error('Not a starmap file: its contents are not JSON.');
   }
-  if (typeof doc !== 'object' || doc === null || Array.isArray(doc)) throw new Error('Not a gitmap file: its contents are not a model.');
+  if (typeof doc !== 'object' || doc === null || Array.isArray(doc)) throw new Error('Not a starmap file: its contents are not a model.');
   if (doc.schema !== SCHEMA) {
-    throw new Error(`Unsupported gitmap schema ${JSON.stringify(doc.schema)}: this build reads schema ${SCHEMA}. The file may come from a newer version.`);
+    throw new Error(`Unsupported starmap schema ${JSON.stringify(doc.schema)}: this build reads schema ${SCHEMA}. The file may come from a newer version.`);
   }
-  if (doc.format !== FORMAT) throw new Error('Not a gitmap file: the format marker is missing.');
+  if (doc.format !== FORMAT) throw new Error('Not a starmap file: the format marker is missing.');
   return fromDocument(doc);
 }

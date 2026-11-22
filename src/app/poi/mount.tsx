@@ -92,8 +92,9 @@ function PointsOfInterest() {
       }
       const box = card.current;
       if (!box || openNow === null) { lastAnchor.current = null; return; }
-      const anchor = placed.get(openNow) ?? openBase ?? lastAnchor.current;
-      if (!anchor) return;
+      // opened from elsewhere (the tour) while its star is out of view: the middle of the view will do
+      const anchor = placed.get(openNow) ?? openBase ?? lastAnchor.current
+        ?? { x: view.clientWidth / 2, y: view.clientHeight / 2, width: 0, height: 0 };
       lastAnchor.current = anchor;
       const { gapPx: gap, marginPx: margin, topMarginPx: topMargin, risePx: rise } = POI_UI.card;
       const spot = placeCard(anchor, sizeOf(box), { width: view.clientWidth, height: view.clientHeight }, { gap, margin, topMargin, rise });

@@ -10,6 +10,7 @@
 // `static inline`, which in a header is shared with every file that includes it. @ignore drops
 // what looks like a prototype inside a function body, where `Foo f(x);` declares a variable.
 import type { SyntaxSpec } from '../../contracts/lang';
+import { isObjcHeader } from './objcScan';
 
 // Compiling a query costs time per pattern and per level of nesting, most of all for patterns
 // rooted at a node with many kinds of children, and the C++ grammar is large (the first version of
@@ -88,7 +89,13 @@ export const cSyntax: SyntaxSpec = {
   queries: { c: C_QUERY },
 };
 
-export const cppSyntax: SyntaxSpec = {
-  grammar: () => 'cpp',
+/**
+ * `grammar` also takes the file's text, which the contract does not pass yet (SyntaxSpec.grammar sees
+ * the path only). Given the text of an Objective-C header it answers '', the slow-pass runner's name
+ * for "no grammar: use the plug-in's extractSymbols", because the C++ grammar cannot read
+ * `@interface`. With the path alone every file of the plug-in is C++, as before.
+ */
+export const cppSyntax: SyntaxSpec & { grammar(path: string, text?: string): string | null } = {
+  grammar: (path, text) => (text !== undefined && isObjcHeader(text, path) ? '' : 'cpp'),
   queries: { cpp: CPP_QUERY },
 };

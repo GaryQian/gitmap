@@ -1,14 +1,20 @@
 // Coordinator worker (PLAN.md §3): owns the canonical ModelStore and the compute pool, runs the
-// pipeline, and streams patch batches and events to the main thread. Lead-owned.
+// pipeline, and streams patch batches and events to the main thread. It also holds what must stay
+// off the main thread: the search index and local storage (snapshots, registry, facts cache).
+// Lead-owned.
 import { createWorkerPool } from '../compute';
+import type { Config } from '../config';
 import type { ComputePool } from '../contracts/compute';
-import type { PipelineEvents } from '../contracts/pipeline';
+import type { PipelineEvents, RepoSource } from '../contracts/pipeline';
 import type { ModelStore } from '../contracts/store';
 import { openRepoAccess } from '../git';
 import { createModelStore, decodeModel } from '../model';
 import type { LayoutSnapshot } from '../model/types';
+import { memoryBlobStore, openPersistence, opfsBlobStore, type PersistentFactsCache } from '../persist';
 import { runSource, type PipelineDeps, type PipelineState } from './core';
+import type { PipelinePersistence } from './persist';
 import type { CoordinatorCalls, FromCoordinator, MainCalls, MainMethod, ToCoordinator } from './protocol';
+import { createPipelineSearch, type PipelineSearch } from './search';
 
 const scope = self as unknown as DedicatedWorkerGlobalScope;
 const post = (m: FromCoordinator, transfer: Transferable[] = []) => scope.postMessage(m, transfer);
@@ -17,6 +23,7 @@ let store: ModelStore | null = null;
 let pool: ComputePool | null = null;
 let state: PipelineState | null = null;
 let deps: PipelineDeps | null = null;
+let search: PipelineSearch | null = null;
 
 // ---- requests to the main thread ----
 let nextId = 1;
@@ -31,6 +38,21 @@ function askMain<M extends MainMethod>(method: M, ...args: Parameters<MainCalls[
 
 function emit<E extends keyof PipelineEvents>(evt: E, payload: PipelineEvents[E]): void {
   post({ type: 'event', evt, payload } as FromCoordinator);
+}
+
+// ---- local storage (PLAN.md §12), opened once; in-memory where the browser offers none ----
+interface LocalStorage extends PipelinePersistence { facts: PersistentFactsCache }
+let storage: Promise<LocalStorage> | null = null;
+/** The OPFS directory beside `snapshots/` that holds each repo's history facts. */
+const HISTORY_DIR = 'history';
+function openStorage(): Promise<LocalStorage> {
+  // openPersistence never rejects: without OPFS and IndexedDB (private browsing) it hands back
+  // in-memory twins, and the page works the same, minus the return visit.
+  storage ??= openPersistence().then((p) => ({
+    snapshots: p.snapshots, registry: p.registry, facts: p.facts,
+    aux: p.kind === 'durable' ? opfsBlobStore(HISTORY_DIR) : memoryBlobStore(),
+  }));
+  return storage;
 }
 
 // ---- interaction comes first: park background work while frames run long (PLAN.md §3.1) ----
@@ -60,41 +82,57 @@ const calls: { [M in keyof CoordinatorCalls]: (...args: Parameters<CoordinatorCa
     if (!deps || !state) throw new Error('nothing to update');
     await hooks.update(deps, state);
   },
+  search(query: string, limit: number) {
+    return search ? search.search(query, limit) : [];
+  },
+  async loadFullHistory() {
+    const hooks = await import('./post');
+    if (!deps || !state) throw new Error('The map has not finished loading.');
+    await hooks.loadFullHistory(deps, state);
+  },
 };
+
+async function start(source: RepoSource, config: Config): Promise<void> {
+  store = createModelStore();
+  store.subscribe((batch) => emit('batch', batch));
+  pool = createWorkerPool({ config });
+  search = createPipelineSearch(store);
+  post({ type: 'started' });
+  try {
+    // Only a folder reads or writes local storage; a demo, a file or a synthetic map never opens it.
+    const local = source.kind === 'directory' ? await openStorage() : null;
+    deps = {
+      config, pool, store, emit, search,
+      physics: {
+        settle: (maxMs) => askMain('settle', maxMs),
+        relayout: (maxMs) => askMain('relayout', maxMs),
+        loadLayout: (layout) => askMain('loadLayout', layout),
+        getLayout: () => askMain('getLayout'),
+      },
+      openRepo: openRepoAccess,
+      async loadDemo(baseUrl) {
+        const res = await fetch(new URL('snapshot.starmap.json.gz', new URL(baseUrl, scope.location.href)));
+        if (!res.ok) throw new Error(`Could not load the demo (${res.status}).`);
+        return decodeModel(new Uint8Array(await res.arrayBuffer()));
+      },
+      cache: local?.facts,
+      persist: local ?? undefined,
+    };
+    state = await runSource(source, deps);
+  } catch (err) {
+    post({ type: 'failed', message: String((err as Error)?.message ?? err) });
+    return;
+  }
+  const hooks = await import('./post');
+  hooks.afterReveal(deps, state).catch((err) => emit('error', { message: String(err?.message ?? err), fatal: false }));
+}
 
 scope.onmessage = (ev: MessageEvent<ToCoordinator>) => {
   const msg = ev.data;
   switch (msg.type) {
-    case 'start': {
-      const config = msg.config;
-      store = createModelStore();
-      store.subscribe((batch) => emit('batch', batch));
-      pool = createWorkerPool({ config });
-      deps = {
-        config, pool, store, emit,
-        physics: {
-          settle: (maxMs) => askMain('settle', maxMs),
-          loadLayout: (layout) => askMain('loadLayout', layout),
-          getLayout: () => askMain('getLayout'),
-        },
-        openRepo: openRepoAccess,
-        async loadDemo(baseUrl) {
-          const res = await fetch(new URL('snapshot.gitmap.json.gz', new URL(baseUrl, scope.location.href)));
-          if (!res.ok) throw new Error(`Could not load the demo (${res.status}).`);
-          return decodeModel(new Uint8Array(await res.arrayBuffer()));
-        },
-      };
-      post({ type: 'started' });
-      runSource(msg.source, deps).then(
-        async (s) => {
-          state = s;
-          const hooks = await import('./post');
-          hooks.afterReveal(deps!, s).catch((err) => emit('error', { message: String(err?.message ?? err), fatal: false }));
-        },
-        (err) => post({ type: 'failed', message: String(err?.message ?? err) }),
-      );
+    case 'start':
+      void start(msg.source, msg.config);
       break;
-    }
     case 'reply': {
       const p = pending.get(msg.id);
       if (!p) break;
@@ -117,6 +155,10 @@ scope.onmessage = (ev: MessageEvent<ToCoordinator>) => {
       break;
     case 'frame':
       if (deps) onFrame(msg.frameMs, msg.interacting, deps.config.scheduler.parkWhenFrameMsOver);
+      break;
+    case 'hidden':
+      // The tab may not come back: write what is waiting instead of sitting out the debounce.
+      if (state?.saver?.pending) void state.saver.flush();
       break;
   }
 };

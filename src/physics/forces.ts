@@ -71,11 +71,13 @@ export function forceContainCell(cell: () => LocalCell | undefined, radius: () =
  * to that share of the distance to the edge in that direction. So the pull is toward a place, never
  * toward the centre as such: the content is spread over the whole cell, corners included, at an even
  * density, with the largest units tending to the middle. Without a cell the territory is the disc R().
+ * `strength` is given alpha and returns the share of the way a unit is moved per tick.
  */
-export function forceCellRadial(cell: () => LocalCell | undefined, radius: () => number, strength: number): PForce {
+export function forceCellRadial(cell: () => LocalCell | undefined, radius: () => number, strength: (alpha: number) => number): PForce {
   let nodes: PNode[] = [];
   const force: PForce = (alpha) => {
-    const c = cell(), R = radius(), k = strength * alpha;
+    const c = cell(), R = radius(), k = strength(alpha);
+    if (k === 0) return;
     const ox = c ? c.cx : 0, oy = c ? c.cy : 0;
     for (const n of nodes) {
       const dx = n.x + n.vx - ox, dy = n.y + n.vy - oy;

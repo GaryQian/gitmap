@@ -3,27 +3,38 @@
 //   graph.ts      the clustering graph: symmetrised, hub-damped, with directory affinity
 //   louvain.ts    Louvain levels from graphology-communities-louvain
 //   merge.ts      smallest-into-most-connected merging down to the wanted count
-//   balance.ts    the bias against giants: effective count and merge gain (no size is capped)
+//   balance.ts    the bias against giants: effective count and size-relative merging (no size is capped)
+//   refine.ts     a giant is divided where it has real structure of its own, and only there
 //   names.ts      names from path segments
 //   stableIds.ts  previous ids kept where a community persists
+//   incremental.ts  an Update keeps every unit where it was and places only the new ones
 //
 // Cities: K = clamp(round(citiesPerDecade · log10(files) + cityOffset), minCities, maxCities). The
-// coarsest Louvain level is merged down to K; when it has fewer than K, the resolution is raised and
-// Louvain re-run, a few times at most, and fewer cities are accepted when the graph will not split.
-// Districts: the same curve on each city's files, from the coarsest finer level of the same run
-// that has enough communities inside the city; when no level does, or the level is mostly crumbs,
-// Louvain runs again on the city's own subgraph. Everything is deterministic and independent of
-// the order units and edges arrive in.
+// coarsest Louvain level is taken (the resolution is raised and Louvain re-run, a few times at most,
+// when it has fewer than K communities), pieces that are not really separate are rejoined and giants
+// with structure of their own are divided (refine.ts), and the result is merged down to K as the
+// effective count sees it (balance.ts), so between K and countSlack · K cities remain; fewer are
+// accepted when the graph will not split.
+// Districts: the same curve and the same three steps on each city's files, starting from the
+// coarsest finer level of the same run that has enough communities inside the city; when no level
+// does, or the level is mostly crumbs, Louvain runs again on the city's own subgraph. A city is the
+// union of whole communities of the level it was merged from, or of the parts refine.ts divided
+// them into, so a finer level restricted to a city can start from fragments of its communities;
+// districts are computed per city, so they nest inside it either way.
+// An Update (previous.incremental) skips all of this: see incremental.ts.
+// Everything is deterministic and independent of the order units and edges arrive in.
 import type { Config } from '../../config';
 import type { AnalysisInput } from '../../contracts/pipeline';
 import type { UnitEdges } from '../edges';
 import { comparePaths } from '../order';
 import type { UnitTable } from '../units';
-import { levelCount } from './balance';
+import { countLimit } from './balance';
 import { buildClusterGraph, type ClusterGraph, type EdgeList } from './graph';
+import { clusterIncremental, wantsIncremental } from './incremental';
 import { louvainLevels } from './louvain';
 import { communitySizes, mergeDown, type Partition } from './merge';
 import { Namer } from './names';
+import { mergeCohesive, refineGiants } from './refine';
 import { matchPrevious, mintIds } from './stableIds';
 
 export interface ClusterResult {
@@ -47,7 +58,7 @@ export type Cluster = (
 type ClusteringConfig = Config['clustering'];
 
 /** Louvain runs per partition at most: the configured resolution first, then raised by RESOLUTION_STEP each time. */
-const MAX_RUNS = 6;
+const MAX_RUNS = 4;
 const RESOLUTION_STEP = 2;
 
 /** The count curve of PLAN.md §6.6, before clamping: 50 files → 4, 1,000 → 8, 100,000 → 15 with the defaults. */
@@ -57,6 +68,10 @@ export function communityTarget(files: number, perDecade: number, offset: number
 
 export const cluster: Cluster = (units, edges, config, previous, repoName = '') => {
   if (units.count === 0) return { unitDistrict: [], districts: [], cities: [] };
+  if (previous && wantsIncremental(previous)) {
+    const kept = clusterIncremental(units, edges, config, previous);
+    if (kept) return kept;
+  }
   const graph = buildClusterGraph(units, edges, config.clustering);
   const n = graph.units;
   const { cityOf, cityCount, districtOf, districtCity } = detectCommunities(graph, config.clustering);
@@ -124,8 +139,13 @@ function detectCommunities(g: ClusterGraph, cfg: ClusteringConfig): Communities 
     Math.max(cfg.minCities, Math.min(cfg.maxCities, communityTarget(files, cfg.citiesPerDecade, cfg.cityOffset))),
   ));
   const levels = detect(g.nodes, g, g.size, wantCities, minSize, cfg);
-  // The bias can leave more than the wanted number standing; maxCities still bounds it.
-  const cities = mergeDown(levels[levels.length - 1], g, g.size, wantCities, minSize, pathOf, cfg.sizeBias, Math.max(wantCities, cfg.maxCities));
+  // Giants with structure of their own are divided first (refine.ts); the merge then works by
+  // effective count and size-relative connection (balance.ts), which can leave more than the wanted
+  // number standing. maxCities still bounds it.
+  const cityLabels = refineGiants(mergeCohesive(levels[levels.length - 1], g, cfg), g, g.size, wantCities, cfg);
+  const slack = (cfg as { countSlack?: number }).countSlack;
+  const cities = mergeDown(cityLabels, g, g.size, wantCities, minSize, pathOf, cfg.sizeBias,
+    Math.max(wantCities, Math.min(cfg.maxCities, countLimit(wantCities, slack))));
 
   // Nodes, and the edges inside a city, grouped by city.
   const city = cities.labels;
@@ -163,9 +183,10 @@ function detectCommunities(g: ClusterGraph, cfg: ClusteringConfig): Communities 
         inside.a[k] = local[g.a[e]]; inside.b[k] = local[g.b[e]]; inside.w[k] = g.w[e];
       }
       const memberPath = (k: number) => pathOf(members[k]);
-      const labels = fromFinerLevel(levels, members, size, want, minSize, cityFiles, scratch, cfg.sizeBias)
+      const found = fromFinerLevel(levels, members, size, want, minSize, cityFiles, scratch)
         ?? last(detect(members.length, inside, size, want, minSize, cfg));
-      part = mergeDown(labels, inside, size, want, minSize, memberPath, cfg.sizeBias);
+      const labels = refineGiants(mergeCohesive(found, inside, cfg), inside, size, want, cfg);
+      part = mergeDown(labels, inside, size, want, minSize, memberPath, cfg.sizeBias, countLimit(want, slack));
     }
     const base = districtCity.length;
     for (let d = 0; d < part.count; d++) districtCity.push(c);
@@ -186,9 +207,8 @@ function detect(
   let resolution = cfg.resolution;
   for (let run = 0; run < MAX_RUNS; run++, resolution *= RESOLUTION_STEP) {
     const levels = louvainLevels(nodes, edges, resolution, cfg.seed);
-    // Counted with the bias against giants (balance.ts): a partition one community dominates does
-    // not pass, and the resolution goes up until that community divides.
-    const viable = levelCount(communitySizes(last(levels), nodeSize), minSize, cfg.sizeBias);
+    let viable = 0;
+    for (const s of communitySizes(last(levels), nodeSize)) if (s >= minSize) viable++;
     if (viable > bestViable) { best = levels; bestViable = viable; }
     if (viable >= target || edges.count === 0) break;
   }
@@ -202,7 +222,7 @@ function detect(
  */
 function fromFinerLevel(
   levels: Int32Array[], members: Int32Array, size: Float64Array, want: number, minSize: number, cityFiles: number,
-  scratch: Int32Array, sizeBias: number,
+  scratch: Int32Array,
 ): Int32Array | null {
   for (let l = levels.length - 2; l >= 0; l--) {
     // The level restricted to the city, renumbered from 0. `scratch` is all -1 on entry and on exit.
@@ -216,10 +236,9 @@ function fromFinerLevel(
     }
     for (let k = 0; k < members.length; k++) scratch[level[members[k]]] = -1;
 
-    const sizes = communitySizes(labels, size);
-    let crumbs = 0;
-    for (const s of sizes) if (s < minSize) crumbs += s;
-    if (levelCount(sizes, minSize, sizeBias) >= want) return crumbs * 2 <= cityFiles ? labels : null;
+    let viable = 0, crumbs = 0;
+    for (const s of communitySizes(labels, size)) if (s >= minSize) viable++; else crumbs += s;
+    if (viable >= want) return crumbs * 2 <= cityFiles ? labels : null;
   }
   return null;
 }

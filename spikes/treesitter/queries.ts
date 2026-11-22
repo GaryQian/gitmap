@@ -1,5 +1,5 @@
 // Hand-written tags-style queries (definitions + call-site references by identifier).
-// Modelled on the upstream tags.scm files, trimmed to what gitmap needs.
+// Modelled on the upstream tags.scm files, trimmed to what starmap needs.
 
 const JS_COMMON = `
 (function_declaration name: (identifier) @name) @definition.function

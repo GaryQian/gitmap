@@ -268,7 +268,8 @@ function reconcile(w: World, dirty: Dirty): void {
     if (!ds) {
       ds = createDistrictSim(c, t, {
         bearing: (n) => externalBearing(w, n),
-        centroids: (sim) => { refreshCells(w, sim, t.district.cellEps); return sim.cells?.centroids ?? null; },
+        // Lloyd only needs to know roughly where a cell's middle is: a coarser epsilon than containment
+        centroids: (sim) => { refreshCells(w, sim, Math.max(t.district.cellEps, t.radiusEpsRel * sim.containR)); return sim.cells?.centroids ?? null; },
       });
       w.districtSims.set(c, ds);
     }

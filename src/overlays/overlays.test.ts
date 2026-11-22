@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { config } from '../config';
 import { createModelStore, edgeId, type Layer, type StructureTables } from '../model';
 import { tablesToOps } from '../testing/synthetic';
-import { LAYER_DEFS, OVERLAYS, RECENCY_OLDER, buildAdjacency, computeReach, legendFor, overlayView, ownershipShare, type OverlayId, type OwnershipExtra } from './index';
+import { LAYER_DEFS, OVERLAYS, OVERLAY_RAMP, RECENCY_OLDER, buildAdjacency, computeReach, legendFor, overlayView, ownershipShare, type OverlayId, type OwnershipExtra } from './index';
 
 /** Units a..f in one district with the given dependency edges (src depends on dst). */
 function model(ids: string[], edges: [string, string][]) {
@@ -95,7 +95,7 @@ describe('overlayView', () => {
     expect(OVERLAYS.map((o) => o.id)).toEqual(config.overlays.enabled);
   });
 
-  it('recency is log-scaled age: newer is brighter, "older than the window" is the faded end, unknown stays NaN', () => {
+  it('recency falls off fast: newer is brighter, "older than the window" is the faded end, unknown stays NaN', () => {
     const values = [NOW - DAY, NOW - 30 * DAY, RECENCY_OLDER, NaN];
     const view = overlayView('recency', { replica, mode: 'dark', layer: layerOf('recency', values), now: NOW });
     const [a, b, c, d] = ['a', 'b', 'c', 'd'].map((id) => at(view.values, id));
@@ -106,10 +106,18 @@ describe('overlayView', () => {
     expect(d).toBeNaN();
     expect(view.domain).toEqual([0, 1]);
     expect(view.status).toBe('partial');
-    // log scale: the step from a day to a month is far more than 29/30 of the way down
-    const year = overlayView('recency', { replica, mode: 'dark', layer: layerOf('recency', [NOW - DAY, NOW - 30 * DAY, NOW - 365 * DAY, NaN]), now: NOW });
-    expect(at(year.values, 'b')).toBeLessThan(0.6);
-    expect(at(year.values, 'b')).toBeGreaterThan(0.2);
+    // steep: a file one half-life old is at half brightness, and one many half-lives old is all but faded
+    const half = OVERLAY_RAMP.recencyHalfLifeSeconds;
+    const steep = overlayView('recency', { replica, mode: 'dark', layer: layerOf('recency', [NOW, NOW - half, NOW - 8 * half, NaN]), now: NOW });
+    expect(at(steep.values, 'a')).toBeCloseTo(1, 5);
+    expect(at(steep.values, 'b')).toBeCloseTo(0.5, 5);
+    expect(at(steep.values, 'c')).toBeLessThan(0.01);
+    expect(steep.labels.high).toBe('Now');
+    // a dormant repo is measured from its latest change, and the legend says so
+    const dormant = overlayView('recency', { replica, mode: 'dark', layer: layerOf('recency', [NOW - 400 * DAY, NOW - 400 * DAY - half, NaN, NaN]), now: NOW });
+    expect(at(dormant.values, 'a')).toBeCloseTo(1, 5);
+    expect(at(dormant.values, 'b')).toBeCloseTo(0.5, 5);
+    expect(dormant.labels.high).toMatch(/^Latest change, /);
   });
 
   it('ownership shows the chosen contributor, the top one by default', () => {

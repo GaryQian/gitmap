@@ -17,6 +17,8 @@ export const EDGE_LOCAL = {
     reselectMove: 0.12,
     reselectZoom: 1.12,
   },
+  /** The ambient file edges never exceed this many per file in the districts in view: a small set, not a canopy. */
+  ambientPerUnit: 0.4,
   /** Most district↔district ribbons drawn at once, strongest first. */
   districtRibbons: 400,
   /** Each quality step-down (ctx.counters.quality) multiplies the edge caps by this. */
@@ -32,8 +34,13 @@ export const EDGE_LOCAL = {
   lowConfidence: 0.35,
   /** Seconds over which a newly chosen edge fades in, and a level cross-fades after a model change. */
   fadeIn: 0.45,
-  /** Ambient levels drop to this while something is hovered or selected, so its edges read. */
-  focusDim: 0.45,
+  /** Ambient levels drop to this while something is selected (0: hidden) or hovered, so its edges read. */
+  focusDim: { selected: 0, hovered: 0.65 },
+  /** Ambient edges and ribbons rest this many times longer between pulses than focus edges, so they stay calm. */
+  ambientRestScale: 3.5,
+  /** A sphere with more connections than `max` takes them in turn: one pulse leaves every `seconds` / `max`
+   *  seconds (longer on ambient levels), so about `max` are in flight around it at once. */
+  hubPulses: { max: 6, seconds: 1.4 },
   /** Seconds of flash on the target as a focus pulse arrives, and its size in target radii. */
   flashSeconds: 0.32,
   flashRadii: 2.4,

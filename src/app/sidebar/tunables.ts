@@ -15,5 +15,5 @@ export const SIDEBAR_LOCAL = {
   /** A NUL byte this early means the file is not text. */
   binarySniffBytes: 8 * 1024,
   /** localStorage key for the saved width and the markdown view. */
-  storageKey: 'gitmap.sidebar',
+  storageKey: 'starmap.sidebar',
 } as const;

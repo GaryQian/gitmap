@@ -119,7 +119,7 @@ const STORE = 'repos';
 export interface IndexedDbRegistry extends RepoRegistry { close(): void }
 
 /** The registry in IndexedDB. The database is opened on first use. */
-export function indexedDbRegistry(dbName = 'gitmap-registry', now: () => number = Date.now): IndexedDbRegistry {
+export function indexedDbRegistry(dbName = 'starmap-registry', now: () => number = Date.now): IndexedDbRegistry {
   const db = lazyDb(dbName, 1, (d) => { d.createObjectStore(STORE, { keyPath: 'id' }); });
   const store = async (mode: IDBTransactionMode) => {
     const tx = (await db.open()).transaction(STORE, mode);

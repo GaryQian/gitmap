@@ -23,7 +23,7 @@ function Wisps() {
       created.setEmphasis(backgroundEmphasis);
     } catch (err) {
       // no shader yet, or no WebGL: the static dust underneath is the whole background
-      if (!isNotImplemented(err)) console.warn('gitmap: wisp background unavailable', err);
+      if (!isNotImplemented(err)) console.warn('starmap: wisp background unavailable', err);
       return;
     }
     api.current = created;

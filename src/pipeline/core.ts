@@ -1,6 +1,11 @@
 // The pipeline itself, free of any environment: manifest → fast pass → structure → settle → reveal
 // (PLAN.md §6.8). The browser coordinator worker and the Node scripts both run this with different
 // dependencies. Lead-owned.
+//
+// Beside the parse: the history walk starts with the manifest and fills its layers as it goes
+// (./history), a folder whose map was saved is shown from the snapshot instead of parsed (./persist),
+// and the Tests layer rides in the structure batch. What follows the reveal is in ./post.
+import { testsLayer } from '../analysis';
 import type { Config } from '../config';
 import type { ComputePool } from '../contracts/compute';
 import type { RepoAccess, RepoLocator } from '../contracts/git';
@@ -13,9 +18,13 @@ import { buildManifest, runFastPass, runSlowPass } from '../ingest';
 import { pluginById } from '../lang';
 import { diffStructure } from '../model';
 import type { LayoutSnapshot, RepoMeta, RepoModel } from '../model/types';
+import type { SnapshotWriter } from '../persist';
 import { hash32, now as defaultNow } from '../shared';
 import { syntheticMeta, syntheticTables } from '../testing/synthetic';
 import { createRevealGate, type GateClock, type RevealGate } from './gate';
+import { startHistory, type HistoryRun } from './history';
+import { findSavedMap, type PipelinePersistence } from './persist';
+import type { PipelineSearch } from './search';
 
 /** The part of physics the pipeline drives. In the browser these are messages to the main thread. */
 export interface PipelinePhysics {
@@ -37,6 +46,12 @@ export interface PipelineDeps {
   /** Fetch and decode a demo snapshot. */
   loadDemo?(baseUrl: string): Promise<RepoModel>;
   cache?: FactsCache;
+  /** Snapshots, registry and the history facts. Absent: nothing is saved and every visit parses. */
+  persist?: PipelinePersistence;
+  /** The path index behind Session.search; warmed after the reveal. */
+  search?: PipelineSearch;
+  /** False: do not walk git history (a benchmark of the parse alone). Default true. */
+  history?: boolean;
   now?: () => number;
   /** Clock for the reveal gate's escape hatch (tests inject a fake). */
   gateClock?: GateClock;
@@ -57,6 +72,14 @@ export interface PipelineState {
   analysis: AnalysisResult | null;
   structure: 'full' | 'imports-only';
   settle: SettleReport | null;
+  /** A folder was shown from its stored snapshot instead of being parsed (the return visit, PLAN.md §12). */
+  fromSnapshot: boolean;
+  /** Paths that differ between that snapshot and the folder; 0 after a parse. */
+  changedFiles: number;
+  /** The history walk and its layers; null when the source has no git history to walk. */
+  history: HistoryRun | null;
+  /** The debounced snapshot writer, once the map is revealed and there is storage to write to. */
+  saver: SnapshotWriter | null;
   /** Milliseconds per stage, for benchmarks. */
   timings: Record<string, number>;
 }
@@ -96,8 +119,12 @@ export async function analyzeAndApply(deps: PipelineDeps, state: PipelineState, 
   deps.store.propose([
     ...ops,
     { op: 'meta', value: { structure: result.structure, stats: result.stats, parsedAt: Date.now(), languages, ...opts.extraMeta } },
+    // The Tests overlay needs only paths and edges, so it arrives with the structure it describes (PLAN.md §3.1).
+    testsLayer(result.tables, deps.config),
   ]);
   state.analysis = result;
+  // The history layers hold one value per unit: hand them the units that exist now.
+  state.history?.refresh();
   return result;
 }
 
@@ -106,7 +133,8 @@ export async function runSource(source: RepoSource, deps: PipelineDeps): Promise
   const { config, store, pool, emit } = deps;
   const state: PipelineState = {
     source, repo: null, manifest: null, facts: [], syntax: [], syntaxComplete: false, slowPass: null, gate: null,
-    analysis: null, structure: 'imports-only', settle: null, timings: {},
+    analysis: null, structure: 'imports-only', settle: null, fromSnapshot: false, changedFiles: 0, history: null, saver: null,
+    timings: {},
   };
   let t0 = now();
   const lap = (name: string) => { const t = now(); state.timings[name] = t - t0; t0 = t; };
@@ -115,7 +143,11 @@ export async function runSource(source: RepoSource, deps: PipelineDeps): Promise
   if (source.kind === 'synthetic') {
     stage('structure', 'Finding structure');
     const tables = syntheticTables({ files: source.files, seed: source.seed });
-    store.propose([{ op: 'meta', value: syntheticMeta(`synthetic-${source.files}`, tables) }, ...diffStructure(store.replica, tables)]);
+    store.propose([
+      { op: 'meta', value: syntheticMeta(`synthetic-${source.files}`, tables) },
+      ...diffStructure(store.replica, tables),
+      testsLayer(tables, config),
+    ]);
     state.structure = 'full';
     lap('structure');
     stage('layout', 'Settling layout');
@@ -126,14 +158,11 @@ export async function runSource(source: RepoSource, deps: PipelineDeps): Promise
     return state;
   }
 
-  if (source.kind === 'snapshot' || source.kind === 'demo') {
-    stage('structure', 'Loading map');
-    let model: RepoModel;
-    if (source.kind === 'demo') {
-      if (!deps.loadDemo) throw new Error('Demo loading is not available here.');
-      model = await deps.loadDemo(source.baseUrl);
-    } else model = source.model;
+  /** A finished model, from a file, a demo or local storage: one full batch, its saved layout, the reveal. */
+  async function showModel(model: RepoModel): Promise<void> {
     store.load(model);
+    // Maps saved before the Tests overlay existed get it now; it needs nothing but the structure.
+    if (!store.replica.layers.has('tests')) store.propose([testsLayer(store.replica, config)]);
     state.structure = model.meta.structure;
     lap('load');
     stage('layout', 'Settling layout');
@@ -142,6 +171,16 @@ export async function runSource(source: RepoSource, deps: PipelineDeps): Promise
     lap('layout');
     stage('revealed', '');
     emit('reveal', { structure: state.structure });
+  }
+
+  if (source.kind === 'snapshot' || source.kind === 'demo') {
+    stage('structure', 'Loading map');
+    let model: RepoModel;
+    if (source.kind === 'demo') {
+      if (!deps.loadDemo) throw new Error('Demo loading is not available here.');
+      model = await deps.loadDemo(source.baseUrl);
+    } else model = source.model;
+    await showModel(model);
     return state;
   }
 
@@ -152,17 +191,50 @@ export async function runSource(source: RepoSource, deps: PipelineDeps): Promise
   const manifest = (state.manifest = await buildManifest(repo, config));
   if (manifest.entries.length === 0) throw new Error('No files to map were found in that folder.');
   emit('progress', { subsystem: 'manifest', done: 1, total: 1 });
+  const id = repoId(manifest.repoName, manifest.remoteUrl);
+  if (manifest.historyUnavailable) emit('notice', { kind: 'no-history', reason: manifest.historyUnavailable });
+  // History never waits for the parse and the parse never waits for it: the walk takes the workers
+  // the parse has no task for (PLAN.md §3.1) and holds its layers back until the map has units.
+  const walkHistory = (start: boolean) => {
+    if (deps.history === false || manifest.source !== 'git' || manifest.historyUnavailable) return;
+    state.history = startHistory({
+      config, pool, store, emit, persist: deps.persist, repoId: id, start,
+      paths: manifest.entries.map((e) => e.path),
+      onLayersSaved: () => state.saver?.schedule(),
+    });
+  };
+
+  // The return visit (PLAN.md §12): a folder whose map is in local storage is shown as it was saved,
+  // untouched, and anything that changed since is only counted.
+  const saved = source.fresh ? null : await findSavedMap(deps.persist, manifest, id, config);
+  if (saved) {
+    lap('manifest');
+    state.fromSnapshot = true;
+    state.changedFiles = saved.changed;
+    stage('structure', 'Loading map');
+    await showModel(saved.model);
+    if (saved.changed > 0) emit('notice', { kind: 'files-changed', count: saved.changed });
+    // The saved layers already cover this head: walk only when there are newer commits to add.
+    const meta = saved.model.meta;
+    walkHistory(!meta.history || meta.headOid !== manifest.headOid);
+    state.history?.refresh();
+    return state;
+  }
+
   store.propose([{
     op: 'meta',
     value: {
-      id: repoId(manifest.repoName, manifest.remoteUrl), name: manifest.repoName, remoteUrl: manifest.remoteUrl,
+      id, name: manifest.repoName, remoteUrl: manifest.remoteUrl,
       source: manifest.source, headOid: manifest.headOid, indexChecksum: manifest.indexChecksum,
       parserVersion: config.parser.version, parsedAt: Date.now(), structure: 'imports-only',
       stats: { files: manifest.entries.length, units: 0, edges: 0, loc: 0 },
     },
   }]);
-  if (manifest.historyUnavailable) emit('notice', { kind: 'no-history', reason: manifest.historyUnavailable });
+  walkHistory(true);
   lap('manifest');
+
+  // `fresh` also means "do not trust what was cached": the facts are read from the files again.
+  const cache = source.fresh ? undefined : deps.cache;
 
   const gate = (state.gate = createRevealGate({ maxWaitMs: config.reveal.maxWaitSeconds * 1000, clock: deps.gateClock }));
   gate.onRefinedReady(() => emit('notice', { kind: 'refined-ready' }));
@@ -172,7 +244,7 @@ export async function runSource(source: RepoSource, deps: PipelineDeps): Promise
   stage('reading', `Reading files 0 / ${fmt(total)}`, 0, total);
   let lastEmit = 0;
   state.facts = await runFastPass(manifest, pool, config, {
-    cache: deps.cache,
+    cache,
     onProgress(done, all) {
       const t = now();
       if (t - lastEmit < 100 && done < all) return;
@@ -189,7 +261,7 @@ export async function runSource(source: RepoSource, deps: PipelineDeps): Promise
   stage('structure', 'Finding structure');
   let lastSlow = 0;
   state.slowPass = runSlowPass(manifest, pool, config, {
-    cache: deps.cache,
+    cache,
     onBatch(batch) { if (!state.syntaxComplete) for (const f of batch) state.syntax.push(f); },
     onProgress(done, all) {
       const t = now();

@@ -133,7 +133,7 @@ function dominantPrefixes(paths: readonly string[]): [string, number][] {
   return topShares(deepest, total, LOCAL.structure.prefixes, 0);
 }
 
-function groupStats(units: readonly UnitInfo[]): GroupStats {
+function groupStats(units: readonly UnitInfo[], withPrefixes = true): GroupStats {
   let files = 0, loc = 0, tests = 0, hidden = 0;
   const byLoc = new Map<string, number>(), byFiles = new Map<string, number>();
   const paths: string[] = [];
@@ -145,13 +145,13 @@ function groupStats(units: readonly UnitInfo[]): GroupStats {
     else if (u.flags) hidden += n;
     byLoc.set(u.lang, (byLoc.get(u.lang) ?? 0) + u.loc);
     byFiles.set(u.lang, (byFiles.get(u.lang) ?? 0) + n);
-    paths.push(u.id);
+    if (withPrefixes) paths.push(u.id);
   }
   const { langs, langMinShare } = LOCAL.structure;
   return {
     files, loc, tests, hidden,
     langs: loc > 0 ? topShares(byLoc, loc, langs, langMinShare) : topShares(byFiles, files, langs, langMinShare),
-    prefixes: dominantPrefixes(paths),
+    prefixes: withPrefixes ? dominantPrefixes(paths) : [],
   };
 }
 
@@ -238,7 +238,7 @@ export function buildView(replica: ModelReplica, rules: PathRules): View {
     c.units = members.length;
     Object.assign(c, groupStats(members));
   }
-  const totals = { ...groupStats(units), prefixes: [], edges: edgeT.count, unplaced };
+  const totals = { ...groupStats(units, false), edges: edgeT.count, unplaced };
 
   const C = cities.length, D = districts.length;
   const cityAgg = new Map<number, { milli: number; n: number }>();

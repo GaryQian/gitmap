@@ -7,21 +7,22 @@ import { fixtureExpected, fixtureFiles } from '../../testing/fixture';
 import { analyze, LINK_CONFIDENCE, pairHeaders } from '../index';
 
 // A fake language: an import's spec is the target path (several, separated by ',', for a package
-// import); files of one `decls.package` share a scope.
+// import); files of one `decls.package` share a scope, and a file reads the scopes in `decls.sees`.
 const fake: LanguagePlugin = {
   id: 'fake', name: 'Fake', extensions: ['fk'], color: '#888888',
   scan: () => ({ imports: [] }),
   createResolver: () => ({
     resolve: (_file, imp) => imp.spec.split(',').map((path) => ({ path, confidence: 1 })),
     scopes: (file) => file.decls?.package ?? [],
+    sees: (file) => file.decls?.sees ?? [],
   }),
 };
 
-function file(path: string, imports: (string | ImportSpec)[] = [], pkg?: string): FileFacts {
+function file(path: string, imports: (string | ImportSpec)[] = [], pkg?: string, sees?: string[]): FileFacts {
   return {
     path, oid: `oid-${path}`, bytes: 300, loc: 10, lang: 'fake',
     imports: imports.map((i) => (typeof i === 'string' ? { spec: i, kind: 'import' } : i)),
-    ...(pkg ? { decls: { package: [pkg] } } : {}),
+    ...(pkg ? { decls: { package: [pkg], ...(sees ? { sees } : {}) } } : {}),
   };
 }
 const def = (name: string, kind: SymbolKind = 'function', extra: Partial<SymbolDef> = {}): SymbolDef => ({ name, kind, line: 1, ...extra });
@@ -86,6 +87,21 @@ describe('symbol linking', () => {
     );
     expect(row('p/a.fk', 'p/b.fk')).toEqual({ kind: 'reference', weight: Math.log(1 + 2), confidence: LINK_CONFIDENCE.scope, symbols: 'Shared:2' });
     expect(row('p/a.fk', 'q/c.fk')).toBeNull();
+  });
+
+  it('links into a scope the file can read (Resolver.sees), one way only', () => {
+    const { row } = run(
+      [file('app/a.fk', [], 'app', ['core']), file('app/b.fk', [], 'app'), file('core/c.fk', [], 'core'), file('other/d.fk', [], 'other')],
+      [
+        syn('app/a.fk', [def('AppThing', 'class')], [ref('CoreThing', 'type')]),
+        syn('app/b.fk', [def('AppThing', 'class')]),
+        syn('core/c.fk', [def('CoreThing', 'class')], [ref('AppThing', 'type')]),
+        syn('other/d.fk', [def('CoreThing', 'class'), def('AppThing', 'class')]),
+      ],
+    );
+    expect(row('app/a.fk', 'core/c.fk')).toEqual({ kind: 'reference', weight: Math.log(2), confidence: LINK_CONFIDENCE.import, symbols: 'CoreThing:1' });
+    expect(row('core/c.fk', 'app/a.fk')).toBeNull();
+    expect(row('core/c.fk', 'app/b.fk')).toBeNull();
   });
 
   it('links a globally unique name with lower confidence and drops an ambiguous one', () => {

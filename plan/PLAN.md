@@ -1,4 +1,4 @@
-# gitmap — architecture plan
+# starmap — architecture plan
 
 A browser-based 3D "map of cities" for a codebase. Files are spheres resting on a plane, Louvain communities are cities and districts, d3-force lays them out, and overlays and AI annotations sit on top. Everything heavy runs in the browser, off the main thread.
 
@@ -128,7 +128,7 @@ The folders actually used are finer-grained than this table, so that each work p
 **TypeScript first.** The git index reader, the per-language import scanners and the git pack walker start in TypeScript, each behind an interface that a WASM implementation can replace. M0 measured all three and found no case for Rust or WASM at S and M (§15). tree-sitter is WASM regardless. This avoids a Rust toolchain in the build unless the numbers demand it.
 
 ```
-gitmap/
+starmap/
   config.json            .env.example            vercel.json
   api/ai/                # Vercel functions
   src/{model,ingest,analysis,history,physics,render,ai,persist,app,config}/
@@ -447,6 +447,16 @@ Procedure: take the coarsest dendrogram level with at least K communities and me
 
 **Districts.** The same curve applied to each city's own file count, minimum 5 files per district: about 5 districts in a 125-file city, about 8 in an 830-file city. Taken from the next finer dendrogram level restricted to the city; if that level is degenerate, Louvain is re-run on the city's subgraph.
 
+**Balance: a bias against mega-districts and megacities, with no size cap** (decided 2026-11-21, after tensorflow came out as four giant clusters and a few small ones). Louvain is content to return one community of thousands of files beside a hundred small ones, and merging each small one into its most-connected neighbour feeds the giant. Nothing is capped: a block that really is one tightly bound mass stays whole. Instead the algorithm counts and merges differently, all scaled by `clustering.sizeBias` (1 = on, 0 = plain):
+
+- **A second look at giants.** A community larger than an even share of the wanted count is run through Louvain on its own subgraph, where the resolution limit no longer hides its structure. It is divided only if the division is real: its modularity inside the community is at least `clustering.splitModularity` (0.3).
+- **Pieces that are not separate are rejoined.** Louvain always returns some division, even of a structureless block. Two communities are joined when the weight between them is at least `clustering.mergeCoupling` (0.4) times the geometric mean of the weights inside them.
+- **Effective count.** The wanted number of cities or districts is compared with `(Σsize)² / Σsize²`, not the plain count: twelve equal communities count as 12; one holding 80% of the files plus eleven small ones counts as about 1.5. Merging stops when the effective count is down to the wanted number, so small communities are left standing beside a large one, and the plain count can end above the curve (up to `maxCities` for cities).
+- **Size-relative merging.** A community joins the neighbour it is most connected to for that neighbour's size (weight ÷ size), so a giant needs proportionally more connections to be chosen.
+- **Directories with no code in them** (thousands of data or fixture files in one folder) used to be a star around the directory and therefore one indivisible district. Their files are now tied in √n runs of path-order neighbours, which divide like any other structure.
+
+Measured on tensorflow (27,298 files): the largest district went from 4,451 files to 989 (median 187, 126 districts), cities from 752–7,987 files to 1,478–4,201 (13 cities), in 1.2–1.6 s. On react the largest city went from 3,282 files to 1,311; the count rose from 11 cities to 20.
+
 **Names.** Most distinctive shared path segment (TF-IDF over path tokens). An AI summary may later override the label through an annotation.
 
 ### 6.7 Importance
@@ -701,7 +711,7 @@ All overlays are layers in the model. The history-based ones are computed on the
 
 | Overlay | Colour | Source | Notes |
 |---|---|---|---|
-| **Recency** (specified) | bright green → faded grey | history | Log-scaled age |
+| **Recency** (specified) | bright green → faded grey | history | Falls off fast, so only what changed recently reads as green: brightness halves every two weeks of age (exponential decay) and is all but gone after about three months. Age is measured from the latest change on the map, so a dormant repo or a demo still shows its most recent burst of work. |
 | **Ownership** (specified) | bright purple → grey | history | Commit share per author. Contributor picker with fuzzy search, sorted by commits. |
 | **Dependency reach** (specified) | hop-count ramp | unit graph | BFS from the selection on demand; toggle "depends on" vs "depended on by" |
 | **Knowledge risk** | amber → grey | history | The top author's share of commits to the file. Brightest where one person made nearly all of them. Files with fewer than `overlays.knowledgeRisk.minCommits` commits stay neutral, since a share of two commits means little. |
@@ -725,7 +735,7 @@ First release: Recency, Ownership, Reach, Knowledge risk, Tests. Removed from th
 
 Pipeline. **It starts only when the parse has finished** (both passes complete) and consent has been given. If the escape hatch fired, AI waits for the slow pass and never runs on a provisional structure. It does not wait for Apply: its output attaches to files, so it is valid whichever clustering is on screen.
 
-1. **Map:** one bulk-model call per city (parallel) → a short neutral summary of what that city contains.
+1. **Map:** one bulk-model call per city (parallel) → a short neutral summary of what that city does: its job in the system first, then the main things inside it that do that job (about 30 words, plus a name for the job of at most three words). The summary is shown to the user when the pointer rests on the city's pill (§17.6), and it is also context for the reduce step.
 2. **Reduce, two calls in parallel:** POIs and Tour, both given the repo digest plus the city summaries. The shared digest prefix is prompt-cached.
 3. **On demand:** POI detail buttons ("Role in the system", "Who uses this", "Key entry points", "Walk me through it") send a focused context: that file's skeleton or content plus its neighbours' signatures.
 
@@ -781,7 +791,7 @@ interface Tour { id; steps: { parent: UnitRef; frame: 'file' | 'district' | 'cit
 - **Snapshot:** the gzipped model in the Origin Private File System, one file per repo, written at the reveal and after each later stage (debounced). The layout cache is included.
 - **Registry:** IndexedDB records `{ id, name, remoteUrl, directoryHandle, headOid, indexChecksum, schema, lastOpened }`. `name` and `remoteUrl` are what the landing page's repo pills show (§17.7). `navigator.storage.persist()` is requested.
 - **Return visit:** the snapshot loads and renders immediately, untouched. Folder permission is requested in the background; if `indexChecksum` differs, the top bar offers "N files changed · Update" (§6.8).
-- **Export / import:** the same `.gitmap.json.gz` file, downloaded or dropped onto the landing page.
+- **Export / import:** the same `.starmap.json.gz` file, downloaded or dropped onto the landing page.
 - **Demo mode (M3):** two pre-parsed, permissively licensed open-source repos, one around 200 files and one around 5,000, each shipped as a snapshot plus a content pack of the actual files (§12.1). Exact repos chosen at M3.
 - Bumping `schema` or `parserVersion` invalidates snapshots cleanly.
 
@@ -791,7 +801,7 @@ A demo is two static files per repo, built ahead of time and served from the app
 
 | File | Contents | Loaded |
 |---|---|---|
-| `snapshot.gitmap.json.gz` | The parsed model: files, edges, cities, districts, settled layout, overlay layers, pre-generated AI annotations | When the demo pill is clicked |
+| `snapshot.starmap.json.gz` | The parsed model: files, edges, cities, districts, settled layout, overlay layers, pre-generated AI annotations | When the demo pill is clicked |
 | `content.zip` | The actual text of every file on the map, at the exact commit that was parsed | One file at a time, when a file is opened |
 
 **What is in the content pack**
@@ -847,7 +857,7 @@ One file, typed and validated at build, imported by client and server. Secrets a
 
 ```jsonc
 {
-  "app":        { "title": "Gitmap" },
+  "app":        { "title": "Starmap" },
   "settings":   { "appearance": "dark", "particles": true },
   "theme":      { "fonts": { "ui": "Jost", "code": "Commit Mono" },
                   "dark":  { "void": "#1C1C1C", "dustCool": "#4B5158", "dustWarm": "#6B5A4C", "text": "#EDEFF2", "halo": "#9FD8FF", "warm": "#FFD9A0", "sidebar": "#141414" },
@@ -864,6 +874,7 @@ One file, typed and validated at build, imported by client and server. Secrets a
   "history":    { "maxCommits": 50000, "timeBudgetSeconds": 20, "merges": "skip", "pageBytes": 262144, "objectCacheBytes": 33554432 },
   "clustering": { "citiesPerDecade": 3.5, "cityOffset": -2.2, "minCities": 1, "maxCities": 20,
                   "districtsPerDecade": 3.5, "districtOffset": -2.2, "minDistrictSize": 5,
+                  "sizeBias": 1, "splitModularity": 0.3, "mergeCoupling": 0.4,
                   "resolution": 1.0, "seed": 1, "directoryAffinity": 0.1, "hubDamping": true },
   "physics":    { "sliceMs": 8, "reheat": 0.3, "velocityDecay": 0.6, "settleTicks": 150,
                   "city":     { "gap": 40, "linkStrength": 0.5, "charge": -60, "gravity": 0.02 },
@@ -971,7 +982,7 @@ The build order, work packages and test policy for M1–M6 are in [IMPLEMENTATIO
 | When the map appears | At the stable point (both passes, clustered, settled), or after 30 s with imports plus partial call edges. Waiting screen is the wisp background with a progress pill, no grid. |
 | Visual language | "Cosmic void": dust-wisp background, light and dark modes, Jost throughout, translucent floating pills, opaque sidebar (§17). Dark background is neutral gray; no purple in background or chrome, purple allowed inside the visualization. |
 | Landing page | Title, one "Choose a folder" button, and pills for saved and demo repos showing name and origin remote. Nothing else. |
-| App title | "Gitmap" for now, set by `app.title` in config. |
+| App title | "Starmap" for now, set by `app.title` in config. |
 | Settings | Gear pill in the top row: appearance (dark by default) and particles to start, more to be defined (§17.9). |
 | Reset view | A pill beside the bottom-left controls key returns the camera to the default framing and cities and districts to their settled positions. Selection, overlay and filters are kept. |
 | After the reveal | Nothing moves unless asked: "Refined structure ready · Apply" and "N files changed · Update". |
@@ -1073,7 +1084,7 @@ What was called the "top bar" elsewhere in this plan is a top row of separate fl
 | Bottom left | Controls key: one tiny pill that expands on hover. Beside it, a "Reset view" pill (§9). |
 | Bottom centre | "Tour the repo" pill; tour steps are a translucent card in the same place. |
 | Bottom right | File-type legend: a translucent card holding the type rows and the minimum-lines slider. |
-| In scene | City pills (name and file count), smaller district pills, point-of-interest pills; tooltips and the detail card are translucent cards anchored to their sphere. |
+| In scene | City pills (name and file count), smaller district pills, point-of-interest pills; tooltips and the detail card are translucent cards anchored to their sphere. Resting the pointer on a city pill (or focusing it) shows the AI summary of what that city does in a small card under the pill; with no summary there is no card. |
 | Right edge | Sidebar reader: opaque, resizable, hidden until a file is opened. |
 
 ### 17.7 Landing page
@@ -1083,12 +1094,12 @@ What was called the "top bar" elsewhere in this plan is a top row of separate fl
 │                                                        │
 │                  (wisps, full bleed)                   │
 │                                                        │
-│                        Gitmap                          │
+│                        Starmap                          │
 │                                                        │
 │                  (  Choose a folder  )                 │
 │                                                        │
 │      ( react  github.com/facebook/react )              │
-│      ( gitmap  local folder )   ( demo-small  Demo )   │
+│      ( starmap  local folder )   ( demo-small  Demo )   │
 │                                                        │
 └────────────────────────────────────────────────────────┘
 ```
@@ -1096,7 +1107,7 @@ What was called the "top bar" elsewhere in this plan is a top row of separate fl
 - Centred. The title, one button, and below it the repo pills. Nothing else: no navigation, tagline, footer or settings.
 - **The whole page is the drop target.** Dragging a folder over it brightens the wisps slightly; there is no drop-zone box.
 - **Repo pills** list saved repos by most recently opened, then demos. Each shows the repo name and its location, and clicking one opens it.
-- **The title** comes from `app.title` in `config.json` (default "Gitmap") and is also the document title and the title pill in the map view.
+- **The title** comes from `app.title` in `config.json` (default "Starmap") and is also the document title and the title pill in the map view.
 - Messages appear only when needed, as one quiet line under the button: an unsupported browser, or a folder that could not be read.
 
 **A constraint on "path".** Browsers do not reveal the absolute path of a folder the user picks; the page receives only the folder's name. The pill therefore shows the origin remote read from `.git/config` (for example `github.com/facebook/react`), which also tells two same-named clones apart. A repo with no remote shows "local folder", and a demo shows "Demo".

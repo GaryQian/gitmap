@@ -122,7 +122,7 @@ export function memoryFactsCache(opts?: FactsCacheOptions): PersistentFactsCache
  * queued back to back, and a write is one relaxed-durability transaction: losing the last few
  * entries in a crash only means parsing those files again.
  */
-export function indexedDbFactsBackend(dbName = 'gitmap-facts'): FactsBackend {
+export function indexedDbFactsBackend(dbName = 'starmap-facts'): FactsBackend {
   const db = lazyDb(dbName, 1, (d) => {
     for (const table of TABLES) d.createObjectStore(table).createIndex('seen', 'seen');
   });

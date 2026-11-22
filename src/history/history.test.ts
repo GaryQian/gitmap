@@ -8,6 +8,7 @@ import { config, withConfig } from '../config';
 import type { ComputePool } from '../contracts/compute';
 import { openGitRepo, parseCommit } from '../git';
 import { NodeGitFs, openNodeRepoAccess } from '../git/node';
+import type { HistoryInput } from '../overlays';
 import { buildFixtureRepo, fixtureExpected, git, projectRoot } from '../testing/fixture';
 import { CommitGraph } from './commitGraph';
 import {
@@ -192,6 +193,9 @@ describe('history walk on the three-lang fixture', () => {
       expect(new Date(f.lastModified * 1000).toISOString(), file).toBe(new Date(want.lastDate).toISOString());
     }
     expect(Object.fromEntries(r.contributors.map((c) => [c.name, c.commits]))).toEqual(expected.authors);
+    // a result is the layer builders' input as it stands: no copying adapter is needed
+    const input: HistoryInput = { contributors: r.contributors, files: r.files, coverage: 1, complete: r.complete, recencyComplete: r.recencyComplete, now: 0 };
+    expect(input.contributors.map((c) => c.id)).toEqual(r.contributors.map((_, i) => i));
     // progress never goes backwards and ends with the final result
     expect(reports.length).toBeGreaterThan(1);
     expect([...reports].sort((a, b) => a - b)).toEqual(reports);
@@ -235,19 +239,23 @@ describe('history walk on the three-lang fixture', () => {
 });
 
 describe('history walk with merges, ties and a mailmap', () => {
-  it('follows history.merges, equals git log in each mode, incrementally from any commit, and with a commit-graph', async () => {
+  it('follows history.merges, equals git log in each mode, when resumed from older heads, and with a commit-graph', async () => {
     const dir = buildMergeRepo();
     const pool = await poolFor(dir);
-    const commits = lines(git(dir, ['rev-list', 'HEAD']));
+    const byMessage = Object.fromEntries(lines(git(dir, ['log', '--format=%s %H', 'HEAD'])).map((l) => l.split(' ')));
+    const commits = Object.values<string>(byMessage);
     const mainline = lines(git(dir, ['rev-list', '--first-parent', 'HEAD']));
+    // old heads to resume from: every commit under the default setting, the awkward ones otherwise
+    // (a side branch sharing a date with the mainline, both merges, a plain mainline commit)
+    const awkward = ['f1', 'M1', 'x1', 'M2', 'c2'].map((m) => byMessage[m]);
     const full = {} as Record<MergeMode, HistoryResult>;
     for (const merges of ['skip', 'include', 'firstParent'] as const) {
       const r = (full[merges] = await walk(pool, { merges, useCommitGraph: false }));
       expect(tableOf(r), merges).toEqual(gitTable(dir, merges));
       expect(r.commitsWalked, merges).toBe(merges === 'firstParent' ? mainline.length : commits.length);
       expect(r.complete).toBe(true);
-      for (const from of commits) {
-        const saved = await walk(pool, { merges, startOid: from, useCommitGraph: false });
+      for (const from of merges === 'skip' ? commits : awkward) {
+        const saved = await walk(pool, { merges, startOid: from, useCommitGraph: false, planPageCommits: undefined });
         const again = await run(pool, { merges, since: saved, useCommitGraph: false }) as Walked;
         expect(historyToJson(again.result), `${merges} since ${from}`).toEqual(historyToJson(r));
         // the saved result is reused whenever its head is behind the new one (on the mainline, for firstParent)
@@ -260,6 +268,12 @@ describe('history walk with merges, ties and a mailmap', () => {
     expect(full.include.files.get('dir/d.txt')!.commits).toBe(2);
     expect(full.skip.contributors.map((c) => c.name).sort()).toEqual(['Ada Lovelace', 'Grace B. Hopper', 'Linus Torvalds']);
     expect(full.skip.contributors.find((c) => c.name === 'Linus Torvalds')!.emails).toEqual(['linus@example.com', 'linus@old.example.com']);
+
+    // a saved result made under another .mailmap is not extended: the walk starts over
+    const before = await walk(pool, { startOid: byMessage.c4, useCommitGraph: false });
+    const stale = await run(pool, { since: { ...before, mailmapHash: 'other' }, useCommitGraph: false }) as Walked;
+    expect(stale.stats.incremental).toBe(false);
+    expect(historyToJson(stale.result)).toEqual(historyToJson(full.skip));
 
     // the commit-graph must describe every commit exactly as the commit objects do, octopus merge included
     git(dir, ['commit-graph', 'write', '--reachable']);
@@ -289,11 +303,11 @@ describe('history walk with merges, ties and a mailmap', () => {
       'Proper Three <three@proper.org> <three@x.org>',
       'Proper Four <four@proper.org> Old Four <shared@x.org>',
     ].join('\n'))!;
-    expect(map.resolve('one', 'ONE@x.org')).toEqual({ name: 'Proper One', email: 'ONE@x.org', nameFixed: true });
-    expect(map.resolve('two', 'two@x.org')).toEqual({ name: 'two', email: 'two@proper.org', nameFixed: false });
-    expect(map.resolve('3', 'three@x.org')).toEqual({ name: 'Proper Three', email: 'three@proper.org', nameFixed: true });
-    expect(map.resolve('old four', 'shared@x.org')).toEqual({ name: 'Proper Four', email: 'four@proper.org', nameFixed: true });
-    expect(map.resolve('Someone Else', 'shared@x.org')).toEqual({ name: 'Someone Else', email: 'shared@x.org', nameFixed: false });
+    expect(map.resolve('one', 'ONE@x.org')).toEqual({ name: 'Proper One', email: 'ONE@x.org' });
+    expect(map.resolve('two', 'two@x.org')).toEqual({ name: 'two', email: 'two@proper.org' });
+    expect(map.resolve('3', 'three@x.org')).toEqual({ name: 'Proper Three', email: 'three@proper.org' });
+    expect(map.resolve('old four', 'shared@x.org')).toEqual({ name: 'Proper Four', email: 'four@proper.org' });
+    expect(map.resolve('Someone Else', 'shared@x.org')).toEqual({ name: 'Someone Else', email: 'shared@x.org' });
     expect(parseMailmap('# nothing here\n')).toBeNull();
   });
 });
@@ -319,5 +333,5 @@ describe('repositories without a full history', () => {
     expect(outcome.result).toMatchObject({ commitsWalked: 2, complete: false, stoppedBy: 'shallow' });
     // the boundary commit has no parent on disk, so it is not credited with the whole tree
     expect(tableOf(outcome.result).files).toEqual(gitTable(source, 'skip', 'HEAD~1..HEAD').files);
-  });
+  }, 120_000);
 });

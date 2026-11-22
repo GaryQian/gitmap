@@ -10,8 +10,19 @@ interface Target { name: string | null; email: string | null }
 interface Entry { any: Target | null; byName: Map<string, Target> }
 
 export interface Mailmap {
-  /** The canonical identity of a commit author. `nameFixed` is true when the name came from the map. */
-  resolve(name: string, email: string): { name: string; email: string; nameFixed: boolean };
+  /** The canonical identity of a commit author. */
+  resolve(name: string, email: string): { name: string; email: string };
+}
+
+/**
+ * A short fingerprint of .mailmap text ('' for none). A saved result records it: facts gathered under
+ * another mailmap cannot be extended, because contributors would be keyed differently.
+ */
+export function mailmapHash(text: string | null | undefined): string {
+  if (!text) return '';
+  let h = 0x811c9dc5; // FNV-1a
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193);
+  return (h >>> 0).toString(16).padStart(8, '0');
 }
 
 const LINE = /^([^<]*)<([^>]*)>(?:([^<]*)<([^>]*)>)?/;
@@ -50,8 +61,7 @@ export function parseMailmap(text: string): Mailmap | null {
     resolve(name, email) {
       const entry = byEmail.get(email.toLowerCase());
       const t = entry ? entry.byName.get(name.toLowerCase()) ?? entry.any : null;
-      if (!t) return { name, email, nameFixed: false };
-      return { name: t.name ?? name, email: t.email ?? email, nameFixed: t.name !== null };
+      return t ? { name: t.name ?? name, email: t.email ?? email } : { name, email };
     },
   };
 }

@@ -71,7 +71,7 @@ let shared: Promise<SavedRepos> | null = null;
 /** The saved repos of this browser. Resolves to the empty default when there is no persistence to ask. */
 export function savedRepos(): Promise<SavedRepos> {
   shared ??= fromPersistence().catch((err) => {
-    console.warn('gitmap: saved repos are unavailable', err);
+    console.warn('starmap: saved repos are unavailable', err);
     return NO_SAVED_REPOS;
   });
   return shared;

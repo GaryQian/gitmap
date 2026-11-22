@@ -28,7 +28,7 @@ export interface PersistenceOptions {
   memory?: boolean;
   /** OPFS directory holding the snapshots. Default 'snapshots'. */
   snapshotDir?: string;
-  /** IndexedDB database names. Defaults 'gitmap-registry' and 'gitmap-facts'. */
+  /** IndexedDB database names. Defaults 'starmap-registry' and 'starmap-facts'. */
   registryDb?: string;
   factsDb?: string;
   /** Default: config.parser.version. */

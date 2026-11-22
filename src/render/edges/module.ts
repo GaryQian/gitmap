@@ -69,7 +69,11 @@ export function createEdges(): SceneModule {
   let novaSlot = -1, novaUntil = 0;
   let revealAt = Infinity, revealMix = 0;
   let focusDim = 1;
+  /** What the focus set holds: a selection dims the ambient levels more than a hover. */
+  let focusKind: 'none' | 'hovered' | 'selected' = 'none';
   let stamp = new Uint32Array(0), stampGen = 0;
+  /** Files per district slot. */
+  let districtUnits = new Int32Array(0);
   let districtColor: Float32Array = new Float32Array(0), cityColor: Float32Array = new Float32Array(0);
 
   const shared = {
@@ -88,6 +92,10 @@ export function createEdges(): SceneModule {
       uAlpha: { value: 0 }, uFadeIn: { value: focus ? EDGE_LOCAL.fadeIn * 0.4 : EDGE_LOCAL.fadeIn }, uGain: { value: focus ? 1.7 : 1 },
       uWidth: { value: new THREE.Vector4(width.world[0], width.world[1], width.px[0], width.px[1]) },
       uLift: { value: new THREE.Vector2(lift[0], lift[1]) },
+      // a selected sphere is drawn larger, so its edges start farther out
+      uTrim: { value: focus ? ctx.config.visual.selectedScale : 1 },
+      uRestScale: { value: focus ? 1 : EDGE_LOCAL.ambientRestScale },
+      uRR: { value: new THREE.Vector2(EDGE_LOCAL.hubPulses.max, EDGE_LOCAL.hubPulses.seconds) },
     };
     const defines: Record<string, number> = {};
     if (ribbon) defines.RIBBON = 1;
@@ -160,6 +168,10 @@ export function createEdges(): SceneModule {
     model = buildEdgeModel(ctx.replica, ctx.config.visual, ctx.state.minLines, ctx.state.typeFilter);
     districtColor = dominantColors(model.unitDistrict, model.districtCity.length);
     const districtCity = model.districtCity;
+    districtUnits = new Int32Array(districtCity.length);
+    for (const d of model.unitDistrict) if (d >= 0) districtUnits[d]++;
+    // slots may have been reassigned by a rebuild: ask the interaction module what is hovered now
+    hovered = ctx.service<{ hoveredSlot(): number }>('interaction')?.hoveredSlot() ?? hovered;
     const unitCity = model.unitDistrict.map((d) => (d < 0 ? -1 : districtCity[d]));
     cityColor = dominantColors(unitCity, ctx.replica.table('city').capacity);
     if (stamp.length < model.capacity) stamp = new Uint32Array(Math.max(model.capacity, stamp.length * 2));
@@ -220,8 +232,24 @@ export function createEdges(): SceneModule {
     const m = model!;
     const next = new Map<number, number>();
     level.buffer.ensure(chosen.length);
+    // connections per sphere in this set: a busy sphere takes its connections in turn (see hubPulses)
+    const degree = new Map<number, number>();
+    const bump = (u: number) => degree.set(u, (degree.get(u) ?? 0) + 1);
+    for (const e of chosen) { bump(m.src[e]); bump(m.dst[e]); }
+    const turn = new Map<number, number>();
     chosen.forEach((e, i) => {
       const s = m.src[e], t = m.dst[e];
+      // the hub is a focused end, else the busier end
+      const ds = degree.get(s)!, dt = degree.get(t)!;
+      const sHub = focusUnits && focusUnits.has(s) !== focusUnits.has(t) ? focusUnits.has(s) : ds >= dt;
+      const hub = sHub ? s : t, n = sHub ? ds : dt;
+      let rrTurn = 0, rrSize = 0;
+      if (n > EDGE_LOCAL.hubPulses.max) {
+        const k = turn.get(hub) ?? 0;
+        turn.set(hub, k + 1);
+        // each hub starts its round at its own point in time, so busy spheres do not fire in step
+        rrTurn = k + phaseOf(hub) * n; rrSize = n;
+      }
       let hideAt = m.hideAt[e], nova = 0;
       if (focusUnits) {
         // a selected sphere is exempt from the size slider, so only the other end can hide the edge
@@ -229,7 +257,7 @@ export function createEdges(): SceneModule {
         nova = s === novaSlot ? 1 : t === novaSlot ? -1 : 0;
       }
       level.buffer.set(i, {
-        e0: s, e1: t, e2: 0, e3: 0,
+        e0: s, e1: t, e2: rrTurn, e3: rrSize,
         strength: strength01(m.eff[e], m.typical), brightness: m.bright[e], phase: phaseOf(e), share: 1,
         birth: birthOf(level, next, e, time), hideAt, nova,
       });
@@ -271,9 +299,11 @@ export function createEdges(): SceneModule {
     // near: file edges touching a district in view, strongest first
     let fileWanted: number[] = [];
     if (mix.file > 0) {
-      const cap = Math.max(0, Math.floor(ctx.config.render.ambientEdges * q));
       const inViewDistricts: number[] = [];
-      for (let d = 0; d < m.districtCity.length; d++) if (m.districtCity[d] >= 0 && districtIn(d)) inViewDistricts.push(d);
+      let unitsInView = 0;
+      for (let d = 0; d < m.districtCity.length; d++) if (m.districtCity[d] >= 0 && districtIn(d)) { inViewDistricts.push(d); unitsInView += districtUnits[d] ?? 0; }
+      // a small ambient set: capped overall, and thinned to a few per file when only a few districts are in view
+      const cap = Math.max(0, Math.floor(Math.min(ctx.config.render.ambientEdges, Math.ceil(unitsInView * EDGE_LOCAL.ambientPerUnit)) * q));
       // each district offers its strongest few; with many in view, no single one may flood the set
       const perDistrict = Math.max(16, Math.ceil((cap * 3) / Math.max(1, inViewDistricts.length)));
       const candidates: number[] = [];
@@ -311,8 +341,10 @@ export function createEdges(): SceneModule {
     const focus = levels.focus;
     const unitsInFocus = new Set<number>();
     for (const ref of ctx.state.selection) { const s = unitSlotOf(ref, ctx.replica); if (s >= 0) unitsInFocus.add(s); }
+    const selected = unitsInFocus.size > 0;
     if (hovered >= 0) unitsInFocus.add(hovered);
     if (novaSlot >= 0) unitsInFocus.add(novaSlot);
+    focusKind = selected ? 'selected' : unitsInFocus.size > 0 ? 'hovered' : 'none';
     const candidates: number[] = [];
     if (unitsInFocus.size) {
       if (++stampGen >= 0xffffffff) { stamp.fill(0); stampGen = 1; }
@@ -422,7 +454,8 @@ export function createEdges(): SceneModule {
 
     // cross-fade: each level eases toward its share of the mix; ambient levels step back under a focus
     const hasFocus = levels.focus.buffer.count > 0;
-    const dimTarget = hasFocus ? EDGE_LOCAL.focusDim : 1;
+    // a selection hides the ambient levels outright, even when the selected sphere has no edges
+    const dimTarget = focusKind === 'selected' ? EDGE_LOCAL.focusDim.selected : hasFocus && focusKind === 'hovered' ? EDGE_LOCAL.focusDim.hovered : 1;
     if (focusDim !== dimTarget) { focusDim = dimTarget > focusDim ? Math.min(dimTarget, focusDim + step) : Math.max(dimTarget, focusDim - step); ctx.invalidate(); }
     levels.city.target = mix.city; levels.district.target = mix.district; levels.file.target = mix.file; levels.focus.target = 1;
     let drawn = 0;

@@ -187,10 +187,10 @@ describe('model file', () => {
   it('round-trips a model through export and import', async () => {
     const model = syntheticModel(60);
     const file = await exportModelFile(model);
-    expect(modelFileName(model)).toBe(`${model.meta.name}.gitmap.json.gz`);
+    expect(modelFileName(model)).toBe(`${model.meta.name}.starmap.json.gz`);
     const back = await importModelFile(file);
     expect(back.meta.source).toBe('import');
     expect(back.tables).toEqual(model.tables);
-    await expect(importModelFile(new Blob(['not a map']))).rejects.toThrow(/Not a gitmap file/);
+    await expect(importModelFile(new Blob(['not a map']))).rejects.toThrow(/Not a starmap file/);
   });
 });

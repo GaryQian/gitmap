@@ -1,6 +1,6 @@
 # src/persist — snapshots, registry, facts cache
 
-Local storage for gitmap (PLAN.md §12, §6.3). Works on the main thread and in a worker. Every backend sits behind a small interface with an in-memory twin, which is what Node, tests and private windows get.
+Local storage for starmap (PLAN.md §12, §6.3). Works on the main thread and in a worker. Every backend sits behind a small interface with an in-memory twin, which is what Node, tests and private windows get.
 
 ## API
 
@@ -14,12 +14,12 @@ p.facts                                     // FactsCache (the ingest contract) 
 
 | Part | Durable backend | What it does |
 |---|---|---|
-| `SnapshotStore` `save(model)` `load(id)` `remove(id)` `list()` | OPFS directory `snapshots/`, one `<escaped id>.gitmap.json.gz` per repo | `load` returns `null` and deletes the file when it is damaged or cut short, has another `schema`, or has another `meta.parserVersion` than `config.parser.version`. It rejects only when the storage itself fails. |
+| `SnapshotStore` `save(model)` `load(id)` `remove(id)` `list()` | OPFS directory `snapshots/`, one `<escaped id>.starmap.json.gz` per repo | `load` returns `null` and deletes the file when it is damaged or cut short, has another `schema`, or has another `meta.parserVersion` than `config.parser.version`. It rejects only when the storage itself fails. |
 | `createSnapshotWriter({ store, getModel, debounceMs, onError, onSaved })` | — | `schedule()` after every stage; calls within `debounceMs` share one save, saves never overlap, errors go to `onError`. `flush()` saves now and waits (it always saves; test `pending` first if that matters). |
-| `RepoRegistry` `list()` `get(id)` `put(record)` `touch(id)` `remove(id)` | IndexedDB `gitmap-registry` | `list()` is most recently opened first. `recordFromModel(model, locator?)` builds the record; only `fsa` (the directory handle) and `node` locators are kept. The first `put` asks for `navigator.storage.persist()`. |
+| `RepoRegistry` `list()` `get(id)` `put(record)` `touch(id)` `remove(id)` | IndexedDB `starmap-registry` | `list()` is most recently opened first. `recordFromModel(model, locator?)` builds the record; only `fsa` (the directory handle) and `node` locators are kept. The first `put` asks for `navigator.storage.persist()`. |
 | `queryPermission(handle)` `requestPermission(handle)` | — | `'granted' \| 'prompt' \| 'denied'` for a stored directory handle. `requestPermission` only works inside a click or key handler on the page. |
 | `hasChanged(record, { headOid, indexChecksum })` | — | True when the repo on disk is no longer what the snapshot describes. |
-| `FactsCache` `getFacts` `putFacts` `getSyntax` `putSyntax` `prune(olderThanMs)` `clear()` | IndexedDB `gitmap-facts`, stores `facts` and `syntax` | Keyed `<parserVersion>:<oid>`. One transaction per call whatever the batch size. Entries with an empty oid are ignored. `prune` drops other parser versions and entries not used for the given time. |
+| `FactsCache` `getFacts` `putFacts` `getSyntax` `putSyntax` `prune(olderThanMs)` `clear()` | IndexedDB `starmap-facts`, stores `facts` and `syntax` | Keyed `<parserVersion>:<oid>`. One transaction per call whatever the batch size. Entries with an empty oid are ignored. `prune` drops other parser versions and entries not used for the given time. |
 
 Lower-level pieces, for tests and scripts: `memoryBlobStore()`, `opfsBlobStore(dir)`, `createSnapshotStore(blobs, opts)`, `memoryRegistry()`, `indexedDbRegistry(db?)`, `memoryFactsCache(opts)`, `indexedDbFactsCache(db?, opts)`, `createFactsCache(backend, opts)`, `snapshotFileName(id)`.
 

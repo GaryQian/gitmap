@@ -1,6 +1,6 @@
 // Build a demo (PLAN.md §12.1): two static files per repo, served from the app's own origin.
 //
-//   <out>/<name>/snapshot.gitmap.json.gz   the parsed model, loaded when the demo pill is clicked
+//   <out>/<name>/snapshot.starmap.json.gz   the parsed model, loaded when the demo pill is clicked
 //   <out>/<name>/content.zip               the text of every file on the map at the parsed commit,
 //                                          read one entry at a time by src/content's demoSource
 //
@@ -302,7 +302,7 @@ export default async function main(argv: string[]): Promise<void> {
   // ---- 3. the snapshot ----
   const dir = path.join(args.out, args.name);
   mkdirSync(dir, { recursive: true });
-  const snapshotPath = path.join(dir, 'snapshot.gitmap.json.gz');
+  const snapshotPath = path.join(dir, 'snapshot.starmap.json.gz');
   writeFileSync(snapshotPath, await encodeModel(model));
 
   // ---- 4. the content pack ----

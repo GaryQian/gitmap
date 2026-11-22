@@ -10,6 +10,7 @@ import { GEN_DISTRICT0 } from '../../contracts/physics';
 import type { PatchBatch } from '../../model/types';
 import { makeSlotTexture, slotTexHeight, SLOT_TEX_WIDTH } from '../core/positions';
 import type { BatchInfo, FrameState, RevealInfo, SceneContext, SceneModule } from '../core/types';
+import type { TerritoryShape } from '../../shared/cells';
 import { districtBorders } from './borders';
 import { BORDER_FRAG, BORDER_VERT, CITY_FRAG, CITY_VERT, DISTRICT_FRAG, DISTRICT_VERT, FOOTPRINT_FRAG, FOOTPRINT_VERT, GROUND_FRAG, GROUND_VERT } from './shaders';
 import { cityTint, districtTint } from './tint';
@@ -20,6 +21,7 @@ const QUAD_INDEX = [0, 1, 2, 0, 2, 3];
 
 export function createTerritory(): SceneModule {
   let ctx!: SceneContext;
+  let territoryShape: TerritoryShape = { reach: 1.08, pad: 0, weight: 1 };
   let target: THREE.WebGLRenderTarget | null = null;
   const passScene = new THREE.Scene();
   const passCamera = new THREE.Camera();
@@ -77,6 +79,9 @@ export function createTerritory(): SceneModule {
 
   function init(context: SceneContext): void {
     ctx = context;
+    // the same cell shape physics contains files in (src/physics/cells.ts)
+    const dc = ctx.config.physics.district as { pad: number; reach?: number; cellWeight?: number };
+    territoryShape = { reach: dc.reach ?? 1.08, pad: dc.pad, weight: dc.cellWeight ?? 1 };
     const { renderer } = ctx;
     // additive accumulation needs a float target; without one, fall back to bytes with small weights
     const float = renderer.extensions.has('EXT_color_buffer_float') || renderer.extensions.has('EXT_color_buffer_half_float');
@@ -194,11 +199,11 @@ export function createTerritory(): SceneModule {
       const r = pos.city[3 * c + 2];
       // a city's borders depend only on its districts' local positions and its radius
       let key = `${r.toFixed(2)}`;
-      for (const d of list) key += `|${pos.district[3 * d].toFixed(2)},${pos.district[3 * d + 1].toFixed(2)}`;
+      for (const d of list) key += `|${pos.district[3 * d].toFixed(2)},${pos.district[3 * d + 1].toFixed(2)},${pos.district[3 * d + 2].toFixed(2)}`;
       const had = cityBorders.get(c);
       if (had && had.key === key) continue;
-      const sites = list.map((d) => ({ x: pos.district[3 * d], z: pos.district[3 * d + 1] }));
-      cityBorders.set(c, { key, segments: districtBorders(sites, r) });
+      const sites = list.map((d) => ({ x: pos.district[3 * d], z: pos.district[3 * d + 1], bound: pos.district[3 * d + 2] }));
+      cityBorders.set(c, { key, segments: districtBorders(sites, territoryShape) });
       changed = true;
     }
     if (!changed && borderGeometry) return;

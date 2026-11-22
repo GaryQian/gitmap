@@ -12,17 +12,21 @@ export const TERRITORY_LOCAL = {
   districtDisc: 1.12,
   districtSkirt: 10.0,
   districtWeight: 0.34,
-  /** A city lays down one faint disc of its own radius (× this, plus the skirt): the ground its districts stand on. */
+  /**
+   * A city lays down one faint disc of its own radius (× this, plus the skirt): the ground its districts stand on.
+   * Its weight stays below `contourOuter`, so the disc never draws a contour of its own: the city outline
+   * is then the outer edge of its districts' shapes, organic like theirs rather than a circle.
+   */
   cityDisc: 1.0,
   citySkirt: 14.0,
-  cityWeight: 0.1,
+  cityWeight: 0.03,
   /** Density levels: where the fill starts and saturates, and the two contour levels (city boundary, district boundary). */
   fill: [0.02, 0.7],
   contourOuter: 0.05,
   contourInner: 0.22,
   /** Strengths in dark mode (added light) and light mode (alpha): fill, city contour, district contour, Voronoi border. */
-  dark: { fill: 0.11, outer: 0.30, inner: 0.20, border: 0.22 },
-  light: { fill: 0.26, outer: 0.5, inner: 0.3, border: 0.34 },
+  dark: { fill: 0.11, outer: 0.44, inner: 0.20, border: 0.22 },
+  light: { fill: 0.26, outer: 0.68, inner: 0.3, border: 0.34 },
   /** Voronoi border width, device pixels, and the world width it never drops below. */
   borderPx: 1.25,
   borderWorld: 0.35,

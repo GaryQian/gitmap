@@ -27,7 +27,7 @@ function phasesOf(mount: AppMount): readonly Phase[] {
 class MountBoundary extends Component<{ name: string; children: ReactNode }, { failed: boolean }> {
   override state = { failed: false };
   static getDerivedStateFromError() { return { failed: true }; }
-  override componentDidCatch(err: unknown) { console.error(`gitmap: mount ${this.props.name} failed to render`, err); }
+  override componentDidCatch(err: unknown) { console.error(`starmap: mount ${this.props.name} failed to render`, err); }
   override render() { return this.state.failed ? null : this.props.children; }
 }
 

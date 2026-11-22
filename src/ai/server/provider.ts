@@ -4,13 +4,9 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { Config } from '../../config';
 import type { AiProvider, GenerateRequest, GenerateResult } from '../../contracts/ai';
 import { AiError } from './errors';
+import { estimateTokens } from '../tokens';
 
-/** Rough characters per token, for the cheap local estimate. Deliberately low so it over-counts. */
-const CHARS_PER_TOKEN = 3.5;
-
-export function estimateTokens(text: string): number {
-  return Math.ceil(text.length / CHARS_PER_TOKEN);
-}
+export { estimateTokens };
 
 // ---- Anthropic ----
 

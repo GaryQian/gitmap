@@ -104,5 +104,23 @@ export function createCSharpResolver(index: RepoIndex): Resolver {
       if (!namespaces.length || classes.some((cls) => !namespaces.some((ns) => cls.startsWith(ns + '.')))) keys.push(SCOPE_PREFIX);
       return keys;
     },
+
+    // Code in A.B.C reads the types of A.B and A without a using, and the types of every namespace
+    // it does name in a using. Both are one-way: those namespaces do not see this file.
+    sees(file: FileFacts): string[] {
+      const keys = new Set<string>();
+      for (const ns of file.decls?.namespace ?? []) {
+        for (let dot = ns.lastIndexOf('.'); dot > 0; dot = ns.lastIndexOf('.', dot - 1)) {
+          const parent = ns.slice(0, dot);
+          if (namespaceFiles.has(parent)) keys.add(SCOPE_PREFIX + parent);
+        }
+      }
+      for (const imp of file.imports) {
+        const kind = imp.kind.startsWith(GLOBAL_PREFIX) ? imp.kind.slice(GLOBAL_PREFIX.length) : imp.kind;
+        if (kind === USING && namespaceFiles.has(imp.spec)) keys.add(SCOPE_PREFIX + imp.spec);
+      }
+      for (const own of file.decls?.namespace ?? []) keys.delete(SCOPE_PREFIX + own);
+      return [...keys];
+    },
   };
 }

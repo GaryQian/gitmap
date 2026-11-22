@@ -2,8 +2,14 @@
 //   size → place (forceCellRadial: largest spheres toward the middle of the territory) · forceLink on
 //   intra-district edges · spatial-hash collide (sphere radius + pad) · containment in the district's cell.
 // One knob, physics.file.sizeVsConnectivity = w, balances the two inputs: the size pull has strength
-// 2w · baseStrength and link strength is scaled by 2(1 − w); d3 already divides link strength by
-// degree, so equal coefficients give size and connectivity equal pull per node.
+// 2w · baseStrength and link strength is scaled by 2(1 − w).
+//
+// Link strength is divided by the larger degree of the two ends, where d3's default divides by the
+// smaller. With the smaller, a unit with many links is pulled by each at nearly full strength, and a
+// densely linked district collapses into a ball that collide cannot hold open while alpha is high
+// (react's packages/src: 235 units, 498 links, 75% of units overlapping when cooled, against 1% with
+// the larger degree). With the larger, the pulls on any one unit add up to at most one link's worth,
+// so connected units still gather but collide keeps its say.
 //
 // Even fill. A district's radius is the disc that holds its content at physics.file.fill, and each
 // unit's place along the radius is the share of the content area larger than it, so a ring of the
@@ -29,6 +35,13 @@ export interface FileSim extends SimParts {
   focusDist: number;
   /** A cell edge has pushed units since home was marked: Reset view eases them back too. */
   strayed: boolean;
+  /** With constraintsOnly: the pull to place acts too, at physics.file.spread (see createFileSim). */
+  spreading: boolean;
+  /**
+   * The settle's last pass: collide discs shrink to the sphere plus half the pad, the least room a
+   * unit may be left with, and overlaps are taken out by moving units directly (settle.ts).
+   */
+  tight: boolean;
   /** Scale of the collide discs (≥ 1): grown until they cover physics.file.pack of the territory. */
   inflate: number;
 }
@@ -36,18 +49,22 @@ export interface FileSim extends SimParts {
 export function createFileSim(district: number, t: Tuning, cell: () => LocalCell | undefined): FileSim {
   const fs = {
     district, nodes: [], links: [], maxW: 1, estimate: 0, containR: 0, ticked: -1, focusDist: 0,
-    constraintsOnly: false, squeeze: false, held: new Set(), budget: 0, strayed: false, inflate: 1,
+    constraintsOnly: false, squeeze: false, held: new Set(), budget: 0, strayed: false, spreading: false, tight: false, inflate: 1,
   } as unknown as FileSim;
   const w = t.file.sizeVsConnectivity;
   const linkScale = 2 * (1 - w);
   fs.link = linkScale > 0
     ? forceLink<PNode, PLink>([])
       .distance((l) => l.source.r + l.target.r + t.file.gap / Math.max(l.w, 1e-6))
-      .strength((l) => linkScale / Math.max(1, Math.min(l.source.deg, l.target.deg)))
+      .strength((l) => linkScale / Math.max(1, l.source.deg, l.target.deg))
     : null;
-  fs.collide = forceGridCollide((n) => (n.r + t.file.pad) * fs.inflate);
+  fs.collide = forceGridCollide((n) => (fs.tight ? n.r + t.file.pad / 2 : (n.r + t.file.pad) * fs.inflate));
   const free = () => !fs.constraintsOnly;
-  fs.sim = makeSim(t).force('radial', gated(forceCellRadial(cell, () => fs.containR, 2 * w * t.file.baseStrength), free));
+  // The settle's spreading stage: on constraints, with the pull to place faint and steady. Collide
+  // decides everything it has a say in, and units with free room around them (the rim, after links drew
+  // the content inward) drift back out to where they belong, so the territory fills to its edge.
+  const place = (alpha: number) => (fs.constraintsOnly ? (fs.spreading ? t.file.spread : 0) : 2 * w * t.file.baseStrength * alpha);
+  fs.sim = makeSim(t).force('radial', forceCellRadial(cell, () => fs.containR, place));
   if (fs.link) fs.sim.force('link', gated(fs.link, free));
   fs.sim
     .force('collide', fs.collide)

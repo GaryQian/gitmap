@@ -121,6 +121,8 @@ export function createStaticPhysics(init: PhysicsInit): PhysicsEngine {
       home = { district: positions.district.slice(), city: positions.city.slice() };
       return { ms: 0, ticks: 0, atRest: true, overlapShare: 0 };
     },
+    // nothing is simulated here, so there is nothing to animate: the new layout is simply in place
+    relayout(maxMs: number): Promise<SettleReport> { return api.settle(maxMs); },
     drag(ref, x, z) {
       const kind = ref[0] === 'c' ? 'city' : ref[0] === 'd' ? 'district' : null;
       if (!kind) return;

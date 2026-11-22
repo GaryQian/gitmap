@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { districtStrength, keepPills, type PillBox } from './place';
+import { keepPills, type PillBox } from './place';
 
 const box = (x: number, tier: number, depth: number, sticky = false): PillBox => ({ x, y: 0, width: 100, height: 26, tier, sticky, depth });
 
@@ -20,11 +20,5 @@ describe('in-scene pill placement', () => {
   it('lets a pill that was already showing keep its place over a nearer newcomer', () => {
     const showing = box(0, 1, 800, true), newcomer = box(40, 1, 200);
     expect(keepPills([newcomer, showing], 10)).toEqual([showing]);
-  });
-
-  it('shows district pills only for a city that is near and large in the view', () => {
-    expect(districtStrength(100, 50, 50)).toBe(1);         // inside the city
-    expect(districtStrength(100, 1e6, 1e6)).toBe(0);       // far out: a dot in the view
-    expect(districtStrength(100, 50, 50 / 1e3)).toBe(0);   // the camera is looking at something much nearer
   });
 });

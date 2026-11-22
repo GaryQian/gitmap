@@ -173,6 +173,9 @@ export function publishHot(w: World, extra = 0): number {
 export function refreshCells(w: World, ds: DistrictSim, eps: number): boolean {
   if (cellsCurrent(ds.cells, ds.nodes, eps)) return false;
   ds.cells = computeCells(ds.nodes, w.t.district.cellWeight, w.cells);
+  // Collide discs are refitted to the new cell areas only on an exact refresh (districts at rest, a
+  // settle, a batch): refitting re-reads every radius, too much for every tick of a moving city.
+  if (eps > 0) return true;
   for (const n of ds.nodes) {
     const fs = w.fileSims.get(n.slot);
     if (fs && fitInflate(fs, w.cells[n.slot], w.t)) fs.collide.refresh();

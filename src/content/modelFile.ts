@@ -1,10 +1,10 @@
-// Export and import (PLAN.md §12): the same `.gitmap.json.gz` file the snapshot and the demos use.
+// Export and import (PLAN.md §12): the same `.starmap.json.gz` file the snapshot and the demos use.
 // An exported map holds no file contents.
 import { decodeModel, encodeModel, type RepoModel } from '../model';
 
-export const MODEL_FILE_SUFFIX = '.gitmap.json.gz';
+export const MODEL_FILE_SUFFIX = '.starmap.json.gz';
 
-/** "<name>.gitmap.json.gz", with characters a file system would refuse replaced. */
+/** "<name>.starmap.json.gz", with characters a file system would refuse replaced. */
 export function modelFileName(model: Pick<RepoModel, 'meta'>): string {
   const name = model.meta.name.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '-').replace(/^[.\s-]+|[.\s-]+$/g, '');
   return (name || 'map') + MODEL_FILE_SUFFIX;
@@ -16,7 +16,7 @@ export async function exportModelFile(model: RepoModel): Promise<Blob> {
   return new Blob([bytes as Uint8Array<ArrayBuffer>], { type: 'application/gzip' });
 }
 
-/** Save the model through the browser's download flow as "<name>.gitmap.json.gz". */
+/** Save the model through the browser's download flow as "<name>.starmap.json.gz". */
 export async function downloadModel(model: RepoModel): Promise<void> {
   const url = URL.createObjectURL(await exportModelFile(model));
   const link = document.createElement('a');
@@ -31,7 +31,7 @@ export async function downloadModel(model: RepoModel): Promise<void> {
 }
 
 /**
- * Read an exported or dropped map. Rejects with a readable message when the file is not a gitmap
+ * Read an exported or dropped map. Rejects with a readable message when the file is not a starmap
  * file or was written by a newer schema. The result is marked as an import, whatever wrote it.
  *
  * `meta.parserVersion` is left as the file has it: it says which parser produced these facts, and an
@@ -46,5 +46,5 @@ export async function importModelFile(file: Blob): Promise<RepoModel> {
 
 /** True when a dropped file's name says it is an exported map. */
 export function isModelFileName(name: string): boolean {
-  return name.toLowerCase().endsWith(MODEL_FILE_SUFFIX) || name.toLowerCase().endsWith('.gitmap.json');
+  return name.toLowerCase().endsWith(MODEL_FILE_SUFFIX) || name.toLowerCase().endsWith('.starmap.json');
 }

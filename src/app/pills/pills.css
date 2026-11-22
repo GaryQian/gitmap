@@ -38,6 +38,21 @@
 
 .gm-scene-pill-count { font-weight: 400; color: var(--gm-text-dim); }
 
+/* City pills are the loud tier: larger, SemiBold and opaque, so they read over the scene and their districts. */
+.gm-scene-pill-city {
+  gap: 10px;
+  height: 40px;
+  padding: 0 18px;
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: 0.015em;
+  background: var(--gm-surface);
+}
+.gm-scene-pill-city:hover,
+.gm-scene-pill-city:focus-visible,
+.gm-scene-pill-city.is-dragging { background: var(--gm-surface); }
+.gm-scene-pill-city .gm-scene-pill-count { font-weight: 500; }
+
 /* District pills are the quieter tier: smaller, Regular. */
 .gm-scene-pill-district {
   gap: 6px;

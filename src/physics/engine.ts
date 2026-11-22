@@ -36,6 +36,11 @@ export interface PhysicsEngineInternal extends PhysicsEngine {
    * evenly districts are filled from the middle to the edge (see coverByRadius in quality.ts).
    */
   quality(): { overlapShare: number; innerCover: number; middleCover: number; outerCover: number };
+  /**
+   * A district's territory as physics has it: the cell its units are contained in, as a convex ring
+   * [x0, z0, x1, z1, …] local to the district centre. Undefined for a district with no cell.
+   */
+  territory(district: number): readonly number[] | undefined;
 }
 
 interface Mover { node: PNode; fromX: number; fromY: number }
@@ -489,12 +494,20 @@ export function createEngine(init: PhysicsInit, buffers?: PositionBuffers): Phys
       return w.fileSims.get(district)?.nodes ?? [];
     },
 
+    territory(district: number) {
+      const dn = w.districtNodes[district];
+      const ds = dn && w.districtSims.get(dn.parent);
+      if (ds) refreshCells(w, ds, 0);
+      const cell = w.cells[district];
+      return cell && Array.from(cell.ring);
+    },
+
     quality() {
       const { districts, files } = simLists(w);
       for (const ds of districts) refreshCells(w, ds, 0);
       return {
         overlapShare: overlapShare(files.map((fs) => fs.nodes), t.overlapTolerance),
-        ...coverByRadius(files.map((fs) => ({ nodes: fs.nodes, cell: w.cells[fs.district] }))),
+        ...coverByRadius(files.map((fs) => ({ nodes: fs.nodes, cell: w.cells[fs.district] })), t.file.pad),
       };
     },
 

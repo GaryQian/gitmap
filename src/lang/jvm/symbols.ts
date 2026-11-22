@@ -11,7 +11,7 @@ const GT = 62, QUESTION = 63, AT = 64, LBRACKET = 91, RBRACKET = 93, LBRACE = 12
 
 /** Longest type-argument list (`<…>`, `[…]`) followed, and longest multi-line Scala import selector skipped. */
 const MAX_TYPE_ARGS_CHARS = 160;
-const MAX_SELECTOR_CHARS = 2000;
+const MAX_SELECTOR_CHARS = 1000;
 /** How far back on its line a declaration's `private` modifier is looked for. */
 const MODIFIER_WINDOW = 200;
 const SIGNATURE_CAP = 200;
@@ -156,7 +156,7 @@ function extract(text: string, lang: 'kotlin' | 'scala', defs: SymbolDef[], refs
     let signature = text.slice(from, to).trim();
     if (signature.endsWith(':')) signature = signature.slice(0, -1).trimEnd(); // Scala 3 `object Main:`
     if (signature) def.signature = signature.slice(0, SIGNATURE_CAP);
-    const doc = docBefore(text, lineStart);
+    const doc = from === lineStart ? docBefore(text, lineStart) : undefined; // only the declaration that starts the line
     if (doc) def.doc = doc;
     defs.push(def);
   };

@@ -122,8 +122,13 @@ export function syntheticTables(opts: SyntheticOptions): StructureTables {
   return { city: cities, district: districts, unit: units, file: files, edge: edges };
 }
 
+const LANG_NAMES: Record<string, string> = { ts: 'TypeScript', js: 'JavaScript', python: 'Python', cpp: 'C++', c: 'C', go: 'Go', rust: 'Rust', java: 'Java' };
+
 export function syntheticMeta(name = 'synthetic', tables?: StructureTables): RepoMeta {
+  const languages: NonNullable<RepoMeta['languages']> = {};
+  for (const id of new Set(tables?.unit.cols.lang ?? [])) languages[id] = { name: LANG_NAMES[id] ?? id, color: '#8a9099' };
   return {
+    languages,
     id: `synthetic:${name}`, name, remoteUrl: null, source: 'synthetic', headOid: null, indexChecksum: null,
     parserVersion: '0', parsedAt: 0, structure: 'full',
     stats: {

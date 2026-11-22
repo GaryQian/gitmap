@@ -71,7 +71,7 @@ function ExportButton() {
       await downloadModel(await session.exportModel());
       setState('idle');
     } catch (err) {
-      console.warn('gitmap: export failed', err);
+      console.warn('starmap: export failed', err);
       if (useApp.getState().session === session) setState('unavailable');
     }
   };

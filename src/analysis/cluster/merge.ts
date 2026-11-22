@@ -39,7 +39,7 @@ export function mergeDown(
   pathOf: (node: number) => string | undefined,
   /**
    * Bias against giants, 0..1 (balance.ts). Above 0 the partner is the neighbour most connected for
-   * its size (weight / size^bias) instead of the most connected outright, and `target` is compared
+   * its size (balance.ts mergeScore) instead of the most connected outright, and `target` is compared
    * with the effective count (Σsize)²/Σsize², so merging stops while small communities still stand
    * beside a large one. At 0 this is the plain rule.
    */

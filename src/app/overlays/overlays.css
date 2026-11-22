@@ -1,0 +1,161 @@
+/* Overlay pills and the active overlay's card (PLAN.md §10, §17.6). Chrome colours are the --gm-*
+   tokens only; the ramp and the swatches take the overlay's own colours from its view. */
+
+/* ---- pills ---- */
+
+/* The toolbar has no box of its own: its pills sit in the region's row, beside the settings gear,
+   and wrap with it when the row is tight. */
+.gm-overlays { display: contents; }
+
+.gm-overlay-pill { gap: 6px; padding: 0 14px 0 10px; }
+/* no data yet: still a button, shown quieter */
+.gm-overlay-pill.is-pending:not(.is-active) { color: var(--gm-text-dim); }
+
+.gm-overlay-label.is-short { display: none; }
+
+.gm-overlay-mark { flex: 0 0 auto; overflow: visible; }
+.gm-overlay-dot { fill: currentColor; }
+.gm-overlay-pill.is-pending .gm-overlay-dot { fill: none; stroke: currentColor; stroke-width: 1.2; }
+.gm-overlay-pill.is-active .gm-overlay-dot { fill: var(--gm-halo); stroke: none; }
+.gm-overlay-ring-track { fill: none; stroke: color-mix(in srgb, var(--gm-text) 22%, transparent); stroke-width: 1.5; }
+.gm-overlay-ring { fill: none; stroke: var(--gm-halo); stroke-width: 1.5; transition: stroke-dashoffset 200ms linear; }
+
+/* The full names need the room of a wide window (with the progress pill beside the search, about
+   this wide); below it two of them take their short form. */
+@media (max-width: 1680px) {
+  .gm-overlay-label.has-short { display: none; }
+  .gm-overlay-label.is-short { display: inline; }
+}
+
+/* ---- the card ---- */
+
+/* A row of its own under the pills and the gear. It has no height, so the card floats over the map
+   like the other cards and never pushes the rest of the chrome down. */
+.gm-overlay-card-row {
+  order: 1;
+  flex: 0 0 100%;
+  position: relative;
+  height: 0;
+}
+.gm-overlay-card {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: min(264px, calc(100vw - 32px));
+  padding: 12px 14px 13px;
+}
+/* The settings card opens in the same place; this one steps aside while it is open. */
+.gm-region-topRight:has(.gm-settings-card) .gm-overlay-card { visibility: hidden; }
+
+.gm-ov-title { margin: 0 2px 9px; }
+
+/* A plain line of secondary text: the hint, progress, an empty list. */
+.gm-ov-line { margin: 0; font-size: 12px; letter-spacing: 0.03em; color: var(--gm-text-dim); font-variant-numeric: tabular-nums; }
+.gm-ov-hint { margin: 10px 2px 0; }
+
+/* ---- legend ---- */
+
+.gm-ov-legend { margin: 0 2px; }
+.gm-ov-picker + .gm-ov-legend,
+.gm-ov-direction + .gm-ov-legend { margin-top: 12px; }
+
+.gm-ov-ramp-bar {
+  height: 8px;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px var(--gm-hairline);
+}
+.gm-ov-ramp-ends {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 5px;
+  font-size: 12px;
+  color: var(--gm-text-dim);
+}
+.gm-ov-ramp-ends span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gm-ov-ramp-ends span:last-child { text-align: right; }
+
+.gm-ov-swatches { margin: 0; padding: 0; list-style: none; }
+.gm-ov-ramp + .gm-ov-swatches { margin-top: 8px; }
+.gm-ov-swatch-row { display: flex; align-items: center; gap: 9px; min-height: 22px; font-size: 12px; }
+.gm-ov-swatch-row:last-child { color: var(--gm-text-dim); }
+.gm-ov-swatch {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  /* the "not yet known" colour lies close to the card's own; the hairline keeps its edge */
+  box-shadow: inset 0 0 0 1px var(--gm-hairline);
+}
+.gm-ov-legend > .gm-ov-line { margin-top: 6px; }
+
+/* ---- Dependency reach ---- */
+
+/* two long labels share the row: less padding than a settings segment */
+.gm-ov-direction .gm-segment { padding: 0 6px; }
+
+/* ---- Ownership: the contributor picker ---- */
+
+.gm-ov-field {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--gm-hairline);
+  border-radius: 999px;
+  cursor: text;
+  transition: border-color 140ms var(--gm-ease), background-color 140ms var(--gm-ease);
+}
+.gm-ov-field:hover { border-color: color-mix(in srgb, var(--gm-text) 34%, transparent); }
+.gm-ov-field.is-open { background: var(--gm-text-faint); }
+.gm-ov-field.is-empty { cursor: default; }
+/* the focus ring belongs to the whole field, not to the bare input inside it */
+.gm-ov-field:has(.gm-ov-input:focus-visible) { outline: 2px solid var(--gm-halo); outline-offset: 2px; }
+.gm-ov-input:focus-visible { outline: none; }
+
+.gm-ov-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 500;
+  letter-spacing: inherit;
+  text-overflow: ellipsis;
+}
+.gm-ov-field.is-open .gm-ov-input { font-weight: 400; }
+.gm-ov-input::placeholder { color: var(--gm-text-dim); opacity: 1; font-weight: 400; }
+.gm-ov-count { flex: 0 0 auto; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--gm-text-dim); }
+
+.gm-ov-options { margin-top: 8px; }
+.gm-ov-options > .gm-ov-line { margin: 6px 12px 0; }
+.gm-ov-list {
+  /* six rows and half of the next, which says there is more to scroll to */
+  max-height: 176px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--gm-hairline) transparent;
+}
+.gm-ov-option {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 27px;
+  padding: 0 12px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.gm-ov-option.is-active { background: var(--gm-text-faint); }
+.gm-ov-option.is-chosen .gm-ov-name { font-weight: 500; }
+.gm-ov-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

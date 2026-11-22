@@ -33,7 +33,10 @@ export function assemble(sections: Record<SectionName, Section>, budget: number,
   for (const name of REFILL_ORDER) {
     const extra = spare();
     if (extra <= 0) break;
-    if (filled[name].truncated) filled[name] = sections[name].fill(filled[name].tokens + extra);
+    if (!filled[name].truncated) continue;
+    // Budgets are checked against a slight overcount, so a refill is kept only when it gained something.
+    const refilled = sections[name].fill(filled[name].tokens + extra);
+    if (refilled.tokens > filled[name].tokens) filled[name] = refilled;
   }
 
   const text = TEXT_ORDER.map((name) => filled[name].text).join(SEPARATOR);

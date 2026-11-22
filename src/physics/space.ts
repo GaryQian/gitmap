@@ -17,8 +17,15 @@
 // When the simulation is back at rest the pins are cleared.
 import { citySpacing } from './cityTier';
 import { districtBound, districtSpacing, estimateCityRadius, type DistrictSim } from './districtTier';
+import { separate } from './forces';
 import { countdown, enclosingRadius, heatFor, isHot, maxSpeed2, refreshRadii, reheat, type PNode, type SimParts } from './sim';
 import type { World } from './world';
+
+/**
+ * Two bodies count as pushed together when they are closer than their spacing by more than this share
+ * of it: beyond what positions lose on their way through a Float32 snapshot, and nothing one would see.
+ */
+const TOUCH = 1e-5;
 
 function significant(w: World, before: number, after: number): boolean {
   return Math.abs(after - before) > Math.max(w.t.radiusEpsAbs, w.t.radiusEpsRel * before);
@@ -149,8 +156,17 @@ export function wakeTier(w: World, tier: SimParts, touched: Iterable<PNode>, ful
   }
 }
 
-/** Clear an update's pins and put the tier back on its full forces. */
+/**
+ * Clear an update's pins and put the tier back on its full forces. Cities that made room for one
+ * another did so by a force, to a tolerance: they are set apart exactly here, so the gap between two
+ * cities stays a hard minimum after an update as it is after the settle.
+ */
 export function endUpdate(w: World, tier: SimParts): void {
+  if (tier === w.cityTier && (tier.held.size || tier.constraintsOnly) && live(w)) {
+    const pinned = tier.nodes.filter((n) => n.fx != null && !tier.held.has(n)); // held by a drag: they stay put
+    for (const n of tier.held) { n.fx = null; n.fy = null; }
+    if (!pinned.length) { separate(tier.nodes, (a, b) => citySpacing(a, b, w.t)); w.pending.city = true; }
+  }
   for (const n of tier.held) { n.fx = null; n.fy = null; }
   tier.held.clear();
   // on constraints alone alpha was only a countdown: it must not carry over to the full forces
@@ -172,7 +188,7 @@ export function afterTierTick(w: World, tier: SimParts): void {
         if (f === h || tier.held.has(f)) continue;
         const d = city ? citySpacing(f, h, t) : districtSpacing(f, h, t);
         const dx = f.x - h.x, dy = f.y - h.y;
-        const reach = d - Math.max(t.radiusEpsAbs, t.radiusEpsRel * d);
+        const reach = d * (1 - TOUCH);
         if (dx * dx + dy * dy < reach * reach) { letGo(tier, h); break; }
       }
     }

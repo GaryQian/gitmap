@@ -1,5 +1,5 @@
-// In the scene: city pills (name and file count) and, for cities near the camera, smaller district
-// pills (PLAN.md §8.4, §17.6). Drag one to move its city or district; click it to fly there.
+// In the scene: city pills (name and file count, the larger, bolder tier) and smaller district
+// pills, always shown where they do not overlap a city's (PLAN.md §8.4, §17.6). Drag one to move its city or district; click it to fly there.
 // React only hosts the layer: every pill is a pooled element that layer.ts moves by hand.
 import { useEffect, useRef } from 'react';
 import type { AppMount } from '../../contracts/app';

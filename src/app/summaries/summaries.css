@@ -1,0 +1,48 @@
+/* The summary card of a city pill (PLAN.md §17.6): a small translucent card of prose under the pill
+   the pointer rests on. In the scene, so a flat fill and no backdrop blur; no shadow. It is placed by
+   a transform written whenever its pill moves, so it starts hidden at the layer's top left. */
+
+.gm-summary-layer {
+  position: absolute;
+  inset: 0;
+  /* over the hovered or focused pill of another city, which pills.css raises to 1 */
+  z-index: 1;
+  pointer-events: none;
+}
+
+.gm-card.gm-summary {
+  position: absolute;
+  left: 0;
+  top: 0;
+  visibility: hidden;
+  width: max-content;
+  max-width: 300px;
+  padding: 11px 15px 12px;
+  /* 20 px on a card this small reads as a blob; 16 keeps the family likeness */
+  border-radius: 16px;
+  /* The pill material, more opaque than on a pill or a tooltip: this is a paragraph, and it lies over
+     stars and over district pills, whose own text would otherwise read through it. At 90% the text
+     keeps 11:1 and the waiting line 5.7:1 over pure white (dark mode) or pure black (light mode). */
+  background: color-mix(in srgb, var(--gm-surface) 90%, transparent);
+  /* it describes the pill and must never catch the pointer: the pill stays draggable and clickable */
+  pointer-events: none;
+  will-change: transform;
+  font-size: 14px;
+  line-height: 1.5;
+  letter-spacing: 0.015em;
+  animation: gm-summary-in 140ms var(--gm-ease);
+}
+.gm-card.gm-summary[data-placed] { visibility: visible; }
+/* straight after a neighbour's card, the next one is simply there */
+.gm-card.gm-summary.is-instant { animation: none; }
+@keyframes gm-summary-in { from { opacity: 0; } }
+
+.gm-summary-title { margin: 0 0 3px; font-weight: 500; }
+.gm-summary-text { margin: 0; overflow-wrap: anywhere; text-wrap: pretty; }
+
+/* No summary yet, one is being written: one quiet line. */
+.gm-summary-wait { margin: 0; font-size: 13px; color: var(--gm-text-dim); white-space: nowrap; }
+
+@media (prefers-reduced-motion: reduce) {
+  .gm-card.gm-summary { animation: none; }
+}

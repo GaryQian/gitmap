@@ -4,8 +4,9 @@
 // where the convention puts it. System modules (Foundation, UIKit) match neither and resolve to nothing.
 import type { FileFacts, ImportSpec, RepoIndex, ResolvedImport, Resolver } from '../../contracts/lang';
 import { dirname, joinPath } from '../../shared';
-import { blankComments, includeResolver } from '../cfamily';
-import { MODULE_IMPORT } from './scan';
+import { MODULE_IMPORT } from './objcScan';
+import { includeResolver } from './resolve';
+import { blankComments } from './scan';
 
 /** Basename pattern of module maps; the plug-in lists it under `manifests` so their text is kept. */
 export const MODULE_MAPS = '*.modulemap';
@@ -82,8 +83,7 @@ function readModuleMaps(index: RepoIndex): Map<string, ResolvedImport[]> {
   return modules;
 }
 
-/** The resolver for `.m` and `.mm` files of one repo. */
-export function createObjcResolver(index: RepoIndex): Resolver {
+function createResolver(index: RepoIndex): Resolver {
   const includes = includeResolver(index);
   let moduleMaps: Map<string, ResolvedImport[]> | undefined;
   const bySuffix = (file: FileFacts, spec: string) => includes.resolve(file, { spec, kind: 'include-system' });
@@ -109,4 +109,15 @@ export function createObjcResolver(index: RepoIndex): Resolver {
       return [];
     },
   };
+}
+
+const resolvers = new WeakMap<RepoIndex, Resolver>();
+/**
+ * The resolver for the files of one repo that can hold `@import`: `.m`, `.mm`, and the headers the
+ * C++ plug-in scans as Objective-C. One instance per index, so the module maps are read once.
+ */
+export function createObjcResolver(index: RepoIndex): Resolver {
+  let r = resolvers.get(index);
+  if (!r) resolvers.set(index, (r = createResolver(index)));
+  return r;
 }

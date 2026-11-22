@@ -25,7 +25,7 @@ describe('folder input → RepoLocator', () => {
   });
 
   it('recognises saved maps by name', () => {
-    expect(isSnapshotName('react.gitmap.json.gz')).toBe(true);
+    expect(isSnapshotName('react.starmap.json.gz')).toBe(true);
     expect(isSnapshotName('react.json.gz')).toBe(false);
   });
 });

@@ -14,9 +14,9 @@ export interface PositionBuffers {
   readonly shared: boolean;
   /** [x, z] per unit slot, local to its district centre. */
   readonly unit: Float32Array;
-  /** [x, z, r] per district slot, local to its city centre. r = territory radius. */
+  /** [x, z, r] per district slot, local to its city centre. r = the bounding radius of the district's territory. */
   readonly district: Float32Array;
-  /** [x, z, r] per city slot, world coordinates. */
+  /** [x, z, r] per city slot, world coordinates. r = the radius of the circle enclosing the city's districts. */
   readonly city: Float32Array;
   /**
    * Counters (read with Atomics.load when shared):
@@ -64,6 +64,14 @@ export interface PhysicsApi {
    * settle first so each tier is sized from settled content: files, then districts, then cities.
    */
   settle(maxMs: number): Promise<SettleReport>;
+  /**
+   * The animated counterpart of settle, for "Apply" and "Update" (PLAN.md §6.8): reheat what the
+   * batches since the last settle changed and run it on the normal time-sliced scheduler, so the
+   * renderer sees it move. Resolves when everything is asleep again, or at the cap with
+   * `atRest: false`, and then marks home. Before the first settle it is settle. An in-process
+   * engine only moves while its caller keeps calling `step`.
+   */
+  relayout(maxMs: number): Promise<SettleReport>;
   /** Pin a city or district ('c:…' / 'd:…') at a world position and heat its tier. Districts are clamped to their city. */
   drag(ref: NodeRef, x: number, z: number): void;
   release(ref: NodeRef): void;

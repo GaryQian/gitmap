@@ -26,7 +26,7 @@ export interface DemoSourceOptions {
   oidOf(path: string): string | null | undefined;
   /** Default: the global fetch. */
   fetch?: typeof fetch;
-  /** Where opened files are kept. Default: the Cache API store `gitmap-demo-content` when there is one. Null turns caching off. */
+  /** Where opened files are kept. Default: the Cache API store `starmap-demo-content` when there is one. Null turns caching off. */
   cache?: ContentCache | null;
   /** Archive file name under the base URL. Default 'content.zip'. */
   zipName?: string;
@@ -52,7 +52,7 @@ export class ContentMismatchError extends Error {
   }
 }
 
-const CACHE_NAME = 'gitmap-demo-content';
+const CACHE_NAME = 'starmap-demo-content';
 const DEFAULT_TAIL_BYTES = 512 * 1024;
 
 async function defaultCache(): Promise<ContentCache | null> {

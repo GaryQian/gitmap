@@ -265,20 +265,23 @@ export function extractSymbols(root: Node, query: Query, text: string, options: 
 }
 
 /**
- * Share of the source that sits in ERROR nodes, 0..1; a MISSING token counts as one character.
- * Zero exactly when the tree has no error.
+ * Share of the source that the parser could not place, 0..1: the text of ERROR nodes outside the
+ * subtrees they contain, plus one character per MISSING token. (An ERROR node can wrap a whole file
+ * whose declarations all parsed; its span alone would say 100%.) Zero exactly when the tree has no
+ * error.
  */
 export function errorShare(root: Node, errors: Query | null, length: number): number {
   if (!root.hasError) return 0;
   const total = Math.max(1, length);
-  let covered = 0, end = -1;
+  let lost = 0;
   if (errors) {
     for (const c of errors.captures(root)) {
       const n = c.node;
-      if (n.startIndex < end) continue; // inside an error already counted
-      covered += Math.max(1, n.endIndex - n.startIndex);
-      end = Math.max(n.endIndex, n.startIndex + 1);
+      let own = n.endIndex - n.startIndex;
+      // A subtree inside the error is well formed, or holds errors of its own that are counted for themselves.
+      if (own > 0) for (const child of n.children) if (child && child.childCount > 0) own -= child.endIndex - child.startIndex;
+      lost += Math.max(1, own);
     }
   }
-  return Math.min(1, Math.max(covered, 1) / total);
+  return Math.min(1, Math.max(lost, 1) / total);
 }

@@ -2,7 +2,9 @@
 // of a sample of files per district.
 //
 // Which files (not only hubs): per district a queue of [most important, most distinctive, one
-// seeded-random representative, the next most important ones, then everything else shuffled].
+// seeded-random representative] (which of the three leads rotates between districts), then the file
+// the structure section names as standing for the district, the next most important ones, and
+// everything else shuffled.
 //
 // How much each area gets (stratified): cities share the budget ∝ √size with a floor, and districts
 // share their city's part the same way. The split is a weighted fair queue: the city, then the
@@ -13,7 +15,7 @@ import { Ctx } from './ctx';
 import { Cite, entry, render } from './items';
 import type { Entry, Section } from './items';
 import type { DistrictInfo, UnitInfo } from './model';
-import { cmpStr, oneLine, shuffle } from './seeded';
+import { oneLine, shuffle } from './seeded';
 import { label, representatives } from './structure';
 import { costOf } from './tokens';
 import { LOCAL } from './tunables';
@@ -56,8 +58,8 @@ function distinctiveness(ctx: Ctx): Float64Array {
           for (const word of w) own.add(word);
         }
       }
-      // Sorted, so the floating-point sum below does not depend on the order definitions arrived in.
-      unitWords[u.index] = [...own].sort(cmpStr);
+      // In the order the definitions were kept, which is part of the input, so the sum below is stable.
+      unitWords[u.index] = [...own];
       for (const word of own) usedBy.set(word, (usedBy.get(word) ?? 0) + 1);
       n++;
     }

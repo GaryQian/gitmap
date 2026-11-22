@@ -117,7 +117,7 @@ void main() {
 export const SHAPE_VERT = GLSL_BURST + /* glsl */ `
 uniform vec4 uShape;      // ring reach in radii, ring reach in world units, column height in radii, column width in radii
 attribute float aBurst; attribute float aPart;
-varying vec2 vQ; varying vec3 vCol; varying float vAge; varying float vPart; varying float vKind;
+varying vec2 vQ; flat varying vec3 vCol; flat varying float vAge; flat varying float vPart; flat varying float vKind;
 void main() {
   int i = int(aBurst + 0.5);
   vec3 o, col; float r, kind;
@@ -145,7 +145,7 @@ void main() {
 
 export const SHAPE_FRAG = GLSL_SATURATE + /* glsl */ `
 uniform float uDark; uniform vec3 uWarm;
-varying vec2 vQ; varying vec3 vCol; varying float vAge; varying float vPart; varying float vKind;
+varying vec2 vQ; flat varying vec3 vCol; flat varying float vAge; flat varying float vPart; flat varying float vKind;
 void main() {
   float a; vec3 c = vCol;
   vec3 hot = vec3(1.0, 0.98, 0.92);
@@ -159,7 +159,8 @@ void main() {
     float t = min(1.0, vAge * 1.25);
     float rho = 1.0 - (1.0 - t) * (1.0 - t);                 // the ring runs out fast, then slows
     float wdt = 0.018 + 0.05 * rho;
-    float ring = exp(-pow((d - rho * 0.96) / wdt, 2.0));
+    float off = (d - rho * 0.96) / wdt;
+    float ring = exp(-off * off);
     float wake = smoothstep(rho - 0.35, rho, d) * step(d, rho) * 0.25;         // a faint wash behind the front
     a = (ring + wake) * (1.0 - t) * (1.0 - t) * 0.8;
     c = mix(vCol * 1.15, hot, 0.35 * ring);

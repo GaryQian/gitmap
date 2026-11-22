@@ -20,7 +20,7 @@ Each module's `index.ts` is its public surface. Round 0 left a stub there with t
 ## Rules
 
 1. **Stay in your folders.** Do not edit lead-owned files or another package's folder. If you need a change there (a new config value, a contract tweak, a dependency), work around it locally and list it under "Requested changes" in your final report.
-2. **Import other modules only through their public files**: `index.ts` (and `node.ts`, `types.ts`, `worker.ts` where they exist). `contracts/`, `shared/`, `testing/` and `config/` may be imported file by file. ESLint enforces this (`gitmap/module-boundary`).
+2. **Import other modules only through their public files**: `index.ts` (and `node.ts`, `types.ts`, `worker.ts` where they exist). `contracts/`, `shared/`, `testing/` and `config/` may be imported file by file. ESLint enforces this (`starmap/module-boundary`).
 3. **No shared registries.** Language plug-ins (`src/lang/<id>/index.ts`), pool tasks (`**/*.task.ts`, default-exporting `defineTask({...})`) and app features (`src/app/<feature>/mount.tsx`) are discovered with `import.meta.glob`.
 4. **Tunables come from `config`** (`import { config } from '../config'`), never repeated as literals. Tests read them from there too.
 5. **Browser-safe by default.** Anything importing `node:*` goes in a `node.ts` entry or a test/script, never in a file the browser bundle reaches.

@@ -93,12 +93,18 @@ export class Ctx {
     return false;
   }
 
-  /**
-   * A unit that may be named: placed on the map, and not a test, an excluded file or a withheld
-   * one. A file with key-shaped content is dropped whole, so not even its path is shown.
-   */
+  /** A unit that could be shown, judged by its path alone: placed on the map, not a test, excluded or secret-named. */
   citable(u: UnitInfo): boolean {
-    return (u.flags & (EXCLUDED | TEST | SECRET)) === 0 && u.district >= 0 && !this.unitWithheld(u);
+    return (u.flags & (EXCLUDED | TEST | SECRET)) === 0 && u.district >= 0;
+  }
+
+  /**
+   * A unit that may be named in the output: citable, and nothing kept of it holds key-shaped
+   * content (such a file is dropped whole, path included). This scans what was kept of the file,
+   * so ask it of the few units about to be shown, not of every unit.
+   */
+  nameable(u: UnitInfo): boolean {
+    return this.citable(u) && !this.unitWithheld(u);
   }
 
   /** The unit's definitions in source order; a second file adds only names the first does not define. */

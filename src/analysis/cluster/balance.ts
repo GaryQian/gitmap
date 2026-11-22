@@ -5,12 +5,10 @@
 // Louvain optimises modularity and is content to return one community of several thousand files
 // beside a hundred small ones. Counting those as "enough communities", then merging each small one
 // into its most-connected neighbour (which is usually the giant), is how four huge clusters and a
-// few crumbs come about. Three measures replace the plain count and the plain merge rule:
+// few crumbs come about. Three things replace the plain count and the plain merge rule:
 //
-//   even-share count   Σsize / largest size: how many communities there would be if all were as big
-//                      as the largest. The Louvain resolution is raised until this reaches the wanted
-//                      number, i.e. until the largest community is no bigger than an even share
-//                      (index.ts). A giant that will not divide at any resolution tried is accepted.
+//   a second look      a community larger than an even share of the wanted count is examined on its
+//                      own subgraph and divided where it has real structure, and only there (refine.ts).
 //
 //   effective count    (Σsize)² / Σsize², the inverse Simpson index: twelve equal communities count
 //                      as 12; one holding 80% of the files plus eleven small ones counts as about 1.5.
@@ -21,8 +19,12 @@
 //   merging            size*: connecting weight / partner size. A giant needs proportionally more
 //                      connections than a small neighbour to be chosen.
 //
+// The effective count would let the plain number of cities or districts run far above the curve
+// (react: 20 cities where the curve says 11), so it is bounded: at most clustering.countSlack (1.5)
+// times the wanted number remain, and never more than maxCities.
+//
 // clustering.sizeBias (0..1) scales all three: 1 = as described, 0 = plain count and most-connected
-// merging. Directories with no code in them are made divisible in graph.ts.
+// merging. Directories with no code in them are given a structure that can divide in graph.ts.
 
 /** Σsize / largest size over communities of at least `minSize`: the count if all were as big as the largest. */
 export function evenShareCount(sizes: ArrayLike<number>, minSize = 0): number {
@@ -52,18 +54,19 @@ export function effectiveCount(sizes: ArrayLike<number>, minSize = 0): number {
 }
 
 /**
- * How many communities a Louvain level counts as when deciding whether its resolution is high
- * enough: the plain number of communities of at least `minSize` files, blended toward the
- * even-share count by `bias` (0..1). Never more than the plain number.
+ * Merge score of joining a neighbour of `partnerSize` files over a connection of weight `w`:
+ * w at bias 0, w / size at bias 1, and a straight blend of the two divisors in between. Only
+ * additions, a multiplication and a division, so every engine computes the same bits (Math.pow may not).
  */
-export function levelCount(sizes: ArrayLike<number>, minSize: number, bias: number): number {
-  let plain = 0;
-  for (let i = 0; i < sizes.length; i++) if (sizes[i] >= minSize && sizes[i] > 0) plain++;
-  const b = Math.min(1, Math.max(0, bias));
-  return b === 0 ? plain : (1 - b) * plain + b * Math.min(plain, evenShareCount(sizes, minSize));
+export function mergeScore(w: number, partnerSize: number, bias: number): number {
+  return bias > 0 && partnerSize > 1 ? w / (1 + bias * (partnerSize - 1)) : w;
 }
 
-/** Merge score of joining a neighbour of `partnerSize` files over a connection of weight `w`. */
-export function mergeScore(w: number, partnerSize: number, bias: number): number {
-  return bias > 0 && partnerSize > 1 ? w / Math.pow(partnerSize, bias) : w;
+/**
+ * The most communities a merge may leave standing when the wanted number is `target`. The effective
+ * count lets the plain count run above the curve; `clustering.countSlack` (default 1.5) says how far.
+ */
+export function countLimit(target: number, slack: number | undefined): number {
+  const s = typeof slack === 'number' && slack >= 1 ? slack : 1.5;
+  return Math.max(target, Math.ceil(target * s));
 }

@@ -8,18 +8,22 @@
 //
 // - Closing the map (back to the landing page with no message) forgets it.
 // - A fatal error does not: the next reload, usually the one that brings the fix, tries again.
-// - A folder whose read permission did not survive the reload is not reopened.
+// - A folder whose read permission did not survive the reload gets a "Reopen" pill on the landing
+//   page instead (the browser asks again only from a click).
+// - While a map is loading or open, the dev server holds back reloads for this tab and the map shows
+//   "Code changed · Reload" instead (scripts/holdReloads.ts, devreload/).
 // - `?fresh` on the URL starts at the landing page once; `?fake=…` already reopens itself.
 import type { RepoSource } from '../contracts/pipeline';
 import type { NodeRef } from '../model/types';
-import { queryPermission } from '../persist/permission';
+import { queryPermission, requestPermission } from '../persist';
+import { setHold, setReopenOffer } from './devreload/state';
 import { openSource } from './session';
 import { useApp, type AppState } from './store';
 
-const DB_NAME = 'gitmap-dev-resume';
+const DB_NAME = 'starmap-dev-resume';
 const STORE = 'kv';
 const SOURCE_KEY = 'source';
-const VIEW_KEY = 'gitmap.dev.view';
+const VIEW_KEY = 'starmap.dev.view';
 
 type View = Pick<AppState, 'selection' | 'focus' | 'activeOverlay' | 'typeFilter' | 'minLines' | 'openFile'>;
 const VIEW_FIELDS = ['selection', 'focus', 'activeOverlay', 'typeFilter', 'minLines', 'openFile'] as const;
@@ -46,7 +50,7 @@ async function write(fn: (store: IDBObjectStore) => void): Promise<void> {
     });
   } catch (err) {
     // DataCloneError for a source that cannot be stored: this reload simply starts over
-    console.info('gitmap(dev): could not keep the open map for the next reload', err);
+    console.info('starmap(dev): could not keep the open map for the next reload', err);
   }
 }
 
@@ -95,11 +99,10 @@ function usableView(v: Partial<View>): Partial<View> {
   return out;
 }
 
-/** Folders picked through the Chromium dialog need their read permission to still hold. */
-async function stillReadable(source: RepoSource): Promise<boolean> {
+/** The folder handle of a source picked through the Chromium dialog, whose read permission must still hold. */
+function fsaRoot(source: RepoSource): FileSystemDirectoryHandle | null {
   const locator = source.kind === 'directory' ? source.locator : source.kind === 'snapshot' ? source.locator : undefined;
-  if (locator?.kind !== 'fsa') return true;
-  return (await queryPermission(locator.root)) === 'granted';
+  return locator?.kind === 'fsa' ? locator.root : null;
 }
 
 let started = false;
@@ -114,6 +117,9 @@ export function startDevResume(opts: { reopen: boolean }): void {
   let resuming = false;
 
   useApp.subscribe((s, prev) => {
+    // while a map is loading or open, code changes do not reload the page under it (scripts/holdReloads.ts)
+    if ((s.phase === 'landing') !== (prev.phase === 'landing')) setHold(s.phase !== 'landing');
+    if (s.phase !== 'landing' && prev.phase === 'landing') setReopenOffer(null);
     if (s.session && s.session !== prev.session) {
       const { source } = s.session;
       void write((st) => st.put(source, SOURCE_KEY));
@@ -136,18 +142,31 @@ export function startDevResume(opts: { reopen: boolean }): void {
     if (VIEW_FIELDS.some((k) => s[k] !== prev[k])) saveView(s);
   });
 
+  // a map may already be loading (`?fake` starts before this module arrives)
+  if (useApp.getState().phase !== 'landing') setHold(true);
+
   if (!opts.reopen) return;
   void (async () => {
     const source = await readSource();
     if (!source || useApp.getState().session) return;
-    if (!(await stillReadable(source))) {
-      console.info('gitmap(dev): the last folder needs permission again; pick it to reopen');
+    const reopen = async () => {
+      const view = loadView();
+      pendingView = view ? usableView(view) : null;
+      resuming = true;
+      console.info(`starmap(dev): reopening the last ${source.kind} map after reload (add ?fresh to skip)`);
+      await openSource(source);
+    };
+    const root = fsaRoot(source);
+    if (root && (await queryPermission(root)) !== 'granted') {
+      // the browser asks again only from a click: offer one on the landing page
+      setReopenOffer({
+        name: root.name,
+        reopen: async () => {
+          if ((await requestPermission(root)) === 'granted') await reopen();
+        },
+      });
       return;
     }
-    const view = loadView();
-    pendingView = view ? usableView(view) : null;
-    resuming = true;
-    console.info(`gitmap(dev): reopening the last ${source.kind} map after reload (add ?fresh to skip)`);
-    await openSource(source);
+    await reopen();
   })();
 }

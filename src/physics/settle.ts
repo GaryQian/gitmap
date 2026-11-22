@@ -10,7 +10,10 @@
 //                                     circle enclosing its districts, plus pad
 //   3. city simulation, again      → cities against their measured radii, never closer than the gap
 //   4. territories                 → every city's cells (cells.ts)
-//   5. file simulations            → each district's units spread over its cell
+//   5. file simulations            → each district's units spread over its cell: cooled on all
+//                                     forces, spread to the cell's edge, relaxed on constraints
+//   6. last pass                   → any two spheres still closer than their radii plus the pad are
+//                                     moved apart directly
 //
 // Every tier ends on its constraints alone. Cooling is a schedule, not an equilibrium: the link force
 // fades with alpha and leaves hub neighbourhoods packed tighter than their spheres allow, which is the
@@ -21,10 +24,12 @@
 // spacing is moved apart directly: the gap between two cities is a hard minimum.
 //
 // The cap. The file tier is nearly all of the time, so the cap applies to it: a share for the full
-// forces, the rest for relaxation. The city and district tiers are a few dozen small simulations
-// costing milliseconds and always run to rest. Units start on a spiral over their cell that is already
-// evenly spread, so however short the cap falls, cities and districts do not overlap and every unit is
-// inside its district's cell; what the cap cost is overlap between units, reported with atRest: false.
+// forces (on a shorter cooling schedule if the full one would not fit), the rest for spreading and
+// relaxation, and what settleReserve keeps back for the last pass. The city and district tiers are a
+// few dozen small simulations costing milliseconds and always run to rest. Units start on a spiral
+// over their cell that is already evenly spread, so however short the cap falls, cities and districts
+// do not overlap and every unit is inside its district's cell; what the cap costs is a coarser
+// arrangement and, on very large models, overlap between units, reported with atRest: false.
 //
 // Nothing here depends on the clock except the cap, and simulations of a tier are independent, so the
 // same batches and seed give the same layout whenever the cap is not reached.
@@ -33,7 +38,7 @@ import { now } from '../shared';
 import { clampIntoCell, hasStray } from './cells';
 import { citySpacing } from './cityTier';
 import { districtSpacing, enclosingCentre } from './districtTier';
-import { rankTargets } from './fileTier';
+import { rankTargets, type FileSim } from './fileTier';
 import { separate } from './forces';
 import { spiralUnits } from './placement';
 import { overlapShare } from './quality';
@@ -61,15 +66,48 @@ function runToRest(sims: Sim[], until: number): Run {
 }
 
 /**
+ * The file tier's full forces under the cap. After one round the cost of a round is known; if cooling
+ * over physics.settleTicks would overrun `until`, every simulation is put on a faster schedule that
+ * does finish in the time left. A shorter cooling from an even start gives a coarser but whole layout;
+ * a full-length cooling cut off part-way leaves the link force's clumps in place with nothing to undo
+ * them. `done` is false when the schedule was shortened or cut.
+ */
+function runFiles(w: World, sims: Sim[], until: number): Run {
+  const { alphaMin, alphaDecay } = w.t;
+  let hot = sims.filter(isHot);
+  if (!hot.length) return { ticks: 0, done: true };
+  // two rounds, and the cheaper of the two: the first also pays for the engine warming up
+  let ticks = 0, round = Infinity;
+  for (let pass = 0; pass < 2; pass++) {
+    const t0 = now();
+    for (const sim of hot) {
+      if (now() >= until) break;
+      for (let k = 0; k < ROUND && isHot(sim); k++) { sim.tick(); ticks++; }
+    }
+    round = Math.min(round, Math.max(1e-3, now() - t0));
+    hot = hot.filter(isHot);
+  }
+  let need = 0;
+  for (const sim of hot) need = Math.max(need, Math.log(alphaMin / sim.alpha()) / Math.log(1 - alphaDecay));
+  const afford = Math.floor((until - now()) / round) * ROUND;
+  const shortened = afford < need;
+  if (shortened) {
+    for (const sim of hot) sim.alphaDecay(1 - Math.pow(Math.min(1, alphaMin / sim.alpha()), 1 / Math.max(ROUND, afford)));
+  }
+  const rest = runToRest(hot, until);
+  if (shortened) for (const sim of sims) sim.alphaDecay(alphaDecay);
+  return { ticks: ticks + rest.ticks, done: rest.done && !shortened };
+}
+
+/**
  * Run simulations on their constraints alone until nothing in them moves faster than relaxSpeed, for at
  * most relaxTicks ticks each, or until the clock passes `until`. A simulation in which no constraint is
  * violated stops after one tick.
  */
-export function relax(w: World, parts: readonly SimParts[], until: number): Run {
-  const { relaxTicks, relaxSpeed } = w.t;
-  const still = relaxSpeed * relaxSpeed;
+export function relax(w: World, parts: readonly SimParts[], until: number, maxTicks = w.t.relaxTicks): Run {
+  const still = w.t.relaxSpeed * w.t.relaxSpeed;
   let ticks = 0, done = true;
-  let left = parts.map((p) => ({ p, n: relaxTicks }));
+  let left = parts.map((p) => ({ p, n: maxTicks }));
   for (const p of parts) p.constraintsOnly = true;
   outer: while (left.length) {
     for (const e of left) {
@@ -87,6 +125,39 @@ export function relax(w: World, parts: readonly SimParts[], until: number): Run 
     for (const n of p.nodes) { n.vx = 0; n.vy = 0; }
   }
   return { ticks, done };
+}
+
+/**
+ * The file tier's last pass: no two spheres of a district closer than their radii plus the pad.
+ * Relaxation by force stops when nothing moves faster than relaxSpeed, which leaves the odd pair a
+ * little inside each other, and a capped settle may not get that far at all. Here the collide discs
+ * are the sphere plus half the pad, and each round moves every overlapping pair apart by the full
+ * overlap, directly, then puts anything pushed across a cell edge back inside. A district with no pair
+ * that close is done after one round. Runs until `until`, in rounds over all districts.
+ */
+function finish(w: World, files: readonly FileSim[], until: number): void {
+  let left = files.filter((fs) => fs.nodes.length > 1).map((fs) => ({ fs, n: w.t.file.finishRounds }));
+  for (const { fs } of left) { fs.tight = true; fs.collide.refresh(); }
+  const all = left;
+  while (left.length && now() < until) {
+    for (const e of left) {
+      const { fs } = e;
+      for (const n of fs.nodes) { n.vx = 0; n.vy = 0; }
+      fs.collide(1);
+      let moved = false;
+      for (const n of fs.nodes) {
+        if (n.vx === 0 && n.vy === 0) continue;
+        n.x += n.vx; n.y += n.vy;
+        n.vx = 0; n.vy = 0;
+        moved = true;
+      }
+      const cell = w.cells[fs.district];
+      if (moved && cell) clampIntoCell(fs.nodes, cell);
+      e.n = moved ? e.n - 1 : 0;
+    }
+    left = left.filter((e) => e.n > 0);
+  }
+  for (const { fs } of all) { fs.tight = false; fs.collide.refresh(); }
 }
 
 /** Close the gaps in a city or district tier: its pull toward the middle against collide, at a steady alpha. */
@@ -199,11 +270,16 @@ export function settleWorld(w: World, maxMs: number): SettleReport {
   const activeFiles = files.filter((fs) => isHot(fs.sim));
   if (first) for (const fs of activeFiles) spiralUnits(fs, rankTargets(fs, t), w.seed, w.cells[fs.district]);
   const start = now(), end = Math.max(start, t0 + maxMs * (1 - t.settleReserve));
-  const full = runToRest(activeFiles.map((fs) => fs.sim), start + (end - start) * t.settleFullShare);
+  const full = runFiles(w, activeFiles.map((fs) => fs.sim), start + (end - start) * t.settleFullShare);
+  // spread to the edge of the territory, then settle on collide and containment alone
+  for (const fs of activeFiles) fs.spreading = true;
+  ticks += relax(w, activeFiles, start + (end - start) * (1 + t.settleFullShare) / 2, t.file.spreadTicks).ticks;
+  for (const fs of activeFiles) fs.spreading = false;
   const eased = relax(w, activeFiles, end);
   ticks += full.ticks + eased.ticks;
   capped = !full.done || !eased.done;
   clampToCells(w);
+  finish(w, activeFiles, t0 + maxMs);
 
   // The map is about to be shown: whatever the cap left unfinished stays where it is.
   markHome(w);

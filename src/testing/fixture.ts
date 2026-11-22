@@ -61,7 +61,7 @@ export function buildFixtureRepo(name: string, variant = ''): string {
   const script: FixtureScript = JSON.parse(readFileSync(path.join(src, 'commits.json'), 'utf8'));
   const out = path.join(root, '.fixtures', variant ? `${name}--${variant}` : name);
   const stamp = JSON.stringify([script, walk(src).map((f) => [f, statSync(path.join(src, f)).mtimeMs, statSync(path.join(src, f)).size])]);
-  const stampFile = path.join(out, '.git', 'gitmap-fixture-stamp');
+  const stampFile = path.join(out, '.git', 'starmap-fixture-stamp');
   const fresh = () => existsSync(stampFile) && readFileSync(stampFile, 'utf8') === stamp;
   if (fresh()) return out;
 

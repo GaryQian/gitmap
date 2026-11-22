@@ -1,4 +1,4 @@
-// gitmap M0 spike 4: render N impostor spheres + instanced arc edges + GPU particles + ground/territory.
+// starmap M0 spike 4: render N impostor spheres + instanced arc edges + GPU particles + ground/territory.
 // URL params: n, edges, particles, terr (0/1), terrHot (re-render territory every frame), fd (gl_FragDepth on spheres),
 // orbit (0/1), dist (camera distance multiplier), seg (arc segments), dpr, finish (time render+gl.finish), seed.
 import * as THREE from 'three';

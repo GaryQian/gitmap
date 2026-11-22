@@ -8,6 +8,7 @@
 //                  its folder, and a folder with no code at all follow the directory tree; see
 //                  directoryAffinity below. Linear in files. Directory hubs exist in this graph only.
 import type { Config } from '../../config';
+import { hash32 } from '../../shared';
 import type { UnitEdges } from '../edges';
 import { comparePaths } from '../order';
 import type { UnitTable } from '../units';
@@ -134,19 +135,24 @@ function directoryAffinity(n: number, paths: readonly string[], ea: Int32Array, 
     let anchors = 0;
     for (; k < n && dirOf[byDir[k]] === h; k++) anchors += connected[byDir[k]];
     let before = -1;
+    let runHead = -1;
+    // Run length for a directory with no code: the power of two nearest √n, so it changes only when
+    // the directory grows or shrinks about fourfold.
+    const run = Math.max(2, 2 ** Math.round(Math.log2(Math.sqrt(Math.max(1, k - from)))));
     for (let j = from, waiting = from; j < k; j++) {
       const file = byDir[j];
       if (anchors === 0) {
-        // No code in this directory: its files are tied in runs of neighbours in path order. Each of
-        // the √n runs is a small star around its first file, the first files are linked in order,
-        // and the first of all hangs from the hub. One star around the hub would be a single
-        // indivisible community however many files it held (tensorflow has data directories of
-        // 1,500 files); runs divide wherever the counts ask, and unlike one long chain they cost
-        // Louvain nothing extra.
-        const at = j - from;
-        const run = Math.max(2, Math.ceil(Math.sqrt(k - from)));
-        if (at % run !== 0) tie(file, byDir[j - (at % run)]);
-        else tie(file, at === 0 ? n + h : byDir[j - run]);
+        // No code in this directory: its files are tied in runs of neighbours in path order. Each
+        // run is a small star around its first file, the first files are linked in order, and the
+        // first of all hangs from the hub. One star around the hub would be a single indivisible
+        // community however many files it held (tensorflow has data directories of 1,500 files);
+        // runs divide wherever the counts ask, and unlike one long chain they cost Louvain nothing
+        // extra. Where a run starts is decided by the file's own name (a hash of its path, one start
+        // in `run` on average), not by its position in the listing, so adding or removing a file
+        // moves at most the boundaries next to it and an Update stays local.
+        if (runHead < 0) { tie(file, n + h); runHead = file; }
+        else if (hash32(paths[file]) % run === 0) { tie(file, runHead); runHead = file; }
+        else tie(file, runHead);
       } else if (!connected[file]) { if (before >= 0) tie(file, before); } else {
         tie(file, n + h);
         for (; waiting < j; waiting++) if (!connected[byDir[waiting]]) tie(byDir[waiting], file);

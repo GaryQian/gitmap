@@ -32,4 +32,6 @@ try {
   await runner.close();
   await server.close();
 }
-process.exit(code);
+// Not process.exit(): on Node 24 for Windows, exiting within ~100 ms of tree-sitter wasm work
+// aborts with a libuv assertion. Setting the exit code lets the loop drain first.
+process.exitCode = code;

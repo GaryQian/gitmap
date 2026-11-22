@@ -90,7 +90,7 @@ function ResetView() {
     const mine = ++run.current;
     // the camera and the layout only: selection, overlay and filters are left alone
     const flight = render.resetView().catch(() => {});
-    const layout = session.physics.resetLayout().catch((err: unknown) => console.warn('gitmap: resetLayout failed', err));
+    const layout = session.physics.resetLayout().catch((err: unknown) => console.warn('starmap: resetLayout failed', err));
     // The default framing depends on where the cities are, and they were still on their way home
     // when the camera set off. Once both have arrived, fly the last bit if the framing has moved.
     void Promise.all([flight, layout]).then(() => {
@@ -132,4 +132,7 @@ function ResetView() {
 }
 
 const mounts: AppMount[] = [
-  { region: 'bottomLeft', order: 0, Componen
+  { region: 'bottomLeft', order: 0, Component: ControlsKey },
+  { region: 'bottomLeft', order: 10, Component: ResetView },
+];
+export default mounts;

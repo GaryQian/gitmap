@@ -20,7 +20,10 @@
 //   tunables.ts    values waiting for a config.json entry
 //
 // Notation: every entity is written as its NodeRef (c:<id>, d:<id>, u:<path>) exactly as the server
-// lists it under allowed references, usually at the start of the line that describes it.
+// lists it under allowed references, usually at the start of the line that describes it. Only u:
+// refs are files. Points of interest and tour steps stand on files (PLAN.md §11.3), so each city
+// and district line is followed by "stands for it: u:…" — the file with the most links inside that
+// area — next to its entry points and skeleton files, as candidates for an area-level point.
 import type { Config } from '../../config';
 import type { ModelReplica } from '../../contracts/store';
 import type { NodeRef } from '../../model/types';
@@ -91,7 +94,7 @@ export function buildDigestText(input: DigestInput): DigestText {
  */
 export async function digestHash(text: string, config: Config): Promise<string> {
   const { synthesis, bulk } = config.ai.models;
-  const bytes = new TextEncoder().encode(`gitmap-digest/${DIGEST_VERSION}\n${synthesis}\n${bulk}\n${text}`);
+  const bytes = new TextEncoder().encode(`starmap-digest/${DIGEST_VERSION}\n${synthesis}\n${bulk}\n${text}`);
   const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
   let hex = '';
   for (const b of hash) hex += b.toString(16).padStart(2, '0');

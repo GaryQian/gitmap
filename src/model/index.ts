@@ -2,7 +2,7 @@
 //   replica.ts  ModelReplica: applies batches; what every consumer holds
 //   store.ts    ModelStore: validates proposals, assigns slots and revisions (its choices are listed at the top)
 //   diff.ts     diffStructure: current structure → the structure analysis produced
-//   codec.ts    the .gitmap.json.gz format
+//   codec.ts    the .starmap.json.gz format
 
 export * from './types';
 export { createReplica } from './replica';
@@ -13,5 +13,5 @@ export { createModelStore } from './store';
 /** Operations that turn the replica's current structure into `next`. */
 export { diffStructure } from './diff';
 
-/** Columnar JSON, gzipped: the `.gitmap.json.gz` format (PLAN.md §5, §12). decodeModel rejects an unknown schema. */
+/** Columnar JSON, gzipped: the `.starmap.json.gz` format (PLAN.md §5, §12). decodeModel rejects an unknown schema. */
 export { encodeModel, decodeModel } from './codec';

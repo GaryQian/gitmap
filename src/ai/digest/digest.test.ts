@@ -1,3 +1,4 @@
+import picomatch from 'picomatch';
 import { describe, expect, it } from 'vitest';
 import { config, withConfig } from '../../config';
 import type { Config } from '../../config';
@@ -7,6 +8,7 @@ import { createReplica } from '../../model';
 import { parseRef, unitRef } from '../../model/types';
 import type { ColumnChunk, NodeRef, StructureTables } from '../../model/types';
 import { syntheticTables, tablesToFullBatch } from '../../testing/synthetic';
+import { matcher } from './filters';
 import { buildDetailContext, buildDigest, buildDigestText, poiCount } from './index';
 import type { DigestInput } from './index';
 
@@ -181,6 +183,20 @@ describe('digest builder', () => {
     expect(buildDetailContext(inp, { parent: unitRef(EXTRA.vendored) }).withheld).toBe('excluded');
   });
 
+  it('matches paths exactly as picomatch does with the configured globs', () => {
+    const paths = [
+      ...repo.tables.file.ids, 'vendor', 'a/vendor', 'a/vendor/x.ts', 'a/xvendor/y.ts', 'x.min.js', 'a/b/c.min.css', 'yarn.lock', 'a/Cargo.lock',
+      'a.lock/x.ts', 'a/b.generated.ts', 'x.pb.go', 'a/x_pb2.py', 'tests/a.py', 'a/test/b.go', 'a/test', 'a/__tests__/b.ts', 'a/b_test.go',
+      'a/b.test.tsx', 'a/b.spec.js', 'a/FooTest.java', 'FooTest.java', 'a/test_x.py', 'test_x.py', 'src/latest/contest.ts', 'dist/a.js', 'src/dist/a.js',
+      'node_modules/x/y.js', 'a/third_party/z.c', 'a/b.map', 'package-lock.json', 'a/pnpm-lock.yaml', '.env', 'README.md',
+    ];
+    for (const globs of [config.parser.exclude, config.overlays.tests.patterns]) {
+      const expected = picomatch(globs, { dot: true, windows: false });
+      const actual = matcher(globs, false);
+      for (const path of paths) expect(actual(path), path).toBe(expected(path));
+    }
+  });
+
   it('lists exactly refs that exist in the model and appear in the text, within the budget', () => {
     const inp = input(repo);
     const built = buildDigestText(inp);
@@ -197,10 +213,15 @@ describe('digest builder', () => {
     // A file ref at the start of a line is always one the list carries.
     for (const m of built.digest.matchAll(/^\s*(u:\S+) — /gm)) expect(built.refs.includes(m[1] as NodeRef), m[1]).toBe(true);
 
+    // Points of interest stand on files: every city and district names a file that stands for it.
+    const standIns = [...built.digest.matchAll(/^\s+stands for it: (u:\S+)/gm)];
+    expect(standIns.length).toBe(inp.replica.table('city').count + inp.replica.table('district').count);
+
     expect(built.cities.length).toBe(inp.replica.table('city').count);
     for (const city of built.cities) {
       expect(city.tokens.total).toBeLessThan(config.ai.digestTokens);
       expect(city.context.includes(city.ref)).toBe(true);
+      expect(city.context).toMatch(/stands for it: u:/);
       for (const ref of city.refs) {
         expect(exists(inp.replica, ref), ref).toBe(true);
         expect(city.context.includes(ref), ref).toBe(true);

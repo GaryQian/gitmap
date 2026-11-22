@@ -102,7 +102,7 @@ export function closeSession(message: string | null = null): void {
     phase: 'landing', session: null, render: null, stage: IDLE_STAGE, progress: {}, notices: [], message,
     backgroundEmphasis: 0, ...freshView(),
   });
-  try { session?.dispose(); } catch (err) { console.warn('gitmap: session.dispose failed', err); }
+  try { session?.dispose(); } catch (err) { console.warn('starmap: session.dispose failed', err); }
 }
 
 /** Hand the map canvas to the open session. The renderer then follows the store (see below). */
@@ -116,7 +116,7 @@ export function attachCanvas(canvas: HTMLCanvasElement): void {
   } catch (err) {
     // While the renderer is still a stub the map screen shows its chrome over the bare background;
     // any other failure (no WebGL, say) ends the session with the reason on the landing page.
-    if (isNotImplemented(err)) console.warn('gitmap: no renderer yet', err);
+    if (isNotImplemented(err)) console.warn('starmap: no renderer yet', err);
     else closeSession(errorMessage(err));
     return;
   }
@@ -134,7 +134,7 @@ export function attachCanvas(canvas: HTMLCanvasElement): void {
 
 /** A renderer or session method may still be another package's stub; one failing must not break the rest. */
 function attempt(what: string, fn: () => void): void {
-  try { fn(); } catch (err) { console.warn(`gitmap: ${what} failed`, err); }
+  try { fn(); } catch (err) { console.warn(`starmap: ${what} failed`, err); }
 }
 
 // Store → renderer and session. Everything is pushed once when a renderer appears, then on change.

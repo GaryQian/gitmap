@@ -3,12 +3,7 @@
 // these numbers.
 export const APP_LOCAL = {
   pills: {
-    /** A city shows its district pills when it is no farther than this many camera distances … */
-    districtNear: 1.6,
-    /** … and its territory radius over its depth reaches this; pills are at full strength by `districtFull`. */
-    districtFrom: 0.2,
-    districtFull: 0.3,
-    /** City pills start to fade at this many camera distances and reach `fadeFloor` at `fadeEnd`. */
+    /** Pills start to fade at this many camera distances and reach `fadeFloor` at `fadeEnd`. */
     fadeStart: 1.3,
     fadeEnd: 3.5,
     fadeFloor: 0.6,

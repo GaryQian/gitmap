@@ -1,10 +1,10 @@
 // /dev harness: load a synthetic model or a saved snapshot straight into the renderer, so visuals
 // and physics can be iterated on without parsing anything. Lead-owned.
 //   /dev.html?n=10000&seed=1          synthetic model through the real session (store, physics worker, renderer)
-//   /dev.html?snapshot=/out/react.gitmap.json.gz   a snapshot written by `npm run parse`
+//   /dev.html?snapshot=/out/react.starmap.json.gz   a snapshot written by `npm run parse`
 //   /dev.html?fake=1&n=2000           the fake session: static layout, no workers
 //   &mode=dark|light
-//   window.__gitmap exposes the session for tests and the console.
+//   window.__starmap exposes the session for tests and the console.
 import { config } from '../config';
 import type { RepoLocator } from '../contracts/git';
 import type { RepoSource, Session } from '../contracts/pipeline';
@@ -22,7 +22,7 @@ if (mode === 'light') { document.body.style.background = config.theme.light.void
 
 const state = { ready: false, spheres: 0, error: '' };
 const handle: { session: Session | null; render: unknown; state: typeof state } = { session: null, render: null, state };
-(window as unknown as { __gitmap: unknown }).__gitmap = handle;
+(window as unknown as { __starmap: unknown }).__starmap = handle;
 
 /**
  * A fixture repo (written by scripts/bundle-fixture.ts) as a locator, so the folder pipeline runs in
@@ -38,7 +38,7 @@ async function fixtureLocator(name: string, via: string): Promise<RepoLocator> {
   if (via === 'memory') return { kind: 'memory', name, files: Object.fromEntries(Object.entries(bundle.files).map(([p, b]) => [p, bytes(b)])) };
   if (via === 'files') return { kind: 'files', name, files: Object.entries(bundle.files).map(([p, b]) => ({ path: p, file: new File([bytes(b)], p.split('/').pop()!) })) };
   const opfs = await navigator.storage.getDirectory();
-  const parent = await opfs.getDirectoryHandle('gitmap-dev-fixtures', { create: true });
+  const parent = await opfs.getDirectoryHandle('starmap-dev-fixtures', { create: true });
   try { await parent.removeEntry(name, { recursive: true }); } catch { /* first run */ }
   const root = await parent.getDirectoryHandle(name, { create: true });
   for (const [p, b] of Object.entries(bundle.files)) {

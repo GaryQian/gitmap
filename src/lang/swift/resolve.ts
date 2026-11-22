@@ -297,5 +297,19 @@ export function createSwiftResolver(index: RepoIndex): Resolver {
       if (isManifest(file.path)) return [];
       return [(moduleOfFile.get(file.path) ?? moduleOfDir(dirname(file.path))).key];
     },
+
+    // `import Core` makes every public symbol of Core readable from this file, without Core's files
+    // seeing this one: one-way visibility instead of an import edge to each of the module's files.
+    sees(file: FileFacts): string[] {
+      if (isManifest(file.path)) return [];
+      const own = moduleOfFile.get(file.path);
+      const keys: string[] = [];
+      for (const imp of file.imports) {
+        const dot = imp.spec.indexOf('.');
+        const target = imported(dot < 0 ? imp.spec : imp.spec.slice(0, dot), own);
+        if (target && target !== own && !keys.includes(target.key)) keys.push(target.key);
+      }
+      return keys;
+    },
   };
 }

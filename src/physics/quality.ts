@@ -54,10 +54,12 @@ export function overlapShare(districts: Iterable<readonly PNode[]>, tolerance: n
  * zones of equal area around its centroid (inner, middle and outer third, scaled along each bearing to
  * the cell's edge), and a zone's cover is the area of the unit discs centred in it over the zone's
  * area. Returned as the area-weighted mean over all districts with a cell: equal numbers mean an even
- * fill, a high inner and low outer number a pile at the centre and a sparse rim. Discs are counted
- * whole where they are centred and overlaps are counted twice, so a cover above about 0.9 means overlap.
+ * fill, a high inner and low outer number a pile at the centre and a sparse rim. A disc is counted
+ * with its collide padding (`pad`), since the padded disc is the room a unit takes (small spheres are
+ * mostly padding, so the bare-sphere cover of a rim of small files is lower), and it is shared between
+ * the zones it straddles in proportion to how much of its width along the radius lies in each.
  */
-export function coverByRadius(districts: Iterable<{ nodes: readonly PNode[]; cell: LocalCell | undefined }>): { innerCover: number; middleCover: number; outerCover: number } {
+export function coverByRadius(districts: Iterable<{ nodes: readonly PNode[]; cell: LocalCell | undefined }>, pad: number): { innerCover: number; middleCover: number; outerCover: number } {
   const disc = [0, 0, 0];
   let zone = 0;
   for (const { nodes, cell } of districts) {
@@ -67,8 +69,14 @@ export function coverByRadius(districts: Iterable<{ nodes: readonly PNode[]; cel
       const dx = n.x - cell.cx, dy = n.y - cell.cy;
       const d = Math.sqrt(dx * dx + dy * dy);
       const reach = d > 1e-9 ? cellReach(cell, dx, dy) : Infinity;
-      const share = reach > 0 ? Math.min(1, d / reach) : 1;
-      disc[Math.min(2, Math.floor(share * share * 3))] += Math.PI * n.r * n.r;
+      const rr = n.r + pad, area = Math.PI * rr * rr;
+      if (!(reach > 0) || reach === Infinity) { disc[reach === Infinity ? 0 : 2] += area; continue; }
+      const lo = Math.max(0, (d - rr) / reach), hi = Math.max(lo + 1e-9, Math.min(1, (d + rr) / reach));
+      for (let z = 0; z < 3; z++) {
+        const from = Math.sqrt(z / 3), to = z === 2 ? Infinity : Math.sqrt((z + 1) / 3);
+        const part = Math.max(0, Math.min(hi, to) - Math.max(lo, from));
+        disc[z] += (area * part) / (hi - lo);
+      }
     }
   }
   return { innerCover: zone ? disc[0] / zone : 0, middleCover: zone ? disc[1] / zone : 0, outerCover: zone ? disc[2] / zone : 0 };
