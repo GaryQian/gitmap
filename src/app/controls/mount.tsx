@@ -1,5 +1,5 @@
-// Bottom left: the controls key, one tiny pill that opens into the list of controls on hover or
-// focus, and beside it the "Reset view" pill (PLAN.md §9, §17.6).
+// Bottom left: the controls key, a short list of the navigation controls shown from the start that
+// its pill hides and shows again (remembered in the browser), and beside it the "Reset view" pill (PLAN.md §9, §17.6).
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { AppMount } from '../../contracts/app';
 import { isTyping } from '../keys';
@@ -8,42 +8,43 @@ import { APP_LOCAL } from '../tunables';
 import { Card, PillButton, cx } from '../ui';
 import './controls.css';
 
-/** The table in PLAN.md §9, in the order a newcomer needs it. */
+/** Just how to move around and select; the rest (hover, double-click, dragging labels) is found by use. */
 const CONTROLS: readonly (readonly [input: string, action: string])[] = [
   ['Drag', 'Pan'],
+  ['Wheel', 'Zoom'],
   ['Middle-drag or Space+drag', 'Orbit'],
-  ['Wheel', 'Zoom toward the pointer'],
-  ['Hover', 'Show a file and its connections'],
-  ['Click', 'Select a file'],
-  ['Shift+click', 'Add to or remove from the selection'],
-  ['Shift+drag', 'Select an area'],
-  ['Double-click', 'Open the file'],
-  ['Drag a label', 'Move a city or district'],
-  ['Escape', 'Clear the selection'],
-  ['Home', 'Reset view'],
+  ['Shift+click or Shift+drag', 'Select'],
 ];
 
+const HIDDEN_KEY = 'starmap.controlsHidden';
+
+function loadHidden(): boolean {
+  try { return localStorage.getItem(HIDDEN_KEY) === '1'; } catch { return false; }
+}
+
 function ControlsKey() {
-  const [hovered, setHovered] = useState(false);
-  const [focused, setFocused] = useState(false);
-  const [dismissed, setDismissed] = useState(false);
+  const [open, setOpen] = useState(() => !loadHidden());
   const id = useId();
-  const open = (hovered || focused) && !dismissed;
+
+  const toggle = useCallback(() => {
+    setOpen((was) => {
+      const next = !was;
+      try { localStorage.setItem(HIDDEN_KEY, next ? '0' : '1'); } catch { /* private mode: lasts for this visit */ }
+      return next;
+    });
+  }, []);
 
   return (
-    <div
-      className="gm-controls"
-      onPointerEnter={() => setHovered(true)}
-      onPointerLeave={() => { setHovered(false); setDismissed(false); }}
-      onFocus={() => setFocused(true)}
-      onBlur={() => { setFocused(false); setDismissed(false); }}
-      onKeyDown={(e) => {
-        if (e.key !== 'Escape' || !open) return;
-        e.stopPropagation(); // this Escape closes the list; the selection stays
-        setDismissed(true);
-      }}
-    >
-      <PillButton blur size="small" active={open} aria-expanded={open} aria-controls={id} onClick={() => setDismissed(false)}>
+    <div className="gm-controls">
+      <PillButton
+        blur
+        size="small"
+        active={open}
+        aria-expanded={open}
+        aria-controls={id}
+        title={open ? 'Hide the controls' : 'Show the controls'}
+        onClick={toggle}
+      >
         Controls
       </PillButton>
       <Card blur id={id} className={cx('gm-controls-card', open && 'is-open')} role="region" aria-label="Controls" aria-hidden={!open}>

@@ -2,10 +2,12 @@
    :root; nothing here names a colour. Neutral grays with the halo (blue) and warm accents only. */
 
 :root {
-  --gm-text-dim: color-mix(in srgb, var(--gm-text) 72%, transparent);
+  /* --gm-text-dim, --gm-text-quiet and --gm-link come from theme.ts, which works out their contrast */
   --gm-text-faint: color-mix(in srgb, var(--gm-text) 10%, transparent);
   --gm-halo-soft: color-mix(in srgb, var(--gm-halo) 30%, transparent);
   --gm-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  /* what the focus ring is drawn on; `transparent` where the ring already lies on a card or the sidebar */
+  --gm-focus-band: var(--gm-surface);
 }
 
 html, body, #root { height: 100%; margin: 0; }
@@ -22,9 +24,29 @@ body {
   overflow: hidden;
 }
 
-/* One focus ring everywhere: the halo colour, clear of the element. */
-:focus-visible { outline: 2px solid var(--gm-halo); outline-offset: 2px; }
+/* One focus ring everywhere: the halo colour, clear of the element. The scene can put anything
+   behind it, a white star as easily as the void, so the ring is drawn on a band of the surface
+   colour (a spread, not a drop shadow), against which the halo always has 3:1 (theme.ts). The band
+   outranks an active pill's glow, hence !important. */
+:focus-visible {
+  outline: 2px solid var(--gm-halo);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 5px var(--gm-focus-band) !important;
+}
 :focus:not(:focus-visible) { outline: none; }
+
+/* For screen readers only: the map's heading, and status lines that would repeat what is on screen. */
+.gm-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 
 /* ---- pill ---- */
 
@@ -89,15 +111,17 @@ body {
   border-left: 1px solid var(--gm-hairline);
   border-radius: 0 999px 999px 0;
   background: transparent;
-  color: var(--gm-halo);
+  color: var(--gm-link);
   font: inherit;
   font-weight: 500;
   letter-spacing: inherit;
   cursor: pointer;
   transition: background-color 140ms var(--gm-ease);
 }
+/* The action is link-coloured text, which needs the card's opacity to keep 4.5:1 (theme.ts). */
+.gm-pill:has(> .gm-pill-segment) { background: var(--gm-card-bg); }
 .gm-pill-segment:hover { background: var(--gm-text-faint); }
-.gm-pill-segment:focus-visible { outline-offset: -4px; }
+.gm-pill-segment:focus-visible { outline-offset: -4px; --gm-focus-band: transparent; }
 .gm-pill-segment:disabled { cursor: default; color: var(--gm-text-dim); background: transparent; }
 
 .gm-strong { font-weight: 500; }
@@ -131,14 +155,19 @@ body {
   padding: 16px;
   border: 1px solid var(--gm-hairline);
   border-radius: var(--gm-card-radius);
-  background: var(--gm-pill-bg);
+  /* more opaque than a pill: a card holds secondary text, which needs it (theme.ts) */
+  background: var(--gm-card-bg);
   color: var(--gm-text);
   font-family: var(--gm-font-ui);
   font-size: 13px;
   line-height: 1.45;
   letter-spacing: 0.02em;
   pointer-events: auto;
+  /* a control inside a card has the card behind its focus ring, which is enough */
+  --gm-focus-band: transparent;
 }
+/* ...but a card that takes the focus itself has the scene behind its ring */
+.gm-card:focus-visible { --gm-focus-band: var(--gm-surface); }
 
 /* ---- segmented choice ---- */
 
@@ -180,6 +209,7 @@ body {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
   }
 }
 
@@ -198,8 +228,9 @@ body {
   flex: 0 0 auto;
   display: inline-grid;
   place-items: center;
-  width: 22px;
-  height: 22px;
+  /* the smallest target the chrome offers */
+  width: 24px;
+  height: 24px;
   margin: 0;
   padding: 0;
   border: 0;

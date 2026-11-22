@@ -8,7 +8,7 @@ import type { SearchHit } from '../../contracts/pipeline';
 import type { ModelReplica } from '../../contracts/store';
 import { matchRanges } from '../../search';
 import { languageColor } from '../../shared';
-import { isTyping } from '../keys';
+import { LAYER, isTyping, useDismissable } from '../keys';
 import { setSelection, useApp, useRender, useSession } from '../store';
 import { Card, CloseIcon, Pill, cx } from '../ui';
 import { unitSummary } from '../units';
@@ -124,6 +124,12 @@ function SearchPill() {
     return () => window.removeEventListener('pointerdown', onPointerDown, true);
   }, [open]);
 
+  // Escape clears and closes; the field gives the focus back to the map. One layer per press (keys.ts).
+  useDismissable(focused, () => {
+    clear();
+    input.current?.blur();
+  }, { layer: LAYER.list, owns: (field) => field === input.current });
+
   const listed = open && term !== '' && results !== null;
   const hits = listed ? results.hits : [];
   const activeId = hits.length > 0 ? `${listId}-${Math.min(active, hits.length - 1)}` : undefined;
@@ -181,13 +187,6 @@ function SearchPill() {
       case 'Enter':
         e.preventDefault();
         onEnter();
-        break;
-      case 'Escape':
-        // Clear and close; the field gives focus back to the map. Stopped here so it does not also clear the selection.
-        e.preventDefault();
-        e.stopPropagation();
-        clear();
-        input.current?.blur();
         break;
     }
   };

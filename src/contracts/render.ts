@@ -87,7 +87,7 @@ export interface RenderApi {
   /** Languages to show at full strength; others dim. Empty = all. */
   setTypeFilter(langs: LangId[]): void;
   /** Hide units below this line count (glowing units exempt). Layout does not change. */
-  setMinLines(n: number): void;
+  setMinBytes(n: number): void;
   flyTo(ref: NodeRef, opts?: FlyOpts): Promise<void>;
   /** Fly to the default framing: the whole map in view at the default tilt. */
   resetView(opts?: FlyOpts): Promise<void>;

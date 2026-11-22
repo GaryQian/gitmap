@@ -7,6 +7,7 @@ import { useEffect, useId, useLayoutEffect, useRef, type RefObject } from 'react
 import type { AppMount } from '../../contracts/app';
 import type { FlyOpts, FrameInfo, RenderApi } from '../../contracts/render';
 import type { NodeRef, Tour, TourStep } from '../../model/types';
+import { LAYER, useDismissable } from '../keys';
 import { useApp, useRender, useReplicaVersion, useSession } from '../store';
 import { Card, CloseIcon, PillButton, Strong, cx } from '../ui';
 import { clearDistance, territoryRadius, type Box } from './framing';
@@ -107,8 +108,9 @@ function usesSpace(target: EventTarget | null): boolean {
 }
 
 /**
- * While a tour plays: ← and → step, Space steps forward, Escape ends it. They work wherever the
- * focus is, except in a field the user is typing in or a control that uses the same key.
+ * While a tour plays: ← and → step, and Space steps forward. They work wherever the focus is, except
+ * in a field the user is typing in or a control that uses the same key. (Escape ends the tour, in
+ * its turn among the things Escape closes: see TourControl.)
  * Space acts on release, and not at all if the pointer went down meanwhile: Space+drag orbits the map.
  */
 function useTourKeys(active: boolean): void {
@@ -118,7 +120,6 @@ function useTourKeys(active: boolean): void {
     let spaceUsed = false;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || isEditable(e.target)) return;
-      if (e.key === 'Escape') { e.preventDefault(); stopTour(); return; }
       if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
         if (usesArrows(e.target)) return;
         e.preventDefault();
@@ -201,6 +202,8 @@ function TourControl() {
   useChoreography(render, card);
   const { tour, index, active } = useTour((s) => s.seq);
   useTourKeys(active);
+  // Escape ends the tour once any card or list over it has closed, and before the sidebar (keys.ts)
+  useDismissable(active, stopTour, { layer: LAYER.tour });
 
   // Focus goes to the card when the tour starts and back to the pill when it ends, unless the user
   // has put it somewhere else in the meantime.

@@ -424,7 +424,7 @@ export function createInteraction(): SceneModule {
     window.addEventListener('keydown', onKey);
     cleanup.push(() => window.removeEventListener('keydown', onKey));
 
-    cleanup.push(ctx.bus.on('minLines', () => {
+    cleanup.push(ctx.bus.on('minBytes', () => {
       // a sphere the slider just hid cannot stay hovered
       if (hovered >= 0 && !isShown(hovered)) clearHover();
     }));

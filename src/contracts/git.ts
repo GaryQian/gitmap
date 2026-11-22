@@ -79,4 +79,10 @@ export interface GitRepo {
 export interface ContentSource {
   /** Bytes of a file ('f:path'), or of a unit's primary file ('u:path'). Rejects when unavailable. */
   read(file: NodeRef): Promise<Uint8Array>;
+  /**
+   * Replace a file's bytes on disk. Present only when the source is a folder the browser can write
+   * to; the sidebar editor offers a download instead when it is absent. Must be called from a user
+   * gesture (the first write asks for write permission). Rejects with a message fit to show.
+   */
+  write?(file: NodeRef, bytes: Uint8Array): Promise<void>;
 }

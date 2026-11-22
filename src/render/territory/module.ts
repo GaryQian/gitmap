@@ -203,7 +203,7 @@ export function createTerritory(): SceneModule {
       const had = cityBorders.get(c);
       if (had && had.key === key) continue;
       const sites = list.map((d) => ({ x: pos.district[3 * d], z: pos.district[3 * d + 1], bound: pos.district[3 * d + 2] }));
-      cityBorders.set(c, { key, segments: districtBorders(sites, territoryShape) });
+      cityBorders.set(c, { key, segments: districtBorders(sites, territoryShape, (b) => b * T.borderReach[0] + T.borderReach[1]) });
       changed = true;
     }
     if (!changed && borderGeometry) return;

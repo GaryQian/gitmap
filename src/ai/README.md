@@ -121,6 +121,21 @@ store.propose(ops);
 // demo snapshots ship every detail card: one generateDetail per point of interest and question
 ```
 
+### Dev server and deployment
+
+Nothing to add. `vite.config.ts` already mounts `POST /api/ai/{summaries,pois,tour,detail}` in the dev server (the `ai-dev-routes` plugin, which loads `src/ai/server` through the dev server and reads the selected provider's key from the environment or a `.env` file; see Providers below), and `api/ai/*.ts` are the deployed functions. `createAiClient()` defaults to that base, `/api/ai`. Without a key the handlers answer `no_key`, which the chrome shows as "No AI key is configured on the server."
+
+## Providers
+
+Two adapters implement `AiProvider` (`src/contracts/ai.ts`): Anthropic (`server/provider.ts`, the SDK) and OpenAI (`server/openai.ts`, the Responses API over plain `fetch`).
+
+- **Selecting one.** The provider id is `VITE_AI_PROVIDER`, then `AI_PROVIDER`, then `config.json → ai.provider`, trimmed and lower-cased (`resolveProviderId`). Set `VITE_AI_PROVIDER`: it is the one the page can also read, so the consent prompt names the right provider and the digest hash includes it. On Vercel it has to be set for the build and for the functions.
+- **Variables.** `anthropic` needs `ANTHROPIC_API_KEY`; `openai` needs `OPENAI_API_KEY`. Keys are read only on the server. A missing key is answered as `no_key`, naming the variable; an unknown id as `provider`. `.env.example` lists them with the optional switches.
+- **Models.** Each provider has its own block in `config.json`: `ai.models` (Anthropic) and `ai.openaiModels` (OpenAI), each with `synthesis` and `bulk`.
+- **`activeAi(config, env?)`** (`active.ts`, exported from `src/ai`, browser-safe) returns `{ provider, name, models }` for the provider in use. `digestHash` mixes in the provider id and its two model ids, so switching provider regenerates the annotations instead of reusing another model's; the consent card takes the provider's name from it.
+- **OpenAI specifics.** The system prompt is the first `developer` message, `cachedPrefix` is the first part of the user message with an explicit cache breakpoint at its end, and the prompt follows it; the result format is `text.format` with `strict: true`. The server's schemas meet the strict rules as written (`strictSchemaIssues` checks, and a test holds them to it); a schema that does not is sent with `strict: false` and the reply's shape is checked locally. Requests are sent with `store: false`. `countTokens` is the local estimate.
+- **Adding another.** Write `server/<name>.ts` exporting a `create<Name>Provider({ apiKey, config, fetch? })` that returns an `AiProvider`: refusals, truncation and unusable output are `outcome` values, HTTP and network failures are thrown as `AiError` (`rate_limited` with a `retry-after` header, otherwise `provider`), and no message quotes the key. Add a case to `getProvider` (`server/provider.ts`) with the key's variable, a case to `activeAi` with the display name and the models block, and ask the lead for that block in `config.json`.
+
 ## Errors
 
 Every failure is an `AiErrorInfo`: `{ code, message, retryAfterSeconds? }`, a plain object that survives `postMessage`. `code` is one of the server's (`disabled`, `no_key`, `too_large`, `rate_limited`, `refused`, `invalid`, `provider`) or the client's own (`network`, `unavailable` when the routes are not mounted, `aborted`, `failed`). `message` is one plain sentence for the chrome (`describeAiError`); the server's wording stays in `AiClientError.detail` for the console. `toAiErrorInfo(anything)` reads the code by shape, not by class.
@@ -129,7 +144,7 @@ The client retries nothing, except a `rate_limited` answer whose `retry-after` i
 
 ## Consent
 
-`getConsent(repoId)` / `setConsent(repoId, 'granted' | 'declined')` / `resetConsent(repoId)` over `localStorage` key `gitmap.ai.consent` (a JSON object, repo id → answer; storage can be injected). `shouldAsk({ config, meta, annotations, consent })` is true only when `config.ai.enabled`, the map is not a demo, no annotations with a digest hash are stored, and the viewer has not answered for this repo. The main thread cannot rebuild the digest, so "stored for the current digest" is settled in the worker: a set whose hash no longer matches is replaced there.
+`getConsent(repoId)` / `setConsent(repoId, 'granted' | 'declined')` / `resetConsent(repoId)` over `localStorage` key `starmap.ai.consent` (a JSON object, repo id → answer; storage can be injected). `shouldAsk({ config, meta, annotations, consent })` is true only when `config.ai.enabled`, the map is not a demo, no annotations with a digest hash are stored, and the viewer has not answered for this repo. The main thread cannot rebuild the digest, so "stored for the current digest" is settled in the worker: a set whose hash no longer matches is replaced there.
 
 ## Tunables waiting for a `config.json` entry
 

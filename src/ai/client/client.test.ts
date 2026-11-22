@@ -12,9 +12,10 @@ import { createModelStore } from '../../model';
 import type { ModelPatch, Poi, StructureTables } from '../../model/types';
 import { syntheticMeta, syntheticTables, tablesToOps } from '../../testing/synthetic';
 import {
-  AiClientError, createAiClient, generateAnnotations, generateDetail, getConsent, poiCount, resetConsent, setConsent, shouldAsk,
+  AiClientError, createAiClient, describeAiError, generateAnnotations as generate, generateDetail, getConsent, poiCount, reduceHeadStart,
+  resetConsent, setConsent, shouldAsk, toAiErrorInfo,
 } from '../index';
-import type { ConsentStorage, DigestInput } from '../index';
+import type { AiClient, ConsentStorage, DigestInput, GenerateOptions } from '../index';
 import { createCannedProvider, createMemoryLimiter, handlers } from '../server';
 import type { CannedReply, Deps, RouteName } from '../server';
 
@@ -85,6 +86,9 @@ function server(cfg: Config = config, intercept?: (sent: Sent, index: number) =>
 }
 
 const fast = { reduceHeadStartMs: 5 };
+/** The provider is named here, not read from the machine: Vitest loads `VITE_*` from `.env.local`. */
+const ENV = { VITE_AI_PROVIDER: 'anthropic' };
+const generateAnnotations = (options: GenerateOptions) => generate({ env: ENV, ...options });
 const errorBody = (code: string, status: number, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify({ error: { code, message: 'server words' } }), { status, headers });
 
@@ -155,8 +159,9 @@ describe('ai client orchestration', () => {
     expect(again.digestHash).toBe(store.replica.meta?.digestHash);
     expect(second.sent).toHaveLength(0);
 
-    // another digest (here: other models) replaces the stored set instead of reusing it
-    const other = withConfig({ ai: { models: { synthesis: 'another-model' } } });
+    // another digest (here: only the tour's model changed) replaces the whole stored set instead of
+    // reusing it: the hash is one key for everything written from the digest
+    const other = withConfig({ ai: { models: { tour: 'another-model' } } });
     const third = server(other);
     const replaced = await generateAnnotations({ input, config: other, client: third.client, timing: fast });
     expect(replaced.skipped).toBe(false);
@@ -212,8 +217,41 @@ describe('ai client orchestration', () => {
     // byte for byte on the wire as well: the shared fields come first and in the same order
     const sharedPart = (body: string) => body.slice(0, body.lastIndexOf('"summaries"')) + JSON.stringify(JSON.parse(body).summaries);
     expect(sharedPart(raw.tour!)).toBe(sharedPart(raw.pois!));
-    // the tour follows the points of interest; it is never sent first
+    // the points of interest are asked for first, the tour in the same breath: it is one request
     expect(sent.findIndex((s) => s.route === 'pois')).toBeLessThan(sent.findIndex((s) => s.route === 'tour'));
+    expect(sent.filter((s) => s.route === 'tour')).toHaveLength(1);
+  });
+
+  it('sends the tour with the points of interest, and holds it back only when both use the same model', async () => {
+    expect(reduceHeadStart(config.ai.models, 3000)).toBe(0);
+    expect(reduceHeadStart(config.ai.openaiModels, 3000)).toBe(0);
+    expect(reduceHeadStart({ synthesis: 'one-model', tour: 'one-model' }, 3000)).toBe(3000);
+
+    /** Was the tour request out while the points-of-interest call was still unanswered? */
+    const together = async (cfg: Config): Promise<boolean> => {
+      const { input } = repo(cfg);
+      const { client } = server(cfg);
+      const at = { tourSent: false, whilePoisPending: false };
+      const watched: AiClient = {
+        ...client,
+        pois: async (req, opts) => {
+          await new Promise((resolve) => setTimeout(resolve, 0)); // the provider has not answered yet
+          at.whilePoisPending = at.tourSent;
+          return client.pois(req, opts);
+        },
+        tour: (req, opts) => { at.tourSent = true; return client.tour(req, opts); },
+      };
+      // a head start far longer than the test: where it applies, only the end of the first call releases the tour
+      const result = await generateAnnotations({ input, config: cfg, client: watched, timing: { reduceHeadStartMs: 600_000 } });
+      expect(result.errors).toEqual([]);
+      expect(at.tourSent).toBe(true);
+      return at.whilePoisPending;
+    };
+
+    expect(await together(config)).toBe(true);
+    // one model for both: they share a prompt cache, so the tour waits for the first call
+    const oneModel = withConfig({ ai: { models: { tour: config.ai.models.synthesis } } });
+    expect(await together(oneModel)).toBe(false);
   });
 
   it('keeps the points of interest when the tour fails, and asks only for the tour the next time', async () => {
@@ -324,6 +362,22 @@ describe('ai http client', () => {
     abort.abort();
     await expect(client.detail(req, { signal: abort.signal })).rejects.toMatchObject({ code: 'aborted' });
     expect(calls).toBe(4);
+  });
+});
+
+describe('ai failures as one line', () => {
+  it('keeps the sentence a plain outcome brings with it, and describes an Error from its code', () => {
+    // an outcome sent over from the coordinator says more than its code does
+    const reason = 'AI notes are written from a fresh parse. Update or re-open the folder to write them for this saved map.';
+    expect(toAiErrorInfo({ code: 'unavailable', message: reason })).toEqual({ code: 'unavailable', message: reason });
+    // a thrown error, and an object with no sentence of its own, get the generic one
+    const generic = describeAiError('unavailable');
+    expect(generic).not.toBe(reason);
+    expect(toAiErrorInfo(new AiClientError('unavailable', { detail: 'server words' }))).toEqual({ code: 'unavailable', message: generic });
+    expect(toAiErrorInfo(Object.assign(new Error('internal words'), { code: 'unavailable' })).message).toBe(generic);
+    expect(toAiErrorInfo({ code: 'unavailable' }).message).toBe(generic);
+    expect(toAiErrorInfo({ code: 'unavailable', message: '  ' }).message).toBe(generic);
+    expect(toAiErrorInfo({ code: 'rate_limited', retryAfterSeconds: 20 }).message).toBe(describeAiError('rate_limited', 20));
   });
 });
 

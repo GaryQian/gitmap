@@ -99,11 +99,11 @@
 }
 
 /* Step dots are buttons: the dot is small, the target around it is not. */
-.gm-tour-dots { display: flex; align-items: center; margin-left: -7px; }
+.gm-tour-dots { display: flex; align-items: center; margin-left: -8px; }
 .gm-tour-dot {
   display: grid;
   place-items: center;
-  width: 21px;
+  width: 24px;
   height: 24px;
   margin: 0;
   padding: 0;
@@ -118,12 +118,13 @@
   width: 7px;
   height: 7px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--gm-text) 32%, transparent);
+  /* the dot is the whole button, so it needs 3:1 on the card: dim text has that and more (theme.ts) */
+  background: var(--gm-text-dim);
   transition: width 160ms var(--gm-ease), background-color 160ms var(--gm-ease);
 }
-.gm-tour-dot:hover::before { background: color-mix(in srgb, var(--gm-text) 62%, transparent); }
+.gm-tour-dot:hover::before { background: var(--gm-text); }
 /* the current step is warm, and longer, so it does not rest on colour alone */
-.gm-tour-dot.is-current { width: 32px; }
+.gm-tour-dot.is-current { width: 34px; }
 .gm-tour-dot.is-current::before,
 .gm-tour-dot.is-current:hover::before { width: 18px; background: var(--gm-warm); }
 .gm-tour-dot:focus-visible { outline-offset: -2px; }

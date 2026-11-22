@@ -192,6 +192,29 @@ describe('ai server handlers', () => {
     expect(b.schema).toEqual(a.schema);
   });
 
+  it('asks each route for its model tier: summaries bulk, the tour its own, points of interest and details synthesis', async () => {
+    const { provider, deps } = setup((req) => {
+      if (req.prompt.includes('guided tour')) return { value: { pois: [], steps: enoughSteps() } };
+      return { value: { label: 'Core', text: summaryText, markdown: 'It starts the server.', pois: [poi('u:src/main.ts'), poi('u:src/store.ts')], steps: [] } };
+    });
+    const summary: SummariesRequest = { digestHash: 'digest-1', refs: REFS, city: 'c:1', context: 'district d:1 holds the stores.' };
+    const detail: DetailRequest = {
+      digestHash: 'digest-1', refs: REFS, question: 'role', context: 'export function main(): void',
+      poi: { parent: 'u:src/main.ts', label: 'Entry point', summary: summaryText },
+    };
+    const bodies: Record<RouteName, unknown> = { summaries: summary, pois: poisBody(), tour: tourBody(), detail };
+    const roles: Record<string, string> = {};
+    for (const route of ['summaries', 'pois', 'tour', 'detail'] as const) {
+      const before = provider.requests.length;
+      const res = await call(route, deps, bodies[route]);
+      expect(res.status, route).toBe(200);
+      // one request per route: the tour is a single call, like the others
+      expect(provider.requests.length - before, route).toBe(1);
+      roles[route] = provider.requests[before].role;
+    }
+    expect(roles).toEqual({ summaries: 'bulk', pois: 'synthesis', tour: 'tour', detail: 'synthesis' });
+  });
+
   it('answers disabled, no_key, wrong method and malformed bodies without calling the provider', async () => {
     const { provider, deps } = setup([]);
     const code = async (route: RouteName, d: Deps, body: unknown) => (await call<AiErrorBody>(route, d, body)).body.error.code;

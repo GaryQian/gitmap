@@ -3,6 +3,9 @@
 //   /dev.html?n=10000&seed=1          synthetic model through the real session (store, physics worker, renderer)
 //   /dev.html?snapshot=/out/react.starmap.json.gz   a snapshot written by `npm run parse`
 //   /dev.html?fake=1&n=2000           the fake session: static layout, no workers
+//   /dev.html?fixture=three-lang&via=opfs|files|memory   a fixture repo through the folder pipeline.
+//        A second load comes back from the snapshot the first one saved (state.fromSnapshot);
+//        add &fresh=1 to parse again, ignoring the saved map and the cached parse facts.
 //   &mode=dark|light
 //   window.__starmap exposes the session for tests and the console.
 import { config } from '../config';
@@ -20,7 +23,15 @@ const hud = document.getElementById('hud')!;
 const canvas = document.getElementById('scene') as HTMLCanvasElement;
 if (mode === 'light') { document.body.style.background = config.theme.light.void; document.body.style.color = config.theme.light.text; }
 
-const state = { ready: false, spheres: 0, error: '' };
+const state = {
+  ready: false, spheres: 0, error: '',
+  /** Stages seen, in order, without repeats. */
+  stages: [] as string[],
+  /** The folder was shown from its stored snapshot: it was revealed without a 'reading' stage. */
+  fromSnapshot: false,
+  /** Notices raised so far ("N files changed", "no history", …). */
+  notices: [] as unknown[],
+};
 const handle: { session: Session | null; render: unknown; state: typeof state } = { session: null, render: null, state };
 (window as unknown as { __starmap: unknown }).__starmap = handle;
 
@@ -56,7 +67,7 @@ async function open(): Promise<Session> {
   if (qs.has('fake')) return createFakeSession(config, { files: n, seed, waitMs: Number(qs.get('wait') ?? 0) });
   let source: RepoSource = { kind: 'synthetic', files: n, seed };
   const fixture = qs.get('fixture');
-  if (fixture) return createSession({ kind: 'directory', locator: await fixtureLocator(fixture, qs.get('via') ?? 'opfs') }, config);
+  if (fixture) return createSession({ kind: 'directory', locator: await fixtureLocator(fixture, qs.get('via') ?? 'opfs'), fresh: qs.has('fresh') }, config);
   const snapshot = qs.get('snapshot');
   if (snapshot) {
     hud.textContent = `loading ${snapshot}`;
@@ -71,10 +82,15 @@ open().then(async (session) => {
   handle.session = session;
   const render = session.attachCanvas(canvas, { theme: mode });
   handle.render = render;
-  session.on('stage', (s) => { hud.textContent = s.label || s.stage; });
+  session.on('stage', (s) => {
+    hud.textContent = s.label || s.stage;
+    if (state.stages.at(-1) !== s.stage) state.stages.push(s.stage);
+  });
+  session.on('notice', (n) => { state.notices.push(n); });
   session.on('error', (e) => { state.error = e.message; hud.textContent = `error: ${e.message}`; });
   await session.start();
   state.ready = true;
+  state.fromSnapshot = session.source.kind === 'directory' && !state.stages.includes('reading');
   state.spheres = session.replica.table('unit').count;
   const tick = () => {
     const s = render.stats();

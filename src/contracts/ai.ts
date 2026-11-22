@@ -1,7 +1,13 @@
 // AI layer contracts (PLAN.md §11). The browser builds context; the server is a thin, stateless proxy.
 import type { NodeRef, PoiKind, TourFrame, UnitRef } from '../model/types';
 
-export type ModelRole = 'synthesis' | 'bulk';
+/**
+ * Which tier of model a call uses (config.ai.models / config.ai.openaiModels):
+ *   bulk       the cheapest tier: one short summary per city
+ *   tour       a mid tier: the guided tour, written in one call
+ *   synthesis  the most capable tier: points of interest and detail answers
+ */
+export type ModelRole = 'synthesis' | 'tour' | 'bulk';
 
 export interface GenerateRequest {
   role: ModelRole;

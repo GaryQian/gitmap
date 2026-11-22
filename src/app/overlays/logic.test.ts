@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createModelStore, edgeId, type StructureTables } from '../../model';
 import type { HistoryContributor } from '../../overlays';
 import { tablesToOps } from '../../testing/synthetic';
-import { batchTouches, filterContributors, historyUnavailable, pillState, seedSlots, touchesOverlay } from './logic';
+import { announcedPercent, batchTouches, filterContributors, historyUnavailable, pillState, seedSlots, touchesOverlay } from './logic';
 
 const people: HistoryContributor[] = [
   { id: 1, name: 'Grace Hopper', commits: 40 },
@@ -50,6 +50,10 @@ describe('pill state', () => {
     expect(pillState(history, { status: 'partial', coverage: NaN }, false)).toEqual({ kind: 'partial', coverage: 0 });
     expect(pillState(history, { status: 'partial', coverage: 3 }, false)).toEqual({ kind: 'partial', coverage: 1 });
     expect(pillState(history, { status: 'complete', coverage: 1 }, false)).toEqual({ kind: 'complete' });
+  });
+
+  it('announces progress in quarters, not on every batch', () => {
+    expect([0, 0.1, 0.249, 0.25, 0.6, 0.99, 1, NaN].map(announcedPercent)).toEqual([0, 0, 0, 25, 50, 75, 75, 0]);
   });
 
   it('hides a history overlay that can never have data, and only that', () => {

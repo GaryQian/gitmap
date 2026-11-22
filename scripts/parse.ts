@@ -1,5 +1,6 @@
 // Run the pipeline headless on a local folder and write a snapshot.
-// Usage: npm run parse -- <repo folder> [out.starmap.json.gz] [--synthetic N]
+// Usage: npm run parse -- <repo folder> [out.starmap.json.gz] [--synthetic N] [--no-history]
+//   --no-history   skip the git history walk (Recency, Ownership, Knowledge risk): the parse alone
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { config } from '../src/config';
@@ -27,6 +28,7 @@ export default async function main(args: string[]): Promise<void> {
   const t0 = performance.now();
   let lastStage = '';
   const result = await runHeadless(source, config, {
+    history: !args.includes('--no-history'),
     onEvent(evt, payload) {
       if (evt === 'stage') {
         const s = payload as { stage: string; label: string };
@@ -42,7 +44,10 @@ export default async function main(args: string[]): Promise<void> {
   console.log(`${model.meta.name}: ${s.files} files, ${s.units} units, ${s.edges} edges, ${model.tables.city.ids.length} cities, ${model.tables.district.ids.length} districts`);
   console.log(`structure: ${model.meta.structure}; timings (ms): ${Object.entries(state.timings).map(([k, v]) => `${k} ${v.toFixed(0)}`).join(', ')}`);
   if (state.settle) console.log(`settle: ${state.settle.ms.toFixed(0)} ms, ${state.settle.ticks} ticks, at rest ${state.settle.atRest}, overlap ${(state.settle.overlapShare * 100).toFixed(1)}%`);
-  if (state.analysis) console.log(`imports resolved: ${state.analysis.diagnostics.importsResolved} / ${state.analysis.diagnostics.importsTotal}`);
+  if (state.analysis) console.log(`imports resolved: ${state.analysis.diagnostics.importsResolved} / ${state.analysis.diagnostics.importsTotal}; bridge links: ${state.analysis.diagnostics.bridges}`);
+  const walk = state.history?.outcome;
+  if (walk?.available) console.log(`history: ${walk.result.commitsWalked} commits, ${walk.result.contributors.length} contributors, ${walk.result.complete ? 'complete' : `stopped by ${walk.result.stoppedBy ?? 'a cap'}`}, ${walk.stats.wallMs.toFixed(0)} ms`);
+  else if (walk) console.log(`history: unavailable (${walk.message})`);
   console.log(`wrote ${out} (${(bytes.length / 1024).toFixed(0)} KB) in ${((performance.now() - t0) / 1000).toFixed(2)} s`);
   result.dispose();
 }

@@ -1,7 +1,8 @@
 // Feature mounts: every src/app/<feature>/mount.tsx is discovered here and rendered into its region
 // (contracts/app.ts). Adding a feature never edits the shell.
-import { Component, type ReactNode } from 'react';
+import { Component, useEffect, type ReactNode } from 'react';
 import type { AppMount, AppRegion } from '../contracts/app';
+import { installTabOrder } from './keys';
 import { usePhase, type Phase } from './store';
 
 interface FoundMount extends AppMount { key: string }
@@ -34,6 +35,8 @@ class MountBoundary extends Component<{ name: string; children: ReactNode }, { f
 /** Renders the mounts of one region for the current phase. */
 export function Region({ name }: { name: AppRegion }) {
   const phase = usePhase();
+  // Tab walks the regions in reading order (keys.ts). Installed once, by the region the shell always renders last.
+  useEffect(() => (name === 'overlay' ? installTabOrder() : undefined), [name]);
   const shown = mounts.filter((m) => m.region === name && phasesOf(m).includes(phase));
   return (
     <div className={`gm-region gm-region-${name}`} data-region={name}>

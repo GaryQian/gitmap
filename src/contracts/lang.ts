@@ -133,10 +133,16 @@ export interface Resolver {
  */
 export interface SyntaxSpec {
   /**
-   * Grammar name for a path: the stem of a wasm file under public/grammars/ (tree-sitter-<name>.wasm),
-   * for example 'typescript', 'tsx', 'python', 'cpp'. Return null to skip the slow pass for that file.
+   * Grammar name for a file: the stem of a wasm file under public/grammars/ (tree-sitter-<name>.wasm),
+   * for example 'typescript', 'tsx', 'python', 'cpp'.
+   * - null skips the slow pass for that file.
+   * - '' means "no grammar for this file: use `extractSymbols`" (a `.h` file of the C++ plug-in that
+   *   turns out to be Objective-C, which the C++ grammar cannot read). Nothing is loaded for it.
+   * `text` is the file's content where the caller has it: the slow pass passes it per file, while
+   * planning (which grammars a batch needs, whether a file has a slow pass at all) sees the path
+   * alone. With the path alone, answer for the usual file of that kind.
    */
-  grammar(path: string): string | null;
+  grammar(path: string, text?: string): string | null;
   /** Query source per grammar name. */
   queries: Record<string, string>;
   /**

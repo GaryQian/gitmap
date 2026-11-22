@@ -11,6 +11,7 @@ import { openRepoAccess } from '../git';
 import { createModelStore, decodeModel } from '../model';
 import type { LayoutSnapshot } from '../model/types';
 import { memoryBlobStore, openPersistence, opfsBlobStore, type PersistentFactsCache } from '../persist';
+import { createPipelineAi, type PipelineAi } from './ai';
 import { runSource, type PipelineDeps, type PipelineState } from './core';
 import type { PipelinePersistence } from './persist';
 import type { CoordinatorCalls, FromCoordinator, MainCalls, MainMethod, ToCoordinator } from './protocol';
@@ -24,6 +25,7 @@ let pool: ComputePool | null = null;
 let state: PipelineState | null = null;
 let deps: PipelineDeps | null = null;
 let search: PipelineSearch | null = null;
+let ai: PipelineAi | null = null;
 
 // ---- requests to the main thread ----
 let nextId = 1;
@@ -90,6 +92,14 @@ const calls: { [M in keyof CoordinatorCalls]: (...args: Parameters<CoordinatorCa
     if (!deps || !state) throw new Error('The map has not finished loading.');
     await hooks.loadFullHistory(deps, state);
   },
+  // AI runs only when the page asks: consent is the viewer's, given in the chrome (PLAN.md §11.4).
+  aiStart() {
+    return ai ? ai.start() : { failure: null };
+  },
+  aiDetail(poiId, question, fileText) {
+    return ai ? ai.detail(poiId, question, fileText) : { failure: null };
+  },
+  aiCancel() { ai?.cancel(); },
 };
 
 async function start(source: RepoSource, config: Config): Promise<void> {
@@ -118,6 +128,7 @@ async function start(source: RepoSource, config: Config): Promise<void> {
       cache: local?.facts,
       persist: local ?? undefined,
     };
+    ai = createPipelineAi(deps, () => state);
     state = await runSource(source, deps);
   } catch (err) {
     post({ type: 'failed', message: String((err as Error)?.message ?? err) });

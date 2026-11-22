@@ -9,7 +9,7 @@
 // Nothing here fails on a threshold; the numbers are for comparing before and after a change.
 //
 // Usage: node scripts/run.mjs scripts/bench/layout.ts <in.starmap.json.gz> [out.starmap.json.gz]
-//          [--cap ms]         settle time cap (default reveal.settleMaxMs)
+//          [--cap ms]         settle time cap (default: what the pipeline allows a map of this size)
 //          [--keep-clusters]  lay out the snapshot's own cities and districts instead of re-clustering
 //          [--no-physics]     sizes only
 //          [--diag]           what the twelve largest districts consist of
@@ -22,6 +22,7 @@ import { config } from '../../src/config';
 import { createModelStore, decodeModel, encodeModel } from '../../src/model';
 import type { EdgeKind, StructureTables } from '../../src/model/types';
 import { createPhysicsEngine } from '../../src/physics';
+import { settleCap } from '../../src/pipeline/core';
 import { unitRadius } from '../../src/shared';
 import { tablesToOps } from '../../src/testing/synthetic';
 
@@ -31,7 +32,7 @@ const f1 = (x: number) => x.toFixed(1);
 export default async function main(args: string[]): Promise<void> {
   const positional = args.filter((a, i) => !a.startsWith('--') && args[i - 1] !== '--cap');
   const capAt = args.indexOf('--cap');
-  const capMs = capAt >= 0 ? Number(args[capAt + 1]) : config.reveal.settleMaxMs;
+  const capOverride = capAt >= 0 ? Number(args[capAt + 1]) : undefined;
   const model = await decodeModel(new Uint8Array(readFileSync(positional[0])));
   const ut = model.tables.unit, et = model.tables.edge;
   const n = ut.ids.length;
@@ -104,6 +105,8 @@ export default async function main(args: string[]): Promise<void> {
   const physics = createPhysicsEngine({ config, capacity: { units: n + 16, districts: ds.length + 16, cities: cs.length + 16 } });
   store.subscribe((b) => physics.applyBatch(b));
   store.propose([{ op: 'meta', value: { ...model.meta } }, ...tablesToOps(tables)]);
+  const capMs = capOverride ?? settleCap(config, n);
+  console.log(`settle cap: ${capMs.toFixed(0)} ms`);
   const report = await physics.settle(capMs);
   console.log(`settle: ${report.ms.toFixed(0)} ms, ${report.ticks} ticks, atRest ${report.atRest}, overlapShare ${(report.overlapShare * 100).toFixed(1)}%`);
 

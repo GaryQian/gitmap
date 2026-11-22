@@ -1,9 +1,13 @@
 // AiProvider implementations (PLAN.md §11.1): the Anthropic adapter, a canned provider for tests and
-// keyless development, and the factory that picks one from config.
+// keyless development, and the factory that picks one from the environment and config. The OpenAI
+// adapter is in openai.ts.
 import Anthropic from '@anthropic-ai/sdk';
 import type { Config } from '../../config';
 import type { AiProvider, GenerateRequest, GenerateResult } from '../../contracts/ai';
+import { resolveProviderId, tierModels } from '../active';
+import type { AiEnv } from '../active';
 import { AiError } from './errors';
+import { createOpenAiProvider } from './openai';
 import { estimateTokens } from '../tokens';
 
 export { estimateTokens };
@@ -25,7 +29,8 @@ export interface AnthropicProviderOptions {
 
 export function createAnthropicProvider(opts: AnthropicProviderOptions): AiProvider {
   const client = new Anthropic({ apiKey: opts.apiKey, ...(opts.fetch ? { fetch: opts.fetch } : {}) });
-  const models = opts.config.ai.models;
+  // summaries → bulk, the tour → tour, points of interest and details → synthesis
+  const models = tierModels(opts.config.ai.models);
   const refusalFallback = opts.refusalFallback ?? true;
 
   return {
@@ -160,20 +165,37 @@ export function createCannedProvider(script: CannedScript): CannedProvider {
 
 // ---- Factory ----
 
-export type Env = Record<string, string | undefined>;
+export type Env = AiEnv;
+
+export { resolveProviderId };
+
+/** The key for one provider. Throws AiError('no_key') naming the variable when it is missing. */
+function keyFrom(env: Env, variable: string): string {
+  const apiKey = env[variable]?.trim();
+  if (!apiKey) throw new AiError('no_key', `No AI key is configured on the server (${variable}).`);
+  return apiKey;
+}
 
 /**
- * The provider named by `config.ai.provider`. Throws AiError('no_key') when its key is missing.
- * Keys come only from the environment (`.env.local`, or the Vercel project settings).
+ * The provider selected by `resolveProviderId`: `VITE_AI_PROVIDER`, then `AI_PROVIDER`, then
+ * `config.ai.provider`. Throws AiError('no_key') when that provider's key is missing. Keys come
+ * only from the environment (`.env.local`, or the Vercel project settings).
+ *
+ * To add a provider: an adapter file beside openai.ts implementing `AiProvider`, a case here, and a
+ * case in `activeAi` (src/ai/active.ts) for its name and its models block in config.json.
  */
 export function getProvider(env: Env, config: Config): AiProvider {
-  switch (config.ai.provider) {
-    case 'anthropic': {
-      const apiKey = env.ANTHROPIC_API_KEY?.trim();
-      if (!apiKey) throw new AiError('no_key', 'No AI key is configured on the server (ANTHROPIC_API_KEY).');
-      return createAnthropicProvider({ apiKey, config, refusalFallback: env.AI_REFUSAL_FALLBACK !== 'off' });
-    }
+  const id = resolveProviderId(env, config);
+  switch (id) {
+    case 'anthropic':
+      return createAnthropicProvider({
+        apiKey: keyFrom(env, 'ANTHROPIC_API_KEY'), config, refusalFallback: env.AI_REFUSAL_FALLBACK !== 'off',
+      });
+    case 'openai':
+      return createOpenAiProvider({
+        apiKey: keyFrom(env, 'OPENAI_API_KEY'), config, cacheBreakpoint: env.AI_OPENAI_CACHE_BREAKPOINT !== 'off',
+      });
     default:
-      throw new AiError('provider', `Unknown AI provider "${config.ai.provider}" in config.json.`);
+      throw new AiError('provider', `Unknown AI provider "${id}". Set VITE_AI_PROVIDER or config.json ai.provider to "anthropic" or "openai".`);
   }
 }

@@ -10,13 +10,27 @@ import {
   clearSelection as cleared, clickSelect, focusSelected, marqueeSelect, removeSelected, replaceSelection, shiftClickSelect,
   type SelectionState,
 } from './selectionState';
-import { APPEARANCES, applyTheme, resolveMode, type Appearance } from './theme';
+import { applyTheme } from './theme';
 
 export type Phase = 'landing' | 'waiting' | 'map';
-export interface Settings { appearance: Appearance; particles: boolean }
+export interface Settings { particles: boolean }
 export interface ProgressEntry { done: number; total: number; label?: string }
+/** The one thing a line offers to do: "Reload", "Choose the folder". */
+export interface LineAction { label: string; run(): void | Promise<void> }
+/**
+ * A line the shell itself raises on the map (src/app/status has the wording): an error that did not
+ * end the map, a folder that needs choosing again. One per `id`; a later one replaces it.
+ */
+export interface StatusLine {
+  kind: 'status';
+  id: string;
+  text: string;
+  action?: LineAction;
+  /** Goes away by itself after a while (APP_LOCAL.status); without it the line stays until dismissed. */
+  fades?: boolean;
+}
 /** A notice that is on screen ('cleared' removes one and is never stored). */
-export type ShownNotice = Exclude<Notice, { kind: 'cleared' }>;
+export type ShownNotice = Exclude<Notice, { kind: 'cleared' }> | StatusLine;
 
 export interface AppState {
   // ---- app state ----
@@ -33,9 +47,12 @@ export interface AppState {
   notices: ShownNotice[];
   /** The quiet line under "Choose a folder". */
   message: string | null;
+  /** What that line offers to do about it ("Reload"), if anything. */
+  messageAction: LineAction | null;
+  /** The map's WebGL context is lost (the canvas says so); the scene is not being drawn. */
+  contextLost: boolean;
   settings: Settings;
-  systemDark: boolean;
-  /** Appearance resolved against the system setting. */
+  /** Always 'dark' for now: light mode is switched off (its tokens stay in config.theme.light). */
   mode: ThemeMode;
   reducedMotion: boolean;
   /** 0..1, brightens the background while a folder is dragged over the landing page. */
@@ -48,7 +65,7 @@ export interface AppState {
   activeOverlay: string | null;
   /** Languages shown at full strength; empty = all. */
   typeFilter: string[];
-  minLines: number;
+  minBytes: number;
   openFile: NodeRef | null;
 }
 
@@ -57,29 +74,15 @@ export const IDLE_STAGE: StageInfo = { stage: 'idle', label: '' };
 
 const media = (query: string): MediaQueryList | null =>
   typeof matchMedia === 'function' ? matchMedia(query) : null;
-const darkQuery = media('(prefers-color-scheme: dark)');
 const motionQuery = media('(prefers-reduced-motion: reduce)');
 
-/** `?appearance=dark|light|system` sets the mode for this visit without saving it (screenshots, links). */
-function appearanceFromUrl(): Appearance | null {
-  if (typeof location === 'undefined') return null;
-  const asked = new URLSearchParams(location.search).get('appearance') as Appearance | null;
-  return asked && APPEARANCES.includes(asked) ? asked : null;
-}
-
 function loadSettings(): Settings {
-  const saved = loadSavedSettings();
-  return { ...saved, appearance: appearanceFromUrl() ?? saved.appearance };
-}
-
-function loadSavedSettings(): Settings {
-  const defaults: Settings = { appearance: config.settings.appearance as Appearance, particles: config.settings.particles };
+  const defaults: Settings = { particles: config.settings.particles };
   try {
     const saved: unknown = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? 'null');
     if (typeof saved !== 'object' || saved === null) return defaults;
-    const { appearance, particles } = saved as Partial<Settings>;
+    const { particles } = saved as Partial<Settings>;
     return {
-      appearance: APPEARANCES.includes(appearance as Appearance) ? (appearance as Appearance) : defaults.appearance,
       particles: typeof particles === 'boolean' ? particles : defaults.particles,
     };
   } catch {
@@ -92,12 +95,11 @@ function saveSettings(settings: Settings): void {
 }
 
 /** View state a new map starts with. */
-export function freshView(): Pick<AppState, 'selection' | 'focus' | 'hover' | 'activeOverlay' | 'typeFilter' | 'minLines' | 'openFile'> {
-  return { selection: [], focus: null, hover: null, activeOverlay: null, typeFilter: [], minLines: config.legend.minLinesDefault, openFile: null };
+export function freshView(): Pick<AppState, 'selection' | 'focus' | 'hover' | 'activeOverlay' | 'typeFilter' | 'minBytes' | 'openFile'> {
+  return { selection: [], focus: null, hover: null, activeOverlay: null, typeFilter: [], minBytes: config.legend.minBytesDefault, openFile: null };
 }
 
 const initialSettings = loadSettings();
-const initialSystemDark = darkQuery?.matches ?? true;
 
 export const useApp = create<AppState>()(() => ({
   phase: 'landing',
@@ -108,21 +110,18 @@ export const useApp = create<AppState>()(() => ({
   progress: {},
   notices: [],
   message: null,
+  messageAction: null,
+  contextLost: false,
   settings: initialSettings,
-  systemDark: initialSystemDark,
-  mode: resolveMode(initialSettings.appearance, initialSystemDark),
+  mode: 'dark',
   reducedMotion: motionQuery?.matches ?? false,
   backgroundEmphasis: 0,
   ...freshView(),
 }));
 
-/** Apply the theme now and keep it, and the system-preference flags, up to date. Call once at start-up. */
+/** Apply the theme now and keep the reduced-motion flag up to date. Call once at start-up. */
 export function initEnvironment(): void {
   applyTheme(useApp.getState().mode);
-  useApp.subscribe((s, prev) => { if (s.mode !== prev.mode) applyTheme(s.mode); });
-  darkQuery?.addEventListener('change', (e) => {
-    useApp.setState((s) => ({ systemDark: e.matches, mode: resolveMode(s.settings.appearance, e.matches) }));
-  });
   motionQuery?.addEventListener('change', (e) => useApp.setState({ reducedMotion: e.matches }));
 }
 
@@ -132,10 +131,9 @@ function setSettings(patch: Partial<Settings>): void {
   useApp.setState((s) => {
     const settings = { ...s.settings, ...patch };
     saveSettings(settings);
-    return { settings, mode: resolveMode(settings.appearance, s.systemDark) };
+    return { settings };
   });
 }
-export function setAppearance(appearance: Appearance): void { setSettings({ appearance }); }
 export function setParticles(particles: boolean): void { setSettings({ particles }); }
 
 /** Selection changes go through the pure transitions in selectionState.ts. */
@@ -162,24 +160,40 @@ export function setHover(hover: NodeRef | null): void {
 }
 export function setActiveOverlay(activeOverlay: string | null): void { useApp.setState({ activeOverlay }); }
 export function setTypeFilter(typeFilter: string[]): void { useApp.setState({ typeFilter }); }
-export function setMinLines(minLines: number): void { useApp.setState({ minLines }); }
+export function setMinBytes(minBytes: number): void { useApp.setState({ minBytes }); }
 export function setOpenFile(openFile: NodeRef | null): void { useApp.setState({ openFile }); }
-export function setMessage(message: string | null): void { useApp.setState({ message }); }
+export function setMessage(message: string | null, action: LineAction | null = null): void {
+  useApp.setState({ message, messageAction: message === null ? null : action });
+}
+export function setContextLost(contextLost: boolean): void {
+  if (useApp.getState().contextLost !== contextLost) useApp.setState({ contextLost });
+}
 export function setBackgroundEmphasis(backgroundEmphasis: number): void { useApp.setState({ backgroundEmphasis }); }
 
-/** Show a notice, or act on a 'cleared' one. One pill per kind for the two actions; info lines stack. */
-export function pushNotice(notice: Notice): void {
+/**
+ * Show a notice, or act on a 'cleared' one. One pill per kind for the two actions; info lines stack;
+ * a status line replaces the one with the same id.
+ */
+export function pushNotice(notice: Notice | StatusLine): void {
   useApp.setState((s) => {
     if (notice.kind === 'cleared') return { notices: s.notices.filter((n) => n.kind !== notice.which) };
     const same = (n: ShownNotice) =>
       n.kind === notice.kind &&
       (n.kind === 'info' && notice.kind === 'info' ? n.message === notice.message : true) &&
-      (n.kind === 'no-history' && notice.kind === 'no-history' ? n.reason === notice.reason : true);
+      (n.kind === 'no-history' && notice.kind === 'no-history' ? n.reason === notice.reason : true) &&
+      (n.kind === 'status' && notice.kind === 'status' ? n.id === notice.id : true);
     return { notices: [...s.notices.filter((n) => !same(n)), notice] };
   });
 }
 export function dismissNotice(notice: ShownNotice): void {
   useApp.setState((s) => ({ notices: s.notices.filter((n) => n !== notice) }));
+}
+/** Take a status line off the screen by its id. Does nothing when it is not there. */
+export function dismissStatus(id: string): void {
+  useApp.setState((s) => {
+    const notices = s.notices.filter((n) => !(n.kind === 'status' && n.id === id));
+    return notices.length === s.notices.length ? s : { notices };
+  });
 }
 
 // ---- hooks ----

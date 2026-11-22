@@ -5,7 +5,7 @@ import type { PatchBatch } from '../../model/types';
 import { glowAmount, hexToRgb, languageColor, unitRadius } from '../../shared';
 import { syntheticBatch } from '../../testing/synthetic';
 import {
-  COLOR_ITEMS, LangTable, SHAPE_ITEMS, SLOT_ITEMS, createInstanceBuffers, hiddenByMinLines, projectUnits, visibleCounts,
+  COLOR_ITEMS, LangTable, SHAPE_ITEMS, SLOT_ITEMS, createInstanceBuffers, hiddenByMinBytes, projectUnits, visibleCounts,
 } from './instances';
 
 const visual = config.visual;
@@ -34,7 +34,7 @@ describe('sphere instance projection', () => {
       expect(Array.from(buffers.slot.subarray(s * SLOT_ITEMS, s * SLOT_ITEMS + 3))).toEqual([s, d, districts.refSlots.city[d]]);
       expect(buffers.shape[s * SHAPE_ITEMS]).toBeCloseTo(unitRadius(units.cols.loc[s], units.cols.importancePct[s], visual), 4);
       expect(buffers.shape[s * SHAPE_ITEMS + 1]).toBeCloseTo(glowAmount(units.cols.importancePct[s], visual), 5);
-      expect(buffers.shape[s * SHAPE_ITEMS + 2]).toBe(units.cols.loc[s]);
+      expect(buffers.shape[s * SHAPE_ITEMS + 2]).toBe(units.cols.bytes[s]);
       expect(buffers.shape[s * SHAPE_ITEMS + 3]).toBe(1);
       const rgb = hexToRgb(languageColor(units.cols.lang[s], visual)).map((v) => Math.round(v * 255));
       expect(Array.from(buffers.color.subarray(s * COLOR_ITEMS, s * COLOR_ITEMS + 3))).toEqual(rgb);
@@ -102,10 +102,10 @@ describe('sphere instance projection', () => {
 
 describe('size slider visibility', () => {
   it('hides small files but never glowing ones', () => {
-    expect(hiddenByMinLines(10, 0, 50)).toBe(true);
-    expect(hiddenByMinLines(10, 0.2, 50)).toBe(false);
-    expect(hiddenByMinLines(80, 0, 50)).toBe(false);
-    expect(hiddenByMinLines(10, 0, 0)).toBe(false);
+    expect(hiddenByMinBytes(10, 0, 50)).toBe(true);
+    expect(hiddenByMinBytes(10, 0.2, 50)).toBe(false);
+    expect(hiddenByMinBytes(80, 0, 50)).toBe(false);
+    expect(hiddenByMinBytes(10, 0, 0)).toBe(false);
   });
 
   it('counts visible and total units per city', () => {

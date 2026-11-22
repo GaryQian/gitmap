@@ -132,3 +132,14 @@ export function percentileLabel(importancePct: number): string {
 export function countLabel(n: number, one: string, many: string): string {
   return `${n.toLocaleString()} ${n === 1 ? one : many}`;
 }
+
+/** "812 bytes", "14 KB", "2 MB", "5.3 MB". */
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} ${bytes === 1 ? 'byte' : 'bytes'}`;
+  const units = ['KB', 'MB', 'GB'];
+  let value = bytes / 1024;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) { value /= 1024; unit++; }
+  const shown = value >= 10 || Math.abs(value - Math.round(value)) < 0.05 ? String(Math.round(value)) : value.toFixed(1);
+  return `${shown} ${units[unit]}`;
+}

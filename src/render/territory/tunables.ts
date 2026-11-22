@@ -27,6 +27,11 @@ export const TERRITORY_LOCAL = {
   /** Strengths in dark mode (added light) and light mode (alpha): fill, city contour, district contour, Voronoi border. */
   dark: { fill: 0.11, outer: 0.44, inner: 0.20, border: 0.22 },
   light: { fill: 0.26, outer: 0.68, inner: 0.3, border: 0.34 },
+  /**
+   * District borders run on past physics' cells to this far around either district (× its bound, plus
+   * world units), and are then cut where the drawn district shape ends.
+   */
+  borderReach: [1.5, 20],
   /** Voronoi border width, device pixels, and the world width it never drops below. */
   borderPx: 1.25,
   borderWorld: 0.35,

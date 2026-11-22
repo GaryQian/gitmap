@@ -1,12 +1,16 @@
 // Import resolution for TypeScript and JavaScript (PLAN.md §6.4): relative paths with extension and
-// index probing, tsconfig `paths` / `baseUrl`, workspace package names and package.json `imports`.
-// TS and JS share one namespace, so both plug-ins use the same resolver.
+// index probing, tsconfig `paths` / `baseUrl`, workspace package names and package.json `imports`,
+// and last the bundler aliases that are a convention rather than a config in the repo (`@/x`, `~/x`,
+// `$lib/x`). TS and JS share one namespace, so both plug-ins use the same resolver.
 import type { FileFacts, ImportSpec, RepoIndex, ResolvedImport, Resolver } from '../../contracts/lang';
 import { dirname, joinPath } from '../../shared';
+import { aliasCandidates, aliasRest } from '../../shared/alias';
 import { parseJsonc } from './jsonc';
 
 /** Extensions tried, in order, when a specifier has none. */
 const PROBE_EXTS = ['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs', '.d.ts'];
+/** Component files a script can import without the extension (`./App` for `./App.vue`); tried after the script extensions. */
+const COMPONENT_EXTS = ['.vue', '.svelte', '.astro'];
 /** A JS extension written for a TS source file (`./x.js` for `./x.ts`). */
 const JS_TO_TS: [string, string[]][] = [['.js', ['.ts', '.tsx', '.d.ts']], ['.jsx', ['.tsx']], ['.mjs', ['.mts', '.d.mts']], ['.cjs', ['.cts', '.d.cts']]];
 /** Output folders a package.json entry may point into; the source usually sits under `src/` instead. */
@@ -19,6 +23,8 @@ const MAX_EXTENDS = 8;
 const EXACT = 1;
 /** A package entry that points at build output, mapped back to a source file by convention. */
 const GUESSED_SOURCE = 0.9;
+/** A conventional alias (`@/x`, `~/x`, `$lib/x`) that no config in the repo maps, found under a `src/` folder or the project root. */
+const CONVENTIONAL_ALIAS = 0.9;
 
 type Json = Record<string, unknown>;
 const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -80,9 +86,13 @@ function createTsResolver(index: RepoIndex): Resolver {
       const stem = p.slice(0, -js.length);
       for (const e of ts) if (index.has(stem + e)) return stem + e;
     }
-    if (p) for (const e of PROBE_EXTS) if (index.has(p + e)) return p + e;
+    if (p) {
+      for (const e of PROBE_EXTS) if (index.has(p + e)) return p + e;
+      for (const e of COMPONENT_EXTS) if (index.has(p + e)) return p + e;
+    }
     const idx = under(p, 'index');
     for (const e of PROBE_EXTS) if (index.has(idx + e)) return idx + e;
+    for (const e of COMPONENT_EXTS) if (index.has(idx + e)) return idx + e;
     return null;
   };
 
@@ -235,6 +245,29 @@ function createTsResolver(index: RepoIndex): Resolver {
     return null;
   };
 
+  // ---- conventional aliases ----
+  /** The directory of the nearest package.json at or above `dir`: the project root as a bundler sees it. */
+  const projectRoot = (dir: string): string | null => {
+    for (let d = dir; ; d = dirname(d)) {
+      if (index.has(under(d, 'package.json'))) return d;
+      if (d === '') return null;
+    }
+  };
+  /**
+   * `@/x`, `~/x` and `$lib/x` when nothing in the repo maps them: `x` (for `$lib`, `lib/x`) under the
+   * nearest `src/` folder at or above `dir`, then, for `@/` and `~/`, under the project root (Nuxt).
+   */
+  const viaConvention = (dir: string, spec: string): ResolvedImport | null => {
+    const rest = aliasRest(spec);
+    if (rest === null) return null;
+    const root = spec.startsWith('$') ? null : projectRoot(dir);
+    for (const c of aliasCandidates(dir, rest, root === null ? [] : [root])) {
+      const hit = probe(c);
+      if (hit) return { path: hit, confidence: CONVENTIONAL_ALIAS };
+    }
+    return null;
+  };
+
   // ---- one specifier from one directory ----
   const memo = new Map<string, ResolvedImport | null>();
   const resolveFrom = (dir: string, spec: string): ResolvedImport | null => {
@@ -251,7 +284,7 @@ function createTsResolver(index: RepoIndex): Resolver {
       const hit = probe(joinPath(cfg.baseUrl, spec));
       if (hit) return { path: hit, confidence: EXACT };
     }
-    return viaPackage(spec);
+    return viaPackage(spec) ?? viaConvention(dir, spec);
   };
 
   return {

@@ -2,6 +2,7 @@
 // adapter builds and how it reads a streamed reply, not the live API.
 import { describe, expect, it } from 'vitest';
 import { config } from '../../config';
+import type { Config } from '../../config';
 import { AiError, createAnthropicProvider, getProvider } from './index';
 
 function sse(events: Record<string, unknown>[]): Response {
@@ -28,13 +29,13 @@ function reply(text: string, stopReason: string): Response {
   ]);
 }
 
-function stubProvider(text: string, stopReason = 'end_turn') {
+function stubProvider(text: string, stopReason = 'end_turn', cfg: Config = config) {
   const sent: { url: string; headers: Headers; body: any }[] = [];
   const fetch: typeof globalThis.fetch = async (input, init) => {
     sent.push({ url: String(input), headers: new Headers(init?.headers), body: JSON.parse(String(init?.body)) });
     return reply(text, stopReason);
   };
-  return { sent, provider: createAnthropicProvider({ apiKey: 'test-key', config, fetch }) };
+  return { sent, provider: createAnthropicProvider({ apiKey: 'test-key', config: cfg, fetch }) };
 }
 
 const request = {
@@ -87,6 +88,24 @@ describe('anthropic provider (stub transport)', () => {
     const bulk = stubProvider('{}');
     await bulk.provider.generate({ ...request, role: 'bulk' });
     expect(bulk.sent[0].body.model).toBe(config.ai.models.bulk);
+  });
+
+  it('sends each tier to its own model, and the tour to the synthesis model when config has no tour entry', async () => {
+    const { synthesis, tour, bulk } = config.ai.models;
+    expect(new Set([synthesis, tour, bulk]).size).toBe(3); // three tiers, three models
+    const sentFor = async (role: 'synthesis' | 'tour' | 'bulk', cfg: Config = config) => {
+      const stub = stubProvider('{}', 'end_turn', cfg);
+      await stub.provider.generate({ ...request, role });
+      return stub.sent[0].body.model as string;
+    };
+    expect(await sentFor('synthesis')).toBe(synthesis);
+    expect(await sentFor('tour')).toBe(tour);
+    expect(await sentFor('bulk')).toBe(bulk);
+
+    // a config.json written before the tour had its own tier
+    const older = { ...config, ai: { ...config.ai, models: { synthesis, bulk } } } as unknown as Config;
+    expect(await sentFor('tour', older)).toBe(synthesis);
+    expect(await sentFor('bulk', older)).toBe(bulk);
   });
 
   it('reports refusals and truncation as outcomes instead of throwing', async () => {

@@ -1,11 +1,12 @@
 // In the scene: a label pill on every point of interest's beam, and the detail card a pill opens
 // (PLAN.md §8.4, §17.6). React renders the elements when the model changes; where they sit is
 // written straight onto them on every rendered frame, never through React state.
-import { useEffect, useLayoutEffect, useRef, type MouseEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, type KeyboardEvent, type MouseEvent } from 'react';
 import { config } from '../../config';
 import type { AppMount } from '../../contracts/app';
 import type { FrameInfo } from '../../contracts/render';
 import { groundToPixels } from '../anchor';
+import { LAYER, useDismissable } from '../keys';
 import { setFocus, useApp, useRender, useReplica, useSession } from '../store';
 import { PillButton, cx } from '../ui';
 import { placeCard, placePills, type PillRequest, type Rect, type Size } from './layout';
@@ -14,6 +15,9 @@ import { livePois, type LivePoi } from './pois';
 import { closePoi, openPoi, usePoiUi } from './state';
 import { POI_UI } from './tunables';
 import './poi.css';
+
+/** The open card's id: its pill points here with `aria-controls`. One card is open at a time. */
+const CARD_ID = 'gm-poi-card';
 
 /** Write a position only when it changed, so an idle frame touches no style. */
 function moveTo(el: HTMLElement, x: number, y: number): void {
@@ -35,6 +39,8 @@ function PointsOfInterest() {
   /** Where the open card was last anchored: it stays there while its star is off screen. */
   const lastAnchor = useRef<Rect | null>(null);
   const focusCard = useRef(false);
+  /** The pill that holds the group's one tab stop (roving tabindex): the one last focused, while it is on screen. */
+  const tabId = useRef<string | null>(null);
 
   const pois: LivePoi[] = replica ? livePois(replica, config.visual) : [];
   const open = openId === null ? null : (pois.find((p) => p.poi.id === openId) ?? null);
@@ -90,6 +96,15 @@ function PointsOfInterest() {
         if (rect) moveTo(el, rect.x, rect.y);
         else if (el.hasAttribute('data-placed')) el.removeAttribute('data-placed');
       }
+      // one tab stop for the whole group, on a pill that is on screen: Tab does not walk every beam
+      const stop = tabId.current !== null && placed.has(tabId.current) ? tabId.current
+        : openNow !== null && placed.has(openNow) ? openNow
+        : (list.find(({ poi }) => placed.has(poi.id))?.poi.id ?? null);
+      for (const { poi } of list) {
+        const el = pills.current.get(poi.id);
+        const tabIndex = poi.id === stop ? 0 : -1;
+        if (el && el.tabIndex !== tabIndex) el.tabIndex = tabIndex;
+      }
       const box = card.current;
       if (!box || openNow === null) { lastAnchor.current = null; return; }
       // opened from elsewhere (the tour) while its star is out of view: the middle of the view will do
@@ -140,22 +155,24 @@ function PointsOfInterest() {
       if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < POI_UI.clickSlopPx) closePoi();
       down = null;
     };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      e.stopPropagation(); // Escape closes this card first; the next one clears the selection
-      closePoi();
-      pills.current.get(openId)?.focus();
-    };
     // capture: the map canvas takes pointer events for itself
     window.addEventListener('pointerdown', onDown, true);
     window.addEventListener('pointerup', onUp, true);
-    window.addEventListener('keydown', onKey, true);
     return () => {
       window.removeEventListener('pointerdown', onDown, true);
       window.removeEventListener('pointerup', onUp, true);
-      window.removeEventListener('keydown', onKey, true);
     };
   }, [openId]);
+
+  // Closing from the card (its button, or Escape while the focus is in it) gives the focus back to the pill.
+  const close = () => {
+    const active = document.activeElement;
+    const back = openId !== null && (!active || active === document.body || (card.current?.contains(active) ?? false));
+    closePoi();
+    if (back) pills.current.get(openId)?.focus();
+  };
+  // Escape closes this card first; a later press clears the selection (keys.ts)
+  useDismissable(openId !== null, close, { layer: LAYER.card });
 
   const toggle = (id: string, e: MouseEvent) => {
     if (openId === id) { closePoi(); return; }
@@ -165,17 +182,30 @@ function PointsOfInterest() {
     openPoi(id);
   };
 
+  // arrow keys move between the pills on screen, as they do between city pills
+  const onGroupKey = (e: KeyboardEvent<HTMLDivElement>) => {
+    const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0;
+    if (step === 0 || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    const shown = pois.map(({ poi }) => pills.current.get(poi.id)).filter((el): el is HTMLButtonElement => !!el && el.hasAttribute('data-placed'));
+    const at = shown.indexOf(document.activeElement as HTMLButtonElement);
+    if (at < 0) return;
+    e.preventDefault();
+    shown[(at + step + shown.length) % shown.length]!.focus();
+  };
+
   if (!render || pois.length === 0) return null;
   return (
     <div className="gm-poi-layer" ref={host}>
-      <div role="group" aria-label="Points of interest">
+      <div role="group" aria-label="Points of interest" aria-description="Arrow keys move between them. Enter opens one." onKeyDown={onGroupKey}>
         {pois.map(({ poi }) => (
           <PillButton
             key={poi.id}
             size="small"
             className={cx('gm-poi-pill', openId === poi.id && 'is-open')}
-            aria-haspopup="dialog"
             aria-expanded={openId === poi.id}
+            aria-controls={openId === poi.id ? CARD_ID : undefined}
+            tabIndex={-1}
+            onFocus={() => { tabId.current = poi.id; }}
             ref={(el) => {
               if (el) pills.current.set(poi.id, el); else pills.current.delete(poi.id);
             }}
@@ -185,7 +215,7 @@ function PointsOfInterest() {
           </PillButton>
         ))}
       </div>
-      {open && <PoiCard key={open.poi.id} poi={open.poi} parent={open.parent} render={render} ref={card} />}
+      {open && <PoiCard key={open.poi.id} id={CARD_ID} poi={open.poi} parent={open.parent} render={render} onClose={close} ref={card} />}
     </div>
   );
 }

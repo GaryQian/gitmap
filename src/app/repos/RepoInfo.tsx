@@ -3,6 +3,10 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { downloadModel } from '../../content';
 import type { RepoMeta } from '../../model/types';
+import { lineFor } from '../status/actions';
+import { folderNeed, useFolderOffers } from '../status/folder';
+import { folderRunners } from '../status/folderActions';
+import { say } from '../status/messages';
 import { useApp, useReplica, useSession } from '../store';
 import { Card, PillButton, Strong } from '../ui';
 import { whereLabel } from './registry';
@@ -64,7 +68,7 @@ function ExportButton() {
   const [state, setState] = useState<'idle' | 'busy' | 'unavailable'>('idle');
   if (!session) return null;
   // a map that cannot be exported loses the button instead of keeping a dead one
-  if (state === 'unavailable') return <p className="gm-repo-note">This map cannot be exported.</p>;
+  if (state === 'unavailable') return <p className="gm-repo-note" role="status">{say('export-failed').text}</p>;
   const run = async (): Promise<void> => {
     setState('busy');
     try {
@@ -79,6 +83,31 @@ function ExportButton() {
     <PillButton size="small" className="gm-repo-export" disabled={state === 'busy'} onClick={() => void run()}>
       {state === 'busy' ? 'Preparing the file' : 'Export map'}
     </PillButton>
+  );
+}
+
+/**
+ * A map opened without its folder (an imported map, a saved one whose folder needs asking for
+ * again): what is unavailable meanwhile, and the one action that brings the folder back.
+ */
+function FolderNote({ meta }: { meta: RepoMeta }) {
+  const session = useSession();
+  useFolderOffers();
+  const [busy, setBusy] = useState(false);
+  const need = folderNeed(session, meta);
+  if (!need) return null;
+  const { text, action } = lineFor(need.status, {}, folderRunners);
+  const run = async (): Promise<void> => {
+    if (!action) return;
+    setBusy(true);
+    try { await action.run(); } catch (err) { console.warn(`starmap: "${action.label}" failed`, err); }
+    setBusy(false);
+  };
+  return (
+    <div className="gm-repo-folder">
+      <p className="gm-repo-note">{text}</p>
+      {action && <PillButton size="small" disabled={busy} onClick={() => void run()}>{action.label}</PillButton>}
+    </div>
   );
 }
 
@@ -143,6 +172,7 @@ export function RepoInfo() {
             {commit && <Row label="Commit"><span title={commit}>{commit.slice(0, SHORT_OID)}</span></Row>}
             {demo?.license && <Row label="Licence">{demo.license}</Row>}
           </dl>
+          <FolderNote meta={meta} />
           <ExportButton />
         </Card>
       )}

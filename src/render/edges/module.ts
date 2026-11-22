@@ -77,7 +77,7 @@ export function createEdges(): SceneModule {
   let districtColor: Float32Array = new Float32Array(0), cityColor: Float32Array = new Float32Array(0);
 
   const shared = {
-    uMinLines: { value: 0 }, uPulse: { value: new THREE.Vector4(120, 30, 0.5, 2.4) }, uFlicker: { value: 62.8 }, uTrace: { value: 0.16 },
+    uMinBytes: { value: 0 }, uPulse: { value: new THREE.Vector4(120, 30, 0.5, 2.4) }, uFlicker: { value: 62.8 }, uTrace: { value: 0.16 },
     uMotion: { value: 1 }, uNova: { value: LONG_AGO }, uNovaSpeed: { value: EDGE_LOCAL.novaSpeed },
     uFlash: { value: new THREE.Vector2(EDGE_LOCAL.flashSeconds, EDGE_LOCAL.flashRadii) },
     uRibbon: { value: new THREE.Vector3(EDGE_LOCAL.ribbon.body, EDGE_LOCAL.ribbon.lane, EDGE_LOCAL.ribbon.pulse) },
@@ -165,7 +165,7 @@ export function createEdges(): SceneModule {
   const colorOf = (colors: Float32Array, g: number): number[] => [colors[3 * g] ?? 0.6, colors[3 * g + 1] ?? 0.6, colors[3 * g + 2] ?? 0.6];
 
   function rebuildModel(): void {
-    model = buildEdgeModel(ctx.replica, ctx.config.visual, ctx.state.minLines, ctx.state.typeFilter);
+    model = buildEdgeModel(ctx.replica, ctx.config.visual, ctx.state.minBytes, ctx.state.typeFilter);
     districtColor = dominantColors(model.unitDistrict, model.districtCity.length);
     const districtCity = model.districtCity;
     districtUnits = new Int32Array(districtCity.length);
@@ -372,7 +372,7 @@ export function createEdges(): SceneModule {
     shared.uFlicker.value = pulse.flickerHz * 2 * Math.PI;
     shared.uTrace.value = pulse.traceOpacity;
     shared.uMotion.value = ctx.reducedMotion ? 0 : 1;
-    shared.uMinLines.value = ctx.state.minLines;
+    shared.uMinBytes.value = ctx.state.minBytes;
 
     levels.city = makeLevel('city', 1.9);
     levels.district = makeLevel('district', 1.95);
@@ -383,7 +383,7 @@ export function createEdges(): SceneModule {
       ctx.bus.on('selection', () => { focusDirty = true; }),
       ctx.bus.on('hover', (h) => setHover(h.slot)),
       ctx.bus.on('typeFilter', markModelDirty),
-      ctx.bus.on('minLines', (n) => { shared.uMinLines.value = n; markModelDirty(); }),
+      ctx.bus.on('minBytes', (n) => { shared.uMinBytes.value = n; markModelDirty(); }),
       ctx.bus.on('burst', ({ ref, kind }) => {
         if (kind !== 'open' || ctx.reducedMotion) return;
         const slot = unitSlotOf(ref, ctx.replica);

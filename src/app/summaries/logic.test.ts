@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Annotation, NodeRef } from '../../model/types';
-import { cardContent, inFlight, placeCard, summaryFor, titleFor, type Rect } from './logic';
+import { cardContent, cardOwner, inFlight, pinnedCity, placeCard, summaryFor, titleFor, type Rect } from './logic';
 import { SUMMARY_UI } from './tunables';
 
 const summary = (id: string, parent: NodeRef, text: string, label?: string): Annotation =>
@@ -58,6 +58,42 @@ describe('the title of the card', () => {
     expect(titleFor('API', 'api')).toBeNull();
     expect(titleFor('Request handling', 'request-handling')).toBeNull();
     expect(titleFor('Request handling.', ' Request  Handling')).toBeNull();
+  });
+});
+
+describe('whose card is showing', () => {
+  const all = () => true;
+
+  it('pins the most recently selected city, and nothing for files or districts', () => {
+    expect(pinnedCity([])).toBeNull();
+    expect(pinnedCity(['u:api/server.ts', 'f:api/server.ts', 'd:api/routes'])).toBeNull();
+    expect(pinnedCity(['c:api'])).toBe('c:api');
+    expect(pinnedCity(['c:api', 'c:web'])).toBe('c:web');
+    // a file selected after the city does not unpin it
+    expect(pinnedCity(['c:api', 'c:web', 'u:web/app.ts'])).toBe('c:web');
+  });
+
+  it('is the hovered or focused pill when nothing is pinned, and nothing when nothing is pointed at', () => {
+    expect(cardOwner('c:api', null, all)).toEqual({ ref: 'c:api', pinned: false });
+    expect(cardOwner(null, null, all)).toBeNull();
+  });
+
+  it('is the pinned city while no other pill is hovered or focused', () => {
+    expect(cardOwner(null, 'c:api', all)).toEqual({ ref: 'c:api', pinned: true });
+    // on the pinned pill itself, hovering changes nothing
+    expect(cardOwner('c:api', 'c:api', all)).toEqual({ ref: 'c:api', pinned: true });
+  });
+
+  it('lets hover or focus on another pill win for as long as it lasts', () => {
+    expect(cardOwner('c:web', 'c:api', all)).toEqual({ ref: 'c:web', pinned: false });
+    expect(cardOwner(null, 'c:api', all)).toEqual({ ref: 'c:api', pinned: true });
+  });
+
+  it('keeps the pinned card when the other pill has nothing to say', () => {
+    const onlyApi = (ref: NodeRef) => ref === 'c:api';
+    expect(cardOwner('c:web', 'c:api', onlyApi)).toEqual({ ref: 'c:api', pinned: true });
+    // with nothing pinned the hovered pill is still the owner; an empty card simply draws nothing
+    expect(cardOwner('c:web', null, onlyApi)).toEqual({ ref: 'c:web', pinned: false });
   });
 });
 

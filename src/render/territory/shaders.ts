@@ -155,12 +155,13 @@ void main() {
 }`;
 
 export const BORDER_FRAG = GLSL_TERRITORY + /* glsl */ `
-uniform float uDark; uniform float uFade; uniform float uBorderStrength; uniform vec2 uFill;
+uniform float uDark; uniform float uFade; uniform float uBorderStrength; uniform vec2 uContour;
 varying vec3 vW; varying float vSide;
 void main() {
   vec4 t = gmTerritory(vW.xz);
-  // the border only shows inside its city's shape
-  float inside = smoothstep(uFill.x, uFill.x * 3.0, t.a);
+  // the border runs out to the drawn outline of the districts and stops on it
+  float fw = max(fwidth(t.a), 1e-5) * 1.5;
+  float inside = smoothstep(uContour.x - fw, uContour.x, t.a);
   float a = exp(-vSide * vSide * 6.0) * inside * uBorderStrength * uFade;
   if (a < 0.004) discard;
   vec3 tint = t.rgb / max(t.a, 1e-4);

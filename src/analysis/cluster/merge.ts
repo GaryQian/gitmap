@@ -46,6 +46,15 @@ export function mergeDown(
   sizeBias = 0,
   /** With a bias, more than `target` communities can remain; never more than this many. */
   maxCount = Infinity,
+  /** Divide the connecting weight by the partner's size, not its square root (balance.ts mergeScore). */
+  sharp = false,
+  /**
+   * Lean toward the directory tree (clustering.mergePathBias): a neighbour's score is multiplied by
+   * 1 + pathBias × dirCloseness of the two communities' directories, so of two neighbours about as
+   * well connected, the one from the same tree is chosen. Not a rule: a neighbour connected strongly
+   * enough across trees still wins. 0 leaves the score alone.
+   */
+  pathBias = 0,
 ): Partition {
   const size = communitySizes(labels, nodeSize);
   const count = size.length;
@@ -82,6 +91,9 @@ export function mergeDown(
     bias === 0 || sumSq <= 0 ? liveNow : (1 - bias) * liveNow + bias * ((totalSize * totalSize) / sumSq);
   let live = count;
   let ancestry: Ancestry | null = null;
+  // The directory each community stands for, as it was found. A community that absorbs a smaller
+  // one keeps its own: the smaller is the one that moved.
+  const dirs = pathBias > 0 ? communityDirs(labels, count, pathOf) : null;
   while (live > 1) {
     const s = smallest();
     if (s < 0 || (size[s] >= floor && counted(live) <= target && live <= maxCount)) break;
@@ -91,7 +103,8 @@ export function mergeDown(
     // proportionally more connections than a small neighbour to be chosen.
     let t = -1, best = 0;
     for (const [c, w] of adj[s]) {
-      const score = mergeScore(w, size[c], bias);
+      let score = mergeScore(w, size[c], bias, sharp);
+      if (dirs) score *= 1 + pathBias * dirCloseness(dirs[s], dirs[c]);
       if (score > best || (score === best && c < t)) { t = c; best = score; }
     }
     if (t < 0) {
@@ -190,6 +203,29 @@ function dominantDir(paths: readonly string[]): string {
     if (top * 2 <= paths.length) return prefix;
     prefix += best + '/';
   }
+}
+
+/** The directory each community stands for (dominantDir of its file nodes); '' when it has none. */
+function communityDirs(labels: Int32Array, count: number, pathOf: (node: number) => string | undefined): string[] {
+  const members: string[][] = Array.from({ length: count }, () => []);
+  for (let i = 0; i < labels.length; i++) {
+    const p = pathOf(i);
+    if (p !== undefined) members[labels[i]].push(p);
+  }
+  return members.map(dominantDir);
+}
+
+/**
+ * How close two 'a/b/' style directories sit in the tree, 0..1: shared leading directories over the
+ * depth of the deeper one. The same directory 1; 'a/x/' and 'a/y/' 1/2; nothing shared 0. A community
+ * spread over the tree with no directory of its own ('') is close to nothing.
+ */
+export function dirCloseness(x: string, y: string): number {
+  if (x === '' || y === '') return 0;
+  let dx = 0, dy = 0;
+  for (let i = 0; i < x.length; i++) if (x[i] === '/') dx++;
+  for (let i = 0; i < y.length; i++) if (y[i] === '/') dy++;
+  return sharedSegments(x, y) / (dx > dy ? dx : dy);
 }
 
 /** Leading directories two 'a/b/' style paths have in common. */

@@ -1,11 +1,18 @@
-// Top centre: one compact progress pill while background subsystems are still working, and the
-// action pills a notice raises ("Refined structure ready" + "Apply", "3 files changed" + "Update").
-import { useState, type ReactNode } from 'react';
+// Top centre: one compact progress pill while background subsystems are still working, the action
+// pills a notice raises ("Refined structure ready" + "Apply", "3 files changed" + "Update"), and the
+// quiet lines: something the map wants to say once (no history here, a folder that needs choosing
+// again, background work that stopped). The wording of every line is in ../status/messages.ts.
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import type { AppMount } from '../../contracts/app';
 import type { Subsystem } from '../../model/types';
-import { errorMessage } from '../session';
-import { dismissNotice, pushNotice, useApp, useNotices, useSession, type ProgressEntry, type ShownNotice } from '../store';
-import { CloseIcon, Pill, PillSegment, ProgressLine, Strong } from '../ui';
+import { statusLine } from '../status/actions';
+import { classifyNoHistory } from '../status/classify';
+import { say, type StatusCase } from '../status/messages';
+import { STATUS_LOCAL } from '../status/tunables';
+import {
+  dismissNotice, pushNotice, useApp, useNotices, useSession, type LineAction, type ProgressEntry, type ShownNotice,
+} from '../store';
+import { CloseIcon, Pill, PillSegment, ProgressLine, Strong, cx } from '../ui';
 import './progress.css';
 
 const SUBSYSTEM_LABELS: Record<Subsystem, string> = {
@@ -44,7 +51,9 @@ function ProgressPill() {
   );
 }
 
-function ActionPill({ notice, verb, run, children }: { notice: ShownNotice; verb: string; run: () => Promise<void>; children: ReactNode }) {
+function ActionPill({ notice, verb, run, failed, children }: {
+  notice: ShownNotice; verb: string; run: () => Promise<void>; failed: StatusCase; children: ReactNode;
+}) {
   const session = useSession();
   const [busy, setBusy] = useState(false);
   const act = async () => {
@@ -55,7 +64,8 @@ function ActionPill({ notice, verb, run, children }: { notice: ShownNotice; verb
     } catch (err) {
       if (useApp.getState().session !== session) return; // the map was closed while this ran
       setBusy(false);
-      pushNotice({ kind: 'info', message: errorMessage(err) });
+      console.warn(`starmap: "${verb}" failed`, err);
+      pushNotice(statusLine(failed, { fades: true }));
     }
   };
   return (
@@ -66,11 +76,48 @@ function ActionPill({ notice, verb, run, children }: { notice: ShownNotice; verb
   );
 }
 
-function InfoPill({ notice, text }: { notice: ShownNotice; text: string }) {
+/**
+ * One quiet line: a sentence, the one thing it offers to do (if any), and a way to dismiss it. It is
+ * announced politely and never takes the focus. A line that fades stays a while, then goes; resting
+ * the pointer on it or focusing one of its buttons keeps it.
+ */
+function LinePill({ notice, text, action, fades }: { notice: ShownNotice; text: string; action?: LineAction; fades?: boolean }) {
+  const [busy, setBusy] = useState(false);
+  const [held, setHeld] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+
+  // Stay, fade, go. The clock starts again when the line is replaced by a newer one with the same
+  // id, and while it is held. (Reduced motion cuts the fade itself short, in ui.css.)
+  useEffect(() => {
+    setLeaving(false);
+    if (!fades || held) return;
+    const fade = setTimeout(() => setLeaving(true), STATUS_LOCAL.lineMs);
+    const go = setTimeout(() => dismissNotice(notice), STATUS_LOCAL.lineMs + STATUS_LOCAL.fadeMs);
+    return () => { clearTimeout(fade); clearTimeout(go); };
+  }, [fades, held, notice]);
+
+  const act = async () => {
+    if (!action) return;
+    setBusy(true);
+    try { await action.run(); } catch (err) { console.warn(`starmap: "${action.label}" failed`, err); }
+    setBusy(false);
+  };
+
   return (
-    <Pill blur role="status" className="gm-info-pill">
+    <Pill
+      blur
+      role="status"
+      className={cx('gm-info-pill', leaving && 'is-leaving')}
+      style={{ '--gm-status-fade-ms': `${STATUS_LOCAL.fadeMs}ms` } as CSSProperties}
+      title={text}
+      onPointerEnter={() => setHeld(true)}
+      onPointerLeave={() => setHeld(false)}
+      onFocus={() => setHeld(true)}
+      onBlur={() => setHeld(false)}
+    >
       <span className="gm-info-text">{text}</span>
-      <PillSegment className="gm-info-close" aria-label="Dismiss" title="Dismiss" onClick={() => dismissNotice(notice)}>
+      {action && <PillSegment className="gm-info-action" disabled={busy} onClick={() => void act()}>{action.label}</PillSegment>}
+      <PillSegment className={cx('gm-info-close', action && 'gm-info-close-after')} aria-label="Dismiss" title="Dismiss" onClick={() => dismissNotice(notice)}>
         <CloseIcon size={13} />
       </PillSegment>
     </Pill>
@@ -86,17 +133,25 @@ function NoticePills() {
       {notices.map((n, i) => {
         switch (n.kind) {
           case 'refined-ready':
-            return <ActionPill key={n.kind} notice={n} verb="Apply" run={() => session.applyRefined()}>Refined structure ready</ActionPill>;
+            return (
+              <ActionPill key={n.kind} notice={n} verb="Apply" failed="apply-failed" run={() => session.applyRefined()}>
+                Refined structure ready
+              </ActionPill>
+            );
           case 'files-changed':
             return (
-              <ActionPill key={n.kind} notice={n} verb="Update" run={() => session.update()}>
+              <ActionPill key={n.kind} notice={n} verb="Update" failed="update-failed" run={() => session.update()}>
                 <Strong>{n.count.toLocaleString()}</Strong> {n.count === 1 ? 'file changed' : 'files changed'}
               </ActionPill>
             );
           case 'no-history':
-            return <InfoPill key={`history-${i}`} notice={n} text={n.reason} />;
+            // why, in one line; it stays until dismissed, and the session sends it once per map
+            return <LinePill key="no-history" notice={n} text={say(classifyNoHistory(n.reason)).text} />;
           case 'info':
-            return <InfoPill key={`info-${i}`} notice={n} text={n.message} />;
+            // the session turns the pipeline's info notices into status lines; one that arrives raw still gets a plain sentence
+            return <LinePill key={`info-${i}`} notice={n} text={say('background-work-stopped').text} fades />;
+          case 'status':
+            return <LinePill key={`status-${n.id}`} notice={n} text={n.text} action={n.action} fades={n.fades} />;
         }
       })}
     </>

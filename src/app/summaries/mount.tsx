@@ -1,7 +1,7 @@
 // In the scene: what a city does, in the AI's words, on a card under its pill while the pointer
-// rests there or the pill has keyboard focus (PLAN.md §11.1, §17.6). React renders the card's text
-// when the target or the model changes; where the card sits is written straight onto it whenever
-// its pill moves, never through React state.
+// rests there or the pill has keyboard focus, and for as long as the city is selected (PLAN.md §11.1,
+// §17.6). React renders the card's text when the target or the model changes; where the card sits is
+// written straight onto it whenever its pill moves, never through React state.
 import { useEffect, useLayoutEffect, useRef, useState, type Ref } from 'react';
 import { config } from '../../config';
 import type { AppMount } from '../../contracts/app';
@@ -10,7 +10,7 @@ import type { NodeRef } from '../../model/types';
 import { sceneObstacles } from '../anchor';
 import { useApp, useRender, useReplica } from '../store';
 import { Card, cx } from '../ui';
-import { cardContent, inFlight, placeCard, type CardContent, type Rect } from './logic';
+import { cardContent, inFlight, pinnedCity, placeCard, type CardContent, type Rect } from './logic';
 import { trackPills, type PillTarget, type PillTracker } from './track';
 import { SUMMARY_UI } from './tunables';
 import './summaries.css';
@@ -41,18 +41,19 @@ function readChrome(view: HTMLElement): { boxes: Rect[]; right: number } {
     if (el.checkVisibility && !el.checkVisibility({ visibilityProperty: true, opacityProperty: true })) continue;
     const r = el.getBoundingClientRect();
     if (r.width <= 0 || r.height <= 0) continue;
-    // the sidebar takes the whole right edge: the view ends where it begins
-    if (el.parentElement?.classList.contains('gm-region-rightEdge')) right = Math.min(right, r.left - origin.left);
+    // the open sidebar takes the whole right edge: the view ends where it begins
+    const sidebar = el.parentElement?.classList.contains('gm-region-rightEdge') && r.height > view.clientHeight / 2;
+    if (sidebar) right = Math.min(right, r.left - origin.left);
     else boxes.push({ x: r.left - origin.left, y: r.top - origin.top, width: r.width, height: r.height });
   }
   return { boxes, right };
 }
 
-function SummaryCard({ content, instant, ref }: { content: CardContent; instant: boolean; ref: Ref<HTMLDivElement> }) {
+function SummaryCard({ content, instant, pinned, ref }: { content: CardContent; instant: boolean; pinned: boolean; ref: Ref<HTMLDivElement> }) {
   // decided once, when the card appears: a card that is already up never fades in again
   const [still] = useState(instant);
   return (
-    <Card id={CARD_ID} role="tooltip" className={cx('gm-summary', still && 'is-instant')} ref={ref}>
+    <Card id={CARD_ID} role="tooltip" className={cx('gm-summary', still && 'is-instant')} data-pinned={pinned || undefined} ref={ref}>
       {content.kind === 'pending' ? (
         <p className="gm-summary-wait">Summary on its way</p>
       ) : (
@@ -69,6 +70,8 @@ function Summaries() {
   const render = useRender();
   const replica = useReplica();
   const generating = useApp((s) => inFlight(s.progress.ai));
+  /** The selected city (the latest, if several): its card is pinned, whatever the pointer does. */
+  const pinned = useApp((s) => pinnedCity(s.selection));
   const [target, setTarget] = useState<PillTarget | null>(null);
   const host = useRef<HTMLDivElement>(null);
   const card = useRef<HTMLDivElement>(null);
@@ -79,7 +82,7 @@ function Summaries() {
     const tracking = trackPills(document, {
       delayMs: config.interaction.hoverDelayMs,
       graceMs: SUMMARY_UI.graceMs,
-      hasCard: ({ ref }) => {
+      hasCard: (ref) => {
         const { session, progress } = useApp.getState();
         return contentOf(session?.replica, ref, inFlight(progress.ai)) !== null;
       },
@@ -90,11 +93,24 @@ function Summaries() {
     return () => { tracker.current = null; tracking.dispose(); };
   }, []);
 
+  useEffect(() => tracker.current?.setPinned(pinned), [pinned]);
+
+  // The tracker looks at its pills on every rendered frame while there is something to follow or to
+  // find again (a pinned city's pill comes and goes with the camera), and whenever a summary arriving
+  // or generation starting changes which pill has a card.
+  const following = target !== null || pinned !== null;
+  useEffect(() => {
+    if (!render || !following) return;
+    return render.on('frame', () => tracker.current?.check());
+  }, [render, following]);
+  const rev = replica?.rev ?? 0;
+  useEffect(() => tracker.current?.check(), [rev, generating]);
+
   const pill = target?.el ?? null;
   const content = target ? contentOf(replica, target.ref, generating) : null;
   const showing = content !== null;
 
-  // The card follows its pill: placed now, on every move of the pill, and on every rendered frame.
+  // The card follows its pill: placed now and on every move of the pill (the tracker calls `place`).
   useLayoutEffect(() => {
     const box = card.current, view = host.current;
     if (!pill || !box || !view) return;
@@ -117,8 +133,6 @@ function Summaries() {
     };
     place.current = run;
     run();
-    // the tracker looks at the pill first (recycled, hidden, dragged?) and calls back to place the card
-    const off = render?.on('frame', () => tracker.current?.check());
     // the text changing, fonts arriving or the window resizing all change what fits where
     const resize = new ResizeObserver(() => {
       size = { width: box.offsetWidth, height: box.offsetHeight };
@@ -127,10 +141,10 @@ function Summaries() {
     });
     resize.observe(box);
     resize.observe(view);
-    return () => { off?.(); resize.disconnect(); place.current = () => {}; };
-  }, [pill, showing, render]);
+    return () => { resize.disconnect(); place.current = () => {}; };
+  }, [pill, showing]);
 
-  // While the card is up it describes its pill, for screen readers too.
+  // While the card is up, pinned or not, it describes its pill, for screen readers too.
   useLayoutEffect(() => {
     if (!pill || !showing) return;
     pill.setAttribute('aria-describedby', CARD_ID);
@@ -139,7 +153,7 @@ function Summaries() {
 
   return (
     <div className="gm-summary-layer" ref={host}>
-      {target && content && <SummaryCard content={content} instant={target.instant} ref={card} />}
+      {target && content && <SummaryCard content={content} instant={target.instant} pinned={target.pinned} ref={card} />}
     </div>
   );
 }

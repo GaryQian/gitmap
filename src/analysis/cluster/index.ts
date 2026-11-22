@@ -28,13 +28,13 @@ import type { AnalysisInput } from '../../contracts/pipeline';
 import type { UnitEdges } from '../edges';
 import { comparePaths } from '../order';
 import type { UnitTable } from '../units';
-import { countLimit } from './balance';
+import { countLimit, districtBias } from './balance';
 import { buildClusterGraph, type ClusterGraph, type EdgeList } from './graph';
 import { clusterIncremental, wantsIncremental } from './incremental';
 import { louvainLevels } from './louvain';
-import { communitySizes, mergeDown, type Partition } from './merge';
+import { communitySizes, labelCount, mergeDown, type Partition } from './merge';
 import { Namer } from './names';
-import { mergeCohesive, refineGiants } from './refine';
+import { mergeCohesive, refineGiants, settleStragglers } from './refine';
 import { matchPrevious, mintIds } from './stableIds';
 
 export interface ClusterResult {
@@ -72,31 +72,16 @@ export const cluster: Cluster = (units, edges, config, previous, repoName = '') 
     const kept = clusterIncremental(units, edges, config, previous);
     if (kept) return kept;
   }
-  const graph = buildClusterGraph(units, edges, config.clustering);
+  // Two views of the same nodes: directories whole (cities are formed on this one), and large
+  // directories tied in runs (districts are formed on this one, so a big flat directory can become
+  // several districts without its files drifting into different cities).
+  const graph = buildClusterGraph(units, edges, config.clustering, false);
+  const districtGraph = config.clustering.sizeBias > 0 ? buildClusterGraph(units, edges, config.clustering, true) : graph;
   const n = graph.units;
-  const { cityOf, cityCount, districtOf, districtCity } = detectCommunities(graph, config.clustering);
+  const { cityOf, cityCount, districtOf, districtCity } = detectCommunities(graph, districtGraph, config.clustering);
   const districtCount = districtCity.length;
 
-  // Names: cities against each other, districts against their siblings.
-  const namer = new Namer(graph.paths);
-  const cityMembers = groupBy(cityOf, cityCount);
-  const districtMembers = groupBy(districtOf, districtCount);
-  const cityNames = cityCount === 1 && repoName ? [repoName] : namer.name(cityMembers, repoName);
-  const districtsOfCity: number[][] = Array.from({ length: cityCount }, () => []);
-  for (let d = 0; d < districtCount; d++) districtsOfCity[districtCity[d]].push(d);
-  const districtNames = new Array<string>(districtCount);
-  for (let c = 0; c < cityCount; c++) {
-    const ds = districtsOfCity[c];
-    const names = ds.length === 1 ? [cityNames[c]] : namer.name(ds.map((d) => districtMembers[d]), cityNames[c]);
-    ds.forEach((d, k) => { districtNames[d] = names[k]; });
-  }
-
-  // Ids: a fresh id is the name (district: city name / district name); communities that persist
-  // keep the ids they had.
-  const freshDistrict = districtNames.map((name, d) => {
-    const city = cityNames[districtCity[d]];
-    return name === city ? city : `${city}/${name}`;
-  });
+  // Communities that persist from the previous run keep their ids, and their names with them.
   let keptDistrict: (string | undefined)[] = new Array(districtCount).fill(undefined);
   let keptCity: (string | undefined)[] = new Array(cityCount).fill(undefined);
   if (previous) {
@@ -105,6 +90,29 @@ export const cluster: Cluster = (units, edges, config, previous, repoName = '') 
     keptDistrict = matchPrevious(districtOf, districtCount, prevDistrict);
     keptCity = matchPrevious(cityOf, cityCount, prevCity);
   }
+  const cityBefore = keptCity.map((id) => (id === undefined || !previous ? undefined : own(previous.cityName, id)));
+  const districtBefore = keptDistrict.map((id) => (id === undefined || !previous ? undefined : own(previous.districtName, id)));
+
+  // Names: cities against each other, districts against their siblings; a previous name is reused
+  // while it is free.
+  const namer = new Namer(graph.paths);
+  const cityMembers = groupBy(cityOf, cityCount);
+  const districtMembers = groupBy(districtOf, districtCount);
+  const cityNames = cityCount === 1 && repoName ? [repoName] : namer.name(cityMembers, repoName, cityBefore);
+  const districtsOfCity: number[][] = Array.from({ length: cityCount }, () => []);
+  for (let d = 0; d < districtCount; d++) districtsOfCity[districtCity[d]].push(d);
+  const districtNames = new Array<string>(districtCount);
+  for (let c = 0; c < cityCount; c++) {
+    const ds = districtsOfCity[c];
+    const names = ds.length === 1 ? [cityNames[c]] : namer.name(ds.map((d) => districtMembers[d]), cityNames[c], ds.map((d) => districtBefore[d]));
+    ds.forEach((d, k) => { districtNames[d] = names[k]; });
+  }
+
+  // Ids: a fresh id is the name (district: city name / district name).
+  const freshDistrict = districtNames.map((name, d) => {
+    const city = cityNames[districtCity[d]];
+    return name === city ? city : `${city}/${name}`;
+  });
   const finalCity = mintIds(cityNames, keptCity);
   const finalDistrict = mintIds(freshDistrict, keptDistrict);
 
@@ -127,7 +135,7 @@ interface Communities {
   districtCity: number[];
 }
 
-function detectCommunities(g: ClusterGraph, cfg: ClusteringConfig): Communities {
+function detectCommunities(g: ClusterGraph, gd: ClusterGraph, cfg: ClusteringConfig): Communities {
   const minSize = cfg.minDistrictSize;
   const pathOf = (node: number): string | undefined => (node < g.units ? g.paths[node] : undefined);
   let files = 0;
@@ -144,8 +152,16 @@ function detectCommunities(g: ClusterGraph, cfg: ClusteringConfig): Communities 
   // number standing. maxCities still bounds it.
   const cityLabels = refineGiants(mergeCohesive(levels[levels.length - 1], g, cfg), g, g.size, wantCities, cfg);
   const slack = (cfg as { countSlack?: number }).countSlack;
-  const cities = mergeDown(cityLabels, g, g.size, wantCities, minSize, pathOf, cfg.sizeBias,
-    Math.max(wantCities, Math.min(cfg.maxCities, countLimit(wantCities, slack))));
+  // Districts may run further above their curve than cities: a city of thousands of files reads
+  // better as two dozen districts than as ten with one of them holding half of it.
+  const districtSlack = (cfg as { districtCountSlack?: number }).districtCountSlack ?? 2.5;
+  // Lean toward the directory tree when choosing which neighbour a community joins (merge.ts).
+  const mergePathBias = (cfg as { mergePathBias?: number }).mergePathBias ?? 0;
+  const mergedCities = mergeDown(cityLabels, g, g.size, wantCities, minSize, pathOf, cfg.sizeBias,
+    Math.max(wantCities, Math.min(cfg.maxCities, countLimit(wantCities, slack))), false, mergePathBias);
+  // Whole blocks have been moved about; now each file goes where most of its connections are.
+  const cityOfNode = cfg.sizeBias > 0 ? settleStragglers(mergedCities.labels, g) : mergedCities.labels;
+  const cities: Partition = { labels: cityOfNode, count: labelCount(cityOfNode) };
 
   // Nodes, and the edges inside a city, grouped by city.
   const city = cities.labels;
@@ -157,11 +173,11 @@ function detectCommunities(g: ClusterGraph, cfg: ClusteringConfig): Communities 
   const fill = nodeStart.slice(0, cities.count);
   for (let i = 0; i < g.nodes; i++) { local[i] = fill[city[i]] - nodeStart[city[i]]; cityNodes[fill[city[i]]++] = i; }
   const edgeStart = new Int32Array(cities.count + 1);
-  for (let e = 0; e < g.count; e++) if (city[g.a[e]] === city[g.b[e]]) edgeStart[city[g.a[e]] + 1]++;
+  for (let e = 0; e < gd.count; e++) if (city[gd.a[e]] === city[gd.b[e]]) edgeStart[city[gd.a[e]] + 1]++;
   for (let c = 0; c < cities.count; c++) edgeStart[c + 1] += edgeStart[c];
   const cityEdges = new Int32Array(edgeStart[cities.count]);
   fill.set(edgeStart.subarray(0, cities.count));
-  for (let e = 0; e < g.count; e++) if (city[g.a[e]] === city[g.b[e]]) cityEdges[fill[city[g.a[e]]]++] = e;
+  for (let e = 0; e < gd.count; e++) if (city[gd.a[e]] === city[gd.b[e]]) cityEdges[fill[city[gd.a[e]]]++] = e;
 
   // Districts, city by city.
   const districtOf = new Int32Array(g.units);
@@ -180,19 +196,48 @@ function detectCommunities(g: ClusterGraph, cfg: ClusteringConfig): Communities 
       const inside: EdgeList = { count, a: new Int32Array(count), b: new Int32Array(count), w: new Float64Array(count) };
       for (let k = 0; k < count; k++) {
         const e = cityEdges[edgeStart[c] + k];
-        inside.a[k] = local[g.a[e]]; inside.b[k] = local[g.b[e]]; inside.w[k] = g.w[e];
+        inside.a[k] = local[gd.a[e]]; inside.b[k] = local[gd.b[e]]; inside.w[k] = gd.w[e];
       }
       const memberPath = (k: number) => pathOf(members[k]);
       const found = fromFinerLevel(levels, members, size, want, minSize, cityFiles, scratch)
         ?? last(detect(members.length, inside, size, want, minSize, cfg));
-      const labels = refineGiants(mergeCohesive(found, inside, cfg), inside, size, want, cfg);
-      part = mergeDown(labels, inside, size, want, minSize, memberPath, cfg.sizeBias, countLimit(want, slack));
+      const strength = districtBias(cfg);
+      const labels = refineGiants(mergeCohesive(found, inside, cfg), inside, size, want, cfg, undefined, 0, strength);
+      // Districts: the firmer strength and the sharp merge score, and no settling of stragglers,
+      // which inside one city would only gather everything back around its busiest files.
+      part = mergeDown(labels, inside, size, want, minSize, memberPath, strength, countLimit(want, districtSlack), true, mergePathBias);
     }
     const base = districtCity.length;
     for (let d = 0; d < part.count; d++) districtCity.push(c);
     for (let k = 0; k < members.length; k++) if (members[k] < g.units) districtOf[members[k]] = base + part.labels[k];
   }
-  return { cityOf: city.subarray(0, g.units), cityCount: cities.count, districtOf, districtCity };
+  return dropEmpty(city.subarray(0, g.units), cities.count, districtOf, districtCity);
+}
+
+/**
+ * Communities are formed over unit nodes and directory hubs alike, and a community can end up
+ * holding only hubs: every file of a city moved to where it is more connected, say, and its
+ * directory hubs stayed behind. Such a district or city has no unit in it and must not reach the
+ * model. Districts no unit belongs to and cities left without a district are removed here, and the
+ * rest renumbered in order of first appearance over the units.
+ */
+function dropEmpty(cityOfUnit: Int32Array, cityCount: number, districtOfUnit: Int32Array, districtCity: number[]): Communities {
+  const districtMap = new Int32Array(districtCity.length).fill(-1);
+  const cityMap = new Int32Array(cityCount).fill(-1);
+  const keptDistrictCity: number[] = [];
+  let cities = 0;
+  const districtOf = new Int32Array(districtOfUnit.length);
+  const cityOf = new Int32Array(cityOfUnit.length);
+  for (let u = 0; u < districtOfUnit.length; u++) {
+    const d = districtOfUnit[u];
+    // a unit's city is its district's city; the two labellings agree by construction
+    const c = districtCity[d];
+    if (cityMap[c] < 0) cityMap[c] = cities++;
+    if (districtMap[d] < 0) { districtMap[d] = keptDistrictCity.length; keptDistrictCity.push(cityMap[c]); }
+    districtOf[u] = districtMap[d];
+    cityOf[u] = cityMap[c];
+  }
+  return { cityOf, cityCount: cities, districtOf, districtCity: keptDistrictCity };
 }
 
 /**

@@ -61,7 +61,7 @@ export default mount;
 
 ## The store
 
-`useApp` is the one zustand store. Read with a selector (`useApp((s) => s.minLines)`) or a hook below; change it with the action functions, which are plain exports and can be called from anywhere.
+`useApp` is the one zustand store. Read with a selector (`useApp((s) => s.minBytes)`) or a hook below; change it with the action functions, which are plain exports and can be called from anywhere.
 
 | State | Type | Notes |
 |---|---|---|
@@ -80,7 +80,7 @@ export default mount;
 | `hover` | `NodeRef \| null` | set from the renderer's `hover` event |
 | `activeOverlay` | `string \| null` | pushed to `session.setSelectedOverlay` |
 | `typeFilter` | `string[]` | language ids, empty = all; pushed to `render.setTypeFilter` |
-| `minLines` | `number` | starts at `config.legend.minLinesDefault`; pushed to `render.setMinLines` |
+| `minBytes` | `number` | starts at `config.legend.minBytesDefault`; pushed to `render.setMinBytes` |
 | `openFile` | `NodeRef \| null` | set on double-click; the sidebar reads it |
 
 View state resets when a map is opened or closed.
@@ -92,11 +92,11 @@ View state resets when a map is opened or closed.
 
 **Selection actions** (each is one transition from `selectionState.ts`, so `focus` can never point outside `selection`): `selectOnly(ref | null)` (click: replace and focus; null clears), `toggleSelection(ref)` (Shift+click), `addToSelection(refs)` (marquee), `removeFromSelection(ref)`, `clearSelection()`, `setFocus(ref | null)` (open or close the detail card), and `setSelection(refs)` (replace; a single node is also focused, which is what search and the tour want).
 
-**Other actions:** `setHover`, `setActiveOverlay`, `setTypeFilter`, `setMinLines`, `setOpenFile`, `setAppearance`, `setParticles`, `setMessage`, `pushNotice`, `dismissNotice` (from `store.ts`); `openSource(source)`, `closeSession(message?)` (from `session.ts`).
+**Other actions:** `setHover`, `setActiveOverlay`, `setTypeFilter`, `setMinBytes`, `setOpenFile`, `setParticles`, `setMessage`, `pushNotice`, `dismissNotice` (from `store.ts`); `openSource(source)`, `closeSession(message?)` (from `session.ts`).
 
 **What is already wired** (`session.ts`):
 
-- Store → renderer: `mode`, `settings.particles`, `selection`, `typeFilter`, `minLines`, all pushed once when the renderer appears and then on change. `activeOverlay` → `session.setSelectedOverlay`. Building the `OverlayView` and calling `render.setOverlay` is left to the overlays feature.
+- Store → renderer: `mode`, `settings.particles`, `selection`, `typeFilter`, `minBytes`, all pushed once when the renderer appears and then on change. `activeOverlay` → `session.setSelectedOverlay`. Building the `OverlayView` and calling `render.setOverlay` is left to the overlays feature.
 - Renderer → store: `hover` → `hover`; `click` → `selection` and `focus` (plain click replaces and focuses, Shift adds or removes, a click on empty space clears); `marquee` adds to `selection`; `dblclick` → `openFile`. For `frame` and `camera`, subscribe yourself: `useRender()?.on('frame', …)`.
 - Left to the renderer's interaction module, so do not repeat them here: the select and open bursts (`render.burst`), easing the camera to a clicked sphere, and redrawing a selected file that the size slider hides. Flying is the shell's job only for its own controls: a city or district pill, a selection pill, a name in the detail card, a search result.
 - Keys (window listeners in the features): Escape clears the selection (`selected/`), Home resets the view (`controls/`). Both ignore text fields (`isTyping`). **A popup that closes on Escape must take the key before it gets there**: listen in the capture phase, or in a React `onKeyDown`, and call `stopPropagation()`, as the settings card and the controls key do.
@@ -154,6 +154,21 @@ Rules from PLAN.md §17 that the primitives already follow, and yours should too
 **Counts are units.** One sphere is one unit (a header + implementation pair is a single unit), so the legend's counts, the slider's "Hiding N of M files" and the city pills all count units and call them files. Language names come from `replica.meta.languages` (the id is shown when the model has none, as on the synthetic map); nothing in the app imports `src/lang`.
 
 **For the next features.** The sidebar reads `openFile`; note that the canvas and the `scene` region stay full-bleed under the sidebar, so an anchored card can end up beneath it (the pills already avoid `rightEdge`). Overlay pills go in `topRight` before 1000; the legend should give way to an overlay's own legend while one is active (not done). Search belongs in `topCenter` before 20 and can call `setSelection([ref])` then `render.flyTo(ref)`. The tour goes in `bottomCenter` and can use `render.setHighlights` plus `useAnchor` for its step card.
+
+## The other feature folders
+
+Each is one folder with a `mount.tsx`; region and order are as that file declares them.
+
+| Folder | Region · order | What it is |
+|---|---|---|
+| `repos/` | `landing` 10; `topLeft` 5 | The landing page's repo pills (saved repos, demos), and on the map the repo info pill under the title pill, with its card and "Export map". |
+| `search/` | `topCenter` 10 | The search pill, first in the row: widens into a field on focus, "/" or Ctrl/Cmd+K, and lists matching files from `session.search`; choosing one selects it and flies to it. |
+| `overlays/` | `topRight` 100 | One pill per overlay before the settings gear, and under them the active overlay's legend and parameters; builds the `OverlayView` and calls `render.setOverlay`. |
+| `sidebar/` | `rightEdge` 0; `topRight` 1100 | The opaque sidebar editor for `openFile`, read (and saved) through `session.content`, and the small button that brings it back while it is closed. |
+| `poi/` | `scene` 20 | A label pill on every point of interest's beam, and the detail card a pill opens, with its detail buttons. |
+| `summaries/` | `scene` 30 | The AI summary of a city on a card under its pill, while the pointer rests there or the pill has focus. |
+| `tour/` | `bottomCenter` 10 | The "Tour the repo" pill, and the step card that takes its place while a tour plays. |
+| `ai/` | `overlay` 10; `bottomCenter` 5 | The consent prompt asked once per repository, starting generation through `session.ai` once the answer is yes, and one quiet line when something fails. |
 
 ## CSS custom properties
 

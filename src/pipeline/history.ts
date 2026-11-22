@@ -44,6 +44,11 @@ export interface HistoryRun {
   refresh(): void;
   /** "Load full history": walk again without the commit and time caps. Resolves when it has ended. */
   loadFull(): Promise<void>;
+  /**
+   * The map's files changed (an Update): walk again for these paths. Only commits newer than the
+   * last walk's head are read; everything older comes from its facts.
+   */
+  restart(paths: string[]): void;
   dispose(): void;
 }
 
@@ -66,7 +71,8 @@ function contributorOps(store: ModelStore, contributors: readonly Contributor[])
 }
 
 export function startHistory(opts: HistoryRunOptions): HistoryRun {
-  const { config, pool, store, emit, persist, repoId, paths } = opts;
+  const { config, pool, store, emit, persist, repoId } = opts;
+  let paths = opts.paths;
   /** The newest facts, final or partial, with the progress they came with. */
   let latest: { result: HistoryResult; info: HistoryProgress | null; final: boolean } | null = null;
   let layerState: HistoryLayerState | undefined;
@@ -155,6 +161,13 @@ export function startHistory(opts: HistoryRunOptions): HistoryRun {
       const before = done;
       done = guarded(before.then(() => walk(true, result)));
       return done;
+    },
+    restart(next) {
+      if (disposed) return;
+      paths = next;
+      controller.abort();
+      controller = new AbortController();
+      done = guarded(done.then(() => walk(false, result)));
     },
     dispose() {
       disposed = true;

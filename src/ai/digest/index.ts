@@ -27,6 +27,8 @@
 import type { Config } from '../../config';
 import type { ModelReplica } from '../../contracts/store';
 import type { NodeRef } from '../../model/types';
+import { activeAi } from '../active';
+import type { AiEnv } from '../active';
 import { assemble } from './assemble';
 import type { DigestTokens } from './assemble';
 import { Ctx } from './ctx';
@@ -62,7 +64,7 @@ export interface DigestText {
 }
 
 export interface Digest extends DigestText {
-  /** Hex SHA-256 of the digest text and the model ids (`AiRequestBase.digestHash`). */
+  /** Hex SHA-256 of the digest text, the provider and its three model ids (`AiRequestBase.digestHash`). */
   hash: string;
 }
 
@@ -89,21 +91,27 @@ export function buildDigestText(input: DigestInput): DigestText {
 }
 
 /**
- * Hex SHA-256 of the digest text, the model ids and the digest format version: stored results are
- * reused only for the same text sent to the same models.
+ * Hex SHA-256 of the digest text, the active provider with its three model ids (synthesis, tour,
+ * bulk), and the digest format version: stored results are reused only for the same text sent to
+ * the same models, so switching provider regenerates the annotations. The hash is one key for the
+ * whole set, so changing any one tier's model (the tour's, say) regenerates all of it, not only
+ * that tier's part. `env` is for callers that know the provider some other way than the page's
+ * build (see `activeAi`).
  */
-export async function digestHash(text: string, config: Config): Promise<string> {
-  const { synthesis, bulk } = config.ai.models;
-  const bytes = new TextEncoder().encode(`starmap-digest/${DIGEST_VERSION}\n${synthesis}\n${bulk}\n${text}`);
+export async function digestHash(text: string, config: Config, env?: AiEnv): Promise<string> {
+  const { provider, models } = activeAi(config, env);
+  const head = ['starmap-digest/' + String(DIGEST_VERSION), provider, models.synthesis, models.tour, models.bulk];
+  const bytes = new TextEncoder().encode(`${head.join('\n')}\n${text}`);
   const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
   let hex = '';
   for (const b of hash) hex += b.toString(16).padStart(2, '0');
   return hex;
 }
 
-export async function buildDigest(input: DigestInput): Promise<Digest> {
+/** `env` as for `digestHash`: without it the provider is the one the page was built with. */
+export async function buildDigest(input: DigestInput, env?: AiEnv): Promise<Digest> {
   const text = buildDigestText(input);
-  return { ...text, hash: await digestHash(text.digest, input.config) };
+  return { ...text, hash: await digestHash(text.digest, input.config, env) };
 }
 
 /**

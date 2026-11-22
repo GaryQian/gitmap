@@ -13,6 +13,6 @@ export { buildAdjacency, computeReach, type Adjacency, type ReachDirection } fro
 export { ownershipContributors, ownershipExtra, ownershipShare } from './ownership';
 export { OVERLAY_COLORS, OVERLAY_RAMP, fadedColor, mixHex, unknownColor, type OverlayPalette } from './colors';
 export {
-  OVERLAYS, formatAge, legendFor, overlayView,
+  OVERLAYS, formatAge, legendFor, overlayFact, overlayView,
   type OverlayContext, type OverlayInfo, type OverlayLegend, type OverlayViewInfo,
 } from './view';

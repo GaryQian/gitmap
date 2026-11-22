@@ -9,6 +9,8 @@ export interface UnitRow {
   /** Outward glow, 0..1 (glowAmount). */
   glow: number;
   loc: number;
+  /** Size on disk: what the size slider compares. */
+  bytes: number;
   lang: string;
   /** District slot, −1 when the unit has no district (it is then not drawn). */
   district: number;
@@ -28,7 +30,7 @@ export function unitReader(replica: ModelReplica, visual: Config['visual']): Uni
     const city = district >= 0 ? (districts.refSlots.city[district] ?? -1) : -1;
     const loc = units.cols.loc[slot];
     const pct = units.cols.importancePct[slot];
-    return { radius: unitRadius(loc, pct, visual), glow: glowAmount(pct, visual), loc, lang: units.cols.lang[slot], district, city };
+    return { radius: unitRadius(loc, pct, visual), glow: glowAmount(pct, visual), loc, bytes: units.cols.bytes[slot], lang: units.cols.lang[slot], district, city };
   };
 }
 

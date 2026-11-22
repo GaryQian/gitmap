@@ -25,13 +25,15 @@
   scrollbar-color: var(--gm-hairline) transparent;
 }
 
-.gm-selected-pill { max-width: 280px; gap: 2px; padding-right: 3px; }
+.gm-selected-pill { max-width: 280px; gap: 2px; padding-right: 0; }
 /* the warm light is selection (§17.1): the focused pill's ring is warm, not the halo blue */
 .gm-selected-pill.is-active { border-color: var(--gm-warm); }
 :root[data-theme='dark'] .gm-selected-pill.is-active { box-shadow: 0 0 14px color-mix(in srgb, var(--gm-warm) 14%, transparent); }
 
 .gm-selected-name {
   min-width: 0;
+  /* the height of the pill, not of the letters: the target is the whole pill beside the close button */
+  align-self: stretch;
   margin: 0;
   padding: 0 4px 0 0;
   border: 0;
@@ -45,9 +47,7 @@
   white-space: nowrap;
   cursor: pointer;
 }
-.gm-selected-name:hover { color: var(--gm-halo); }
-.gm-selected-pill .gm-icon-button { width: 20px; height: 20px; }
+/* not the halo colour: link-coloured text needs a more opaque material than a bare pill (theme.ts) */
+.gm-selected-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 
 .gm-selected-actions { display: flex; gap: 6px; }
-.gm-selected-actions .gm-pill { color: var(--gm-text-dim); }
-.gm-selected-actions .gm-pill:hover { color: var(--gm-text); }

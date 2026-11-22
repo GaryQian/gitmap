@@ -53,8 +53,10 @@ export function refineGiants(
   cfg: ClusteringConfig,
   share?: number,
   depth = 0,
+  /** Strength to use instead of cfg.sizeBias (districts have their own, balance.ts districtBias). */
+  strength?: number,
 ): Int32Array {
-  const bias = Math.min(1, Math.max(0, cfg.sizeBias));
+  const bias = Math.min(1, Math.max(0, strength ?? cfg.sizeBias));
   const sizes = communitySizes(labels, nodeSize);
   if (bias === 0 || target <= 1 && share === undefined) return renumber(labels);
   let total = 0;
@@ -90,7 +92,7 @@ export function refineGiants(
     if (labelCount(parts) < 2 || modularity(parts, inside) < cfg.splitModularity) continue; // one block: it stays whole
     if (depth + 1 < MAX_DEPTH) {
       const size = Float64Array.from(nodes, (node) => nodeSize[node]);
-      parts = refineGiants(parts, inside, size, target, cfg, even, depth + 1);
+      parts = refineGiants(parts, inside, size, target, cfg, even, depth + 1, bias);
     }
     // The first part keeps the community's label; the others get new ones.
     for (let k = 0; k < nodes.length; k++) out[nodes[k]] = parts[k] === 0 ? c : next + parts[k] - 1;
@@ -196,6 +198,50 @@ function popPair(h: Pair[]): Pair | undefined {
     h[i] = last;
   }
   return top;
+}
+
+/**
+ * Belonging: after communities have been divided and merged as whole blocks, some nodes are left in
+ * a community they are less connected to than to a neighbouring one. Each such node moves to the
+ * community that holds most of its connection weight, in node order, for at most `passes` sweeps.
+ * Only a strict majority elsewhere moves a node, so nothing oscillates, and a node with no edges
+ * stays put. Directory hubs are nodes too, so a file with no code edges follows its directory.
+ * Communities that empty out disappear. Deterministic for a given node order.
+ */
+export function settleStragglers(labels: Int32Array, edges: EdgeList, passes = 2): Int32Array {
+  const n = labels.length;
+  // adjacency in compressed rows
+  const start = new Int32Array(n + 1);
+  for (let e = 0; e < edges.count; e++) { start[edges.a[e] + 1]++; start[edges.b[e] + 1]++; }
+  for (let i = 0; i < n; i++) start[i + 1] += start[i];
+  const to = new Int32Array(start[n]);
+  const weight = new Float64Array(start[n]);
+  const fill = start.slice(0, n);
+  for (let e = 0; e < edges.count; e++) {
+    const a = edges.a[e], b = edges.b[e], w = edges.w[e];
+    to[fill[a]] = b; weight[fill[a]++] = w;
+    to[fill[b]] = a; weight[fill[b]++] = w;
+  }
+  const out = Int32Array.from(labels);
+  const sum = new Map<number, number>();
+  for (let pass = 0; pass < passes; pass++) {
+    let moved = 0;
+    for (let i = 0; i < n; i++) {
+      if (start[i] === start[i + 1]) continue;
+      sum.clear();
+      for (let k = start[i]; k < start[i + 1]; k++) {
+        if (to[k] === i) continue;
+        const c = out[to[k]];
+        sum.set(c, (sum.get(c) ?? 0) + weight[k]);
+      }
+      const own = sum.get(out[i]) ?? 0;
+      let best = out[i], top = own;
+      for (const [c, w] of sum) if (w > top || (w === top && w > own && c < best)) { best = c; top = w; }
+      if (best !== out[i] && top > own) { out[i] = best; moved++; }
+    }
+    if (moved === 0) break;
+  }
+  return renumber(out);
 }
 
 /** The same labelling numbered 0..count-1 in order of first appearance over the nodes. */

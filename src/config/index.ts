@@ -33,12 +33,15 @@ export function validateConfig(c: Config): Config {
     if (typeof v !== 'number' || !Number.isFinite(v) || v < min || v > max) fail(`${path} must be a number in [${min}, ${max}]`);
   };
   if (!c.app?.title) fail('app.title is required');
-  if (c.settings.appearance !== 'dark' && c.settings.appearance !== 'light' && c.settings.appearance !== 'system') fail('settings.appearance must be dark, light or system');
   num('scheduler.maxWorkers', c.scheduler.maxWorkers, 1, 64);
   num('scheduler.parseFloorWorkers', c.scheduler.parseFloorWorkers, 0, 64);
   num('reveal.maxWaitSeconds', c.reveal.maxWaitSeconds, 0);
   num('clustering.citiesPerDecade', c.clustering.citiesPerDecade);
   num('clustering.minDistrictSize', c.clustering.minDistrictSize, 1);
+  num('clustering.countSlack', c.clustering.countSlack, 1);
+  num('clustering.incrementalMaxNew', c.clustering.incrementalMaxNew, 0, 1);
+  num('clustering.pathBias', c.clustering.pathBias, 0);
+  num('clustering.mergePathBias', c.clustering.mergePathBias, 0);
   num('physics.file.sizeVsConnectivity', c.physics.file.sizeVsConnectivity, 0, 1);
   num('visual.radiusMin', c.visual.radiusMin, 0);
   num('visual.radiusMax', c.visual.radiusMax, c.visual.radiusMin);
@@ -59,6 +62,9 @@ export function validateConfig(c: Config): Config {
   const split = c.ai.budgetSplit.structure + c.ai.budgetSplit.skeletons + c.ai.budgetSplit.docs;
   if (Math.abs(split - 1) > 1e-6) fail('ai.budgetSplit must sum to 1');
   if (c.ai.tour.minSteps > c.ai.tour.maxSteps) fail('ai.tour.minSteps must not exceed maxSteps');
+  num('ai.client.summaryConcurrency', c.ai.client.summaryConcurrency, 1);
+  num('ai.client.reduceHeadStartMs', c.ai.client.reduceHeadStartMs, 0);
+  num('ai.client.maxRetryAfterSeconds', c.ai.client.maxRetryAfterSeconds, 0);
   for (const mode of ['dark', 'light'] as const) {
     for (const [k, v] of Object.entries(c.theme[mode])) if (!/^#[0-9a-fA-F]{6}$/.test(v)) fail(`theme.${mode}.${k} must be a #rrggbb colour`);
   }

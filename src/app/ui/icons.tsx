@@ -44,3 +44,21 @@ export function CloseIcon(props: { size?: number }) {
     </Icon>
   );
 }
+
+/** A window with a panel on its right: shows the sidebar. */
+export function PanelIcon(props: { size?: number }) {
+  return (
+    <Icon {...props}>
+      <rect x="3.5" y="5" width="17" height="14" rx="2.5" />
+      <path d="M14.5 5v14" />
+    </Icon>
+  );
+}
+
+export function ChevronLeftIcon(props: { size?: number }) {
+  return (
+    <Icon {...props}>
+      <path d="M14.5 6.5L9 12l5.5 5.5" />
+    </Icon>
+  );
+}

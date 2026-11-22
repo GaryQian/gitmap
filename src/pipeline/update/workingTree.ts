@@ -10,7 +10,7 @@ import type { Manifest } from '../../contracts/ingest';
 import { hashObject, MODE_GITLINK, MODE_SYMLINK, openGitRepo } from '../../git';
 import { extname } from '../../shared';
 import { byPath } from './diff';
-import type { KnownFile, WorkingTreeChange, WorkingTreeCheckOptions } from './types';
+import type { WorkingTreeChange, WorkingTreeCheckOptions } from './types';
 
 // Not in config.json yet (requested: parser.workingTreeCheck as an object with these three values).
 /** Metadata lookups in flight. A lookup is a file-handle resolve in the browser, about 2 ms each. */
@@ -26,7 +26,7 @@ const MTIME_TOLERANCE_MS = 2;
 const MODE_TYPE_MASK = 0o170000;
 const UINT32 = 2 ** 32;
 
-function isManifest(x: readonly IndexEntry[] | readonly KnownFile[] | Manifest): x is Manifest {
+function isManifest(x: readonly IndexEntry[] | Manifest): x is Manifest {
   return !Array.isArray(x);
 }
 
@@ -116,47 +116,51 @@ function crLfToLf(bytes: Uint8Array): Uint8Array {
 }
 
 /**
- * Of the paths checkWorkingTree flagged, the ones whose content on disk really is not what the map
- * shows. Each file is read and hashed the way git hashes a blob, as it is and with CRLF turned into
- * LF (a checkout with autocrlf), and dropped from the list when either hash is the oid in `known`.
- *
- * `known` is what the map was built from: `knownFiles(state, store)`, or a manifest. Comparing with
- * the map rather than with the index is what stops a file that an earlier Update already took from
- * disk from being offered again on every check.
+ * Of the paths checkWorkingTree flagged, the ones whose content on disk really differs from the
+ * staged blob. Each file is read and hashed the way git hashes a blob, as it is and with CRLF turned
+ * into LF (a checkout with autocrlf), and dropped from the list when either hash is the oid the index
+ * records. The index is read here, through `openGitRepo(repo.git)`, so the comparison is always with
+ * git and never with a manifest that an earlier Update has already adjusted. What is left carries
+ * the hash of the bytes on disk; planUpdate compares that with what the map shows.
  *
  * Files the parser never opens (binary by extension, over parser.maxFileBytes) are not read: they
- * count as changed when their size differs from the known one. A flagged file that is gone comes
- * back with `missing: true`.
+ * count as changed when their size differs from the index's. A flagged file that is gone comes back
+ * with `missing: true`. Without a readable index every readable path is reported with its hash.
  *
- * Sorted by path. Aborting resolves with what was confirmed so far. Runs in the calling thread.
+ * Sorted by path. Aborting resolves with what was confirmed so far. Rejects only when files look
+ * missing and the folder is unreadable as a whole. Runs in the calling thread.
  */
 export async function confirmWorkingTree(
   repo: RepoAccess,
   paths: readonly string[],
-  known: readonly KnownFile[] | Manifest,
   config: Config,
-  opts: Pick<WorkingTreeCheckOptions, 'signal' | 'concurrency' | 'onProgress'> = {},
+  opts: Pick<WorkingTreeCheckOptions, 'signal' | 'concurrency' | 'onProgress' | 'openGit'> = {},
 ): Promise<WorkingTreeChange[]> {
-  const knownBy = new Map<string, KnownFile>();
-  for (const k of isManifest(known) ? known.entries : known) knownBy.set(k.path, k);
+  const todo = [...new Set(paths)];
+  if (todo.length === 0) return [];
+  const staged = new Map<string, IndexEntry>();
+  if (repo.git) {
+    const wanted = new Set(todo);
+    try { for (const e of (opts.openGit ?? openGitRepo)(repo.git).indexEntries()) if (wanted.has(e.path)) staged.set(e.path, e); } catch { /* nothing to compare with */ }
+  }
   const binary = new Set(config.parser.binaryExtensions);
   const changes: WorkingTreeChange[] = [];
   let missing = 0;
   const gone = (path: string): void => { missing++; changes.push({ path, oid: '', missing: true }); };
-  await eachLimit([...new Set(paths)], opts.concurrency ?? CONFIRM_CONCURRENCY, opts.signal, async (path) => {
-    const was = knownBy.get(path);
+  await eachLimit(todo, opts.concurrency ?? CONFIRM_CONCURRENCY, opts.signal, async (path) => {
+    const index = staged.get(path);
     let stat: { size: number; mtimeMs: number } | null = null;
     try { stat = await repo.tree.stat(path); } catch { /* counts as missing */ }
     if (!stat) return gone(path);
     if (binary.has(extname(path)) || stat.size > config.parser.maxFileBytes) {
-      if (was?.bytes !== stat.size) changes.push({ path, oid: '', bytes: stat.size });
+      if (!index || stat.size % UINT32 !== index.size) changes.push({ path, oid: '', bytes: stat.size });
       return;
     }
     let bytes: Uint8Array | null = null;
     try { bytes = await repo.tree.read(path); } catch { /* counts as missing */ }
     if (!bytes) return gone(path);
     const oid = hashObject('blob', bytes);
-    if (was?.oid && (oid === was.oid || (hasCrLf(bytes) && hashObject('blob', crLfToLf(bytes)) === was.oid))) return;
+    if (index && (oid === index.oid || (hasCrLf(bytes) && hashObject('blob', crLfToLf(bytes)) === index.oid))) return;
     changes.push({ path, oid, bytes: bytes.length });
   }, opts.onProgress);
   if (missing > 0) await assertReadable(repo);

@@ -95,7 +95,7 @@ export const cSyntax: SyntaxSpec = {
  * for "no grammar: use the plug-in's extractSymbols", because the C++ grammar cannot read
  * `@interface`. With the path alone every file of the plug-in is C++, as before.
  */
-export const cppSyntax: SyntaxSpec & { grammar(path: string, text?: string): string | null } = {
+export const cppSyntax: Omit<SyntaxSpec, 'grammar'> & { grammar(path: string, text?: string): string | null } = {
   grammar: (path, text) => (text !== undefined && isObjcHeader(text, path) ? '' : 'cpp'),
   queries: { cpp: CPP_QUERY },
 };

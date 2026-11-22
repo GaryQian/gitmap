@@ -47,6 +47,31 @@ export function cardContent(annotations: readonly Annotation[], ref: NodeRef, na
   return generating && ref.startsWith('c:') ? { kind: 'pending' } : null;
 }
 
+/**
+ * The city whose card is pinned by the selection: the most recently selected city (the selection is
+ * kept in the order things were selected). Files and districts in the selection pin nothing.
+ */
+export function pinnedCity(selection: readonly NodeRef[]): NodeRef | null {
+  for (let i = selection.length - 1; i >= 0; i--) {
+    if (selection[i]!.startsWith('c:')) return selection[i]!;
+  }
+  return null;
+}
+
+/**
+ * Whose card is showing. `live` is the pill under the pointer or with keyboard focus, `pinned` the
+ * selected city (pass null while its pill is off screen or being dragged). Hover or focus wins for
+ * as long as it lasts, then the pinned card is back; on the pinned pill itself it changes nothing.
+ * A pill with nothing to say (`hasCard`) does not push the pinned card aside.
+ */
+export function cardOwner(
+  live: NodeRef | null, pinned: NodeRef | null, hasCard: (ref: NodeRef) => boolean,
+): { ref: NodeRef; pinned: boolean } | null {
+  if (live && live !== pinned && (!pinned || hasCard(live))) return { ref: live, pinned: false };
+  if (pinned) return { ref: pinned, pinned: true };
+  return null;
+}
+
 const overlaps = (a: Rect, b: Rect): boolean =>
   a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
 

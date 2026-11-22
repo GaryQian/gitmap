@@ -86,6 +86,15 @@ export function pillState(
   return info.needs.history && noHistory ? { kind: 'hidden' } : { kind: 'pending' };
 }
 
+/**
+ * The progress a screen reader is told about: in quarters (0, 25, 50, 75), so a live region changes a
+ * few times while the data arrives instead of on every batch.
+ */
+export function announcedPercent(coverage: number): number {
+  const c = coverage > 0 ? Math.min(1, coverage) : 0;
+  return Math.min(75, Math.floor(c * 4) * 25);
+}
+
 // ---- Dependency reach seeds ----
 
 /**

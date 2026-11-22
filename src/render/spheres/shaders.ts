@@ -13,7 +13,7 @@ varying float vScale; varying float vPhase; varying float vDim; varying float vB
 /**
  * Shared by all three vertex shaders. Per instance:
  *   aSlot  = unit slot, district slot, city slot         (model, written by applyBatch)
- *   aShape = radius, glow 0..1, lines of code, alive     (model)
+ *   aShape = radius, glow 0..1, bytes on disk, alive     (model)
  *   aColor = language colour rgb, language index / 255   (model)
  *   aState = flags (1 selected, 2 highlighted, 4 hovered), birth time (s)   (view)
  *   aNudge = display-only offset in world units (jiggle)  (view)
@@ -21,7 +21,7 @@ varying float vScale; varying float vPhase; varying float vDim; varying float vB
  */
 const STAR_PRELUDE = GLSL_POSITIONS + GLSL_HASH + /* glsl */ `
 uniform float uTime; uniform float uPixelWorld;
-uniform float uGrow; uniform float uMinLines; uniform float uSelScale; uniform float uBreathe; uniform float uSpikesFrom;
+uniform float uGrow; uniform float uMinBytes; uniform float uSelScale; uniform float uBreathe; uniform float uSpikesFrom;
 uniform float uOverlayMix; uniform float uMinPx;
 uniform vec4 uEmphasis;   // breathe scale, hover scale, selected glow, highlight glow
 uniform float uHoverGlow;
@@ -36,7 +36,7 @@ bool gmStar(out vec3 center, out float r) {
   float age = (uTime - aState.y) / max(uGrow, 1e-3);
   if (aShape.w < 0.5 || age <= 0.0 || aSlot.y < 0.0 || aSlot.z < 0.0) return false;
   // the size slider: small files go, glowing and selected ones stay
-  if (aShape.z < uMinLines && g <= 0.0 && sel < 0.5) return false;
+  if (aShape.z < uMinBytes && g <= 0.0 && sel < 0.5) return false;
   float k = clamp(age, 0.0, 1.0);
   float grow = 1.0 - (1.0 - k) * (1.0 - k) * (1.0 - k);
   float breath = sel * (0.5 + 0.5 * sin(uTime * 6.2831853 / uBreathe));
@@ -149,7 +149,7 @@ void main() {
   a *= 1.0 - smoothstep(vScale * 0.75, vScale, d);
   a *= smoothstep(inner, 0.93, d);
   a *= 1.0 - 0.6 * vDim;
-  a *= gmOverlayLight(vOvKnown, uOverlayMix);
+  a *= gmOverlayLight(vOvKnown, uOverlayMix, vOvCol);
   if (a < 0.004) discard;
   vec3 col = mix(mix(vCol, vOvCol, uOverlayMix), uDustCool, vDim);
   gl_FragColor = vec4(col, clamp(a, 0.0, 1.0) * (uDark > 0.5 ? 1.0 : 0.6));
@@ -172,7 +172,7 @@ uniform float uDark; uniform float uOverlayMix;
 varying vec2 vQ;
 void main() {
   float d2 = dot(vQ, vQ); if (d2 > 1.0) discard;
-  float w = exp(-d2 * 4.0) * (1.0 - d2) * (1.0 - vDim) * (1.0 - 0.7 * uOverlayMix) * gmOverlayLight(vOvKnown, uOverlayMix);
+  float w = exp(-d2 * 4.0) * (1.0 - d2) * (1.0 - vDim) * (1.0 - 0.7 * uOverlayMix) * gmOverlayLight(vOvKnown, uOverlayMix, vOvCol);
   vec3 col = mix(vCol, vOvCol, uOverlayMix);
   if (uDark > 0.5) gl_FragColor = vec4(col, w * (0.16 + 0.55 * vGlow));
   else gl_FragColor = vec4(mix(vec3(0.25, 0.27, 0.32), col, 0.35 + 0.65 * vGlow), w * (0.22 + 0.35 * vGlow));

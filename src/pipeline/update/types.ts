@@ -37,7 +37,7 @@ export interface WorkingTreeCheckOptions {
   openGit?(fs: GitFs): GitRepo;
 }
 
-/** A tracked file whose content on disk is not what the map shows (confirmWorkingTree). */
+/** A tracked file whose content on disk is not the staged blob (confirmWorkingTree). */
 export interface WorkingTreeChange {
   path: string;
   /** Git blob hash of the bytes on disk; '' when it was not hashed (missing, binary, over the size cap). */
@@ -65,7 +65,7 @@ export interface UpdatePlan {
   /** Paths to take off the map: gone from the manifest, or tracked but deleted on disk. Sorted. */
   drop: string[];
   /** Paths read from the working tree instead of from git, with what is known of their content. */
-  fromDisk: Record<string, WorkingTreeChange>;
+  fromDisk: Map<string, WorkingTreeChange>;
   /** Tracked paths that are not on disk: left out of the map even when the manifest lists them. Sorted. */
   missing: string[];
   /** `reparse.length + drop.length`. */

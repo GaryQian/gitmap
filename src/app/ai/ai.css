@@ -1,17 +1,11 @@
-/* The consent prompt and the failure line (PLAN.md §11.4, §17.6). Chrome material only: the tokens
+/* The prompt at the bottom centre (the consent card, and the pill that stands in for it), the
+   failure line and the settings card's row (PLAN.md §11.4, §17.6). Chrome material only: the tokens
    from theme.ts, the halo for the one affirmative action. No colour is written out. */
 
-/* Bottom centre of the overlay layer. Not a modal: the layer lets the pointer through, so the map
-   under and around the card stays usable. */
-.gm-ai-consent-wrap {
-  position: absolute;
-  left: 16px;
-  right: 16px;
-  bottom: 16px;
-  display: flex;
-  justify-content: center;
-  pointer-events: none;
-}
+/* The prompt is one slot of the bottom-centre region, above the tour pill. Not a modal: the region
+   lets the pointer through, so the map under and around it stays usable. While a tour step card is
+   open the slot is empty: the card is what the viewer is reading. */
+.gm-region-bottomCenter:has(> .gm-tour-card) > .gm-ai-prompt { display: none; }
 
 @keyframes gm-ai-arrive {
   from { opacity: 0; }
@@ -19,7 +13,7 @@
 }
 
 .gm-ai-consent {
-  width: min(452px, 100%);
+  width: min(452px, calc(100vw - 32px));
   padding: 15px 18px 14px;
   /* it comes in after the map has, so it does not compete with the reveal */
   animation: gm-ai-arrive 500ms var(--gm-ease) 900ms both;
@@ -50,11 +44,19 @@
 
 /* The affirmative action carries the halo, like the button segment of an action pill. */
 .gm-pill.gm-ai-allow {
-  color: var(--gm-halo);
+  color: var(--gm-link);
   font-weight: 500;
   border-color: color-mix(in srgb, var(--gm-halo) 46%, var(--gm-hairline));
 }
 .gm-pill.gm-ai-allow:hover { border-color: var(--gm-halo); }
+
+/* The pill that stands in for the card once the viewer has answered: the same slot, the same halo
+   on its edge, one click. It arrives quietly and stays put. */
+.gm-pill.gm-ai-prompt-pill {
+  border-color: color-mix(in srgb, var(--gm-halo) 46%, var(--gm-hairline));
+  animation: gm-ai-arrive 220ms var(--gm-ease) both;
+}
+.gm-pill.gm-ai-prompt-pill:hover { border-color: var(--gm-halo); }
 
 /* ---- the failure line: one small pill that stays a while, then fades ---- */
 
@@ -64,9 +66,23 @@
 }
 .gm-pill.gm-ai-failure {
   max-width: min(520px, 60vw);
-  color: var(--gm-text-dim);
+  /* full-strength text: dim text does not keep 4.5:1 on a bare pill (theme.ts) */
   animation: gm-ai-fade 600ms ease var(--gm-ai-failure-ms, 8000ms) both;
 }
 .gm-ai-failure > span { overflow: hidden; text-overflow: ellipsis; }
 /* kept while the pointer rests on it or it is focused, so it can be read to the end */
 .gm-pill.gm-ai-failure:hover { animation-play-state: paused; }
+
+/* ---- the "AI notes" row of the settings card ---- */
+
+/* The row is a field like its neighbours (the label and the choice come from Segmented); this adds
+   the line under it and, on the label's line, the hint that notes are being written. */
+.gm-ai-setting { position: relative; }
+.gm-ai-setting-note,
+.gm-ai-setting-busy {
+  font-size: 12px;
+  letter-spacing: 0.035em;
+  color: var(--gm-text-dim);
+}
+.gm-ai-setting-note { margin: 6px 0 0 2px; }
+.gm-ai-setting-busy { position: absolute; top: 0; right: 2px; }

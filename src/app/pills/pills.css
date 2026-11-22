@@ -16,7 +16,9 @@
   padding: 0 11px;
   border: 1px solid var(--gm-hairline);
   border-radius: 999px;
-  background: var(--gm-pill-bg);
+  /* The strong material, not the pill's: there is no blur behind these, and they fade with distance.
+     theme.ts works out how far they may fade (sceneFadeFloor) from this opacity. */
+  background: var(--gm-pill-bg-strong);
   color: var(--gm-text);
   font-family: var(--gm-font-ui);
   font-size: 13px;
@@ -56,7 +58,7 @@
 /* District pills are the quieter tier: smaller, Regular. */
 .gm-scene-pill-district {
   gap: 6px;
-  height: 22px;
+  height: 24px;
   padding: 0 9px;
   font-size: 12px;
   font-weight: 400;
@@ -65,7 +67,7 @@
 .gm-scene-pill:hover,
 .gm-scene-pill:focus-visible,
 .gm-scene-pill.is-dragging {
-  background: var(--gm-pill-bg-strong);
+  background: var(--gm-surface);
   border-color: color-mix(in srgb, var(--gm-text) 34%, transparent);
   z-index: 1;
 }

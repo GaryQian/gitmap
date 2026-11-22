@@ -16,8 +16,8 @@
 //                      communities standing beside a large one instead of feeding them to it.
 //
 //   size-relative      a community joins the neighbour it is most connected to *for that neighbour's
-//   merging            size*: connecting weight / partner size. A giant needs proportionally more
-//                      connections than a small neighbour to be chosen.
+//   merging            size*: connecting weight / √(partner size). A giant needs more connections
+//                      than a small neighbour to be chosen, but a strong tie still wins.
 //
 // The effective count would let the plain number of cities or districts run far above the curve
 // (react: 20 cities where the curve says 11), so it is bounded: at most clustering.countSlack (1.5)
@@ -55,11 +55,29 @@ export function effectiveCount(sizes: ArrayLike<number>, minSize = 0): number {
 
 /**
  * Merge score of joining a neighbour of `partnerSize` files over a connection of weight `w`:
- * w at bias 0, w / size at bias 1, and a straight blend of the two divisors in between. Only
- * additions, a multiplication and a division, so every engine computes the same bits (Math.pow may not).
+ * w at bias 0, w / √size at bias 1, blended in between. The square root is deliberate: dividing by
+ * the size itself made a community prefer a small, barely connected neighbour over the large one it
+ * really belongs to, and files ended up in cities they had little to do with. IEEE sqrt and division
+ * are exact, so every engine computes the same bits (Math.pow may not). `sharp` divides by the
+ * size itself; it is used for districts only (see districtBias).
  */
-export function mergeScore(w: number, partnerSize: number, bias: number): number {
-  return bias > 0 && partnerSize > 1 ? w / (1 + bias * (partnerSize - 1)) : w;
+export function mergeScore(w: number, partnerSize: number, bias: number, sharp = false): number {
+  if (!(bias > 0) || !(partnerSize > 1)) return w;
+  const divisor = 1 + bias * (partnerSize - 1);
+  return sharp ? w / divisor : w / Math.sqrt(divisor);
+}
+
+/**
+ * The two strengths (PLAN.md §6.6 "Balance"). Cities get the gentle one, clustering.sizeBias: at
+ * that level a file in the wrong city is what the eye catches, so belonging comes first. Districts
+ * get clustering.districtSizeBias (default 1) and the sharp merge score (weight / size): inside a
+ * city everything is related anyway, and what the eye catches there is one district the size of
+ * the city.
+ */
+export function districtBias(cfg: { sizeBias: number; districtSizeBias?: number }): number {
+  if (!(cfg.sizeBias > 0)) return 0;
+  const b = typeof cfg.districtSizeBias === 'number' ? cfg.districtSizeBias : 1;
+  return Math.min(1, Math.max(0, b));
 }
 
 /**

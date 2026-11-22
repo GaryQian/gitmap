@@ -1,6 +1,7 @@
 // What the app shell sees of the pipeline (PLAN.md §3, §6.8). Implemented by src/pipeline; faked in src/testing.
 import type { Config } from '../config';
 import type { NodeRef, PatchBatch, RepoModel, Subsystem } from '../model/types';
+import type { DetailQuestion } from './ai';
 import type { FileFacts, SyntaxFacts } from './lang';
 import type { ContentSource, RepoLocator } from './git';
 import type { PhysicsApi } from './physics';
@@ -52,6 +53,34 @@ export interface PipelineEvents {
 export interface SearchHit { ref: NodeRef; path: string; score: number }
 
 /**
+ * Why an AI call produced nothing, as one sentence for the chrome. `code` is one of the server's
+ * (AiErrorBody) or the client's own ('network', 'unavailable', 'aborted', 'failed'); src/ai's
+ * `AiErrorInfo` is this shape with the codes spelled out.
+ */
+export interface AiFailure { code: string; message: string; retryAfterSeconds?: number }
+export interface AiOutcome { failure: AiFailure | null }
+
+/**
+ * The AI annotations of one open map (PLAN.md §11). The work runs beside the store, where the parse
+ * facts are; results arrive through the model as annotations, like everything else. Nothing is
+ * generated until `start` is called: the chrome calls it once the viewer has agreed.
+ */
+export interface SessionAi {
+  /** False when this map cannot generate anything: a demo, a synthetic map, an imported map without its folder. */
+  readonly available: boolean;
+  /**
+   * Generate what is missing: city summaries, points of interest, the tour. Waits for the full
+   * parse; safe to call on every visit (a complete stored set makes no request). Resolves when the
+   * run is over, with the one failure worth showing, if any.
+   */
+  start(): Promise<AiOutcome>;
+  /** Answer one detail button; the answer arrives as `poi.details[question]`. */
+  requestDetail(poiId: string, question: DetailQuestion): Promise<AiOutcome>;
+  /** Stop a run in flight (consent withdrawn). */
+  cancel(): void;
+}
+
+/**
  * One open map. Owns the coordinator, the pool, the physics client and (once a canvas is attached)
  * the renderer. The React shell talks only to this.
  */
@@ -65,6 +94,8 @@ export interface Session {
   readonly render: RenderApi | null;
   /** Null when file contents are unavailable (an imported map with no folder). */
   readonly content: ContentSource | null;
+  /** AI annotations. Absent on a session that has no AI wiring at all. */
+  readonly ai?: SessionAi;
   readonly stage: StageInfo;
   /**
    * Create the renderer on a canvas. May be called before or after the reveal. `opts` carries the
@@ -111,6 +142,13 @@ export interface AnalysisInput {
     districtCity: Record<string, string>;
     districtName: Record<string, string>;
     cityName: Record<string, string>;
+    /**
+     * An Update, not a re-clustering (PLAN.md §6.8): keep every unit in the district it is in and
+     * place only the new units, each where it connects most strongly. Clustering declines and runs
+     * in full when more than a fifth of the units are new (clustering.incrementalMaxNew). Never set
+     * for "Refined structure ready · Apply", which must re-cluster.
+     */
+    incremental?: boolean;
   };
 }
 

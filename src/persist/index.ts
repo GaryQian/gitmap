@@ -16,7 +16,9 @@ export {
   indexedDbRegistry, memoryRegistry, recordFromModel, hasChanged, storableLocator, requestPersistentStorage,
   type RepoRegistry, type RepoRecord, type StoredLocator, type IndexedDbRegistry,
 } from './registry';
-export { queryPermission, requestPermission, type FolderPermission } from './permission';
+export {
+  queryPermission, requestPermission, probeFolder, folderReachable, type FolderPermission, type FolderAccess,
+} from './permission';
 export {
   indexedDbFactsCache, memoryFactsCache, createFactsCache, memoryFactsBackend, indexedDbFactsBackend,
   type PersistentFactsCache, type FactsCacheOptions, type FactsBackend, type FactsEntry, type FactsTable,

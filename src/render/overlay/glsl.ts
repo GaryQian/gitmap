@@ -37,9 +37,15 @@ vec3 gmOverlayBody(vec3 ovCol, float known, float d2, float shade, float burn, v
 }
 `;
 
-/** How much of its glow and ground light a star keeps under an overlay: unknown stars emit almost none. */
+/**
+ * How much of its glow and ground light a star keeps under an overlay. Unknown stars emit almost none;
+ * known ones glow by how saturated their overlay colour is, so the grey faded end barely glows and a
+ * strong colour (high ownership, a fresh change) glows hard.
+ */
 export const GLSL_OVERLAY_LIGHT = /* glsl */ `
-float gmOverlayLight(float known, float overlayMix) {
-  return mix(1.0, mix(0.3, 1.0, known), overlayMix);
+float gmOverlayLight(float known, float overlayMix, vec3 ovCol) {
+  float chroma = max(ovCol.r, max(ovCol.g, ovCol.b)) - min(ovCol.r, min(ovCol.g, ovCol.b));
+  float lit = mix(0.35, 1.8, smoothstep(0.08, 0.6, chroma));
+  return mix(1.0, mix(0.3, lit, known), overlayMix);
 }
 `;

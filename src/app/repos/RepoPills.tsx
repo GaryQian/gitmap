@@ -2,11 +2,12 @@
 // Each shows the repo's name and where it is from; clicking one opens it.
 import { useEffect, useRef, useState } from 'react';
 import { config, type DemoRepo } from '../../config';
-import type { RepoSource } from '../../contracts/pipeline';
-import { errorMessage, openSource } from '../session';
+import { openSource } from '../session';
+import { lineFor } from '../status/actions';
+import { offerFolder } from '../status/folder';
 import { setMessage } from '../store';
 import { PillButton, Strong } from '../ui';
-import { NO_SAVED_REPOS, savedRepos, whereLabel, type SavedRepo, type SavedRepos } from './registry';
+import { NO_SAVED_REPOS, savedRepos, whereLabel, type SavedOpen, type SavedRepo, type SavedRepos } from './registry';
 
 /** Saved repos shown. The page is one button and a few pills, not a list to scroll. */
 const MAX_SAVED = 8;
@@ -41,23 +42,41 @@ export function RepoPills() {
         registry.current = found;
         setSaved(list.slice(0, MAX_SAVED));
       } catch (err) {
+        // the page still works without the list: a folder can be chosen, a demo opened
         console.warn('starmap: could not list saved repos', err);
       }
     })();
     return () => { live = false; };
   }, []);
 
+  const remove = async (repo: SavedRepo): Promise<void> => {
+    try {
+      await registry.current.removeSaved(repo.id);
+    } catch (err) {
+      console.warn('starmap: the saved map could not be removed', err);
+    }
+    setSaved((list) => list.filter((r) => r.id !== repo.id));
+    setMessage(null);
+  };
+
   const openSaved = async (repo: SavedRepo): Promise<void> => {
     setMessage(null);
-    let source: RepoSource | null;
+    let opened: SavedOpen | null = null;
     try {
-      source = await registry.current.openSaved(repo.id); // called in the click: it may ask for folder permission
+      opened = await registry.current.openSaved(repo.id); // called in the click: it may ask for folder permission
     } catch (err) {
-      setMessage(errorMessage(err));
+      console.warn('starmap: the saved map could not be opened', err);
+    }
+    if (opened) {
+      // a map that opens without its folder says what the folder needs once it is on screen
+      if (opened.folder) offerFolder(opened.source, opened.folder);
+      await openSource(opened.source);
       return;
     }
-    if (source) await openSource(source);
-    else setMessage(`The saved map of ${repo.name} could not be opened. Choose its folder again.`);
+    // Neither a usable snapshot nor a readable folder: say so, and offer to drop the entry. Choosing
+    // the folder with the button above maps it again and renews the entry.
+    const line = lineFor('saved-map-gone', { name: repo.name }, { 'remove-saved': () => remove(repo) });
+    setMessage(line.text, line.action);
   };
 
   return (

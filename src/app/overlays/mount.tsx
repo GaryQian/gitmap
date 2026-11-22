@@ -1,17 +1,18 @@
 // Top right, before the settings gear: one pill per overlay, and under them a card with the active
 // overlay's legend and parameters (PLAN.md §3.1, §10, §17.6). One overlay is active at a time; a pill
 // can be chosen while its data is still arriving, and shows how far that has got.
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import type { AppMount } from '../../contracts/app';
 import {
-  OVERLAYS, legendFor, ownershipContributors,
+  OVERLAYS, OVERLAY_COLORS, legendFor, ownershipContributors,
   type OverlayId, type OverlayInfo, type OverlayLegend, type ReachDirection,
 } from '../../overlays';
-import { setActiveOverlay, useApp, useReplicaVersion, useSession } from '../store';
-import { Card, PillButton, Segmented, Strong, cx, type SegmentedOption } from '../ui';
+import { setActiveOverlay, useApp, useReplicaVersion, useSession, useThemeMode } from '../store';
+import { Card, CloseIcon, PillButton, Segmented, Strong, cx, type SegmentedOption } from '../ui';
 import { ContributorPicker } from './ContributorPicker';
-import { historyUnavailable, pillState, type PillState } from './logic';
-import { setContributor, setDirection, useOverlayParams } from './state';
+import { announcedPercent, historyUnavailable, pillState, type PillState } from './logic';
+import { setContributor, setDirection, setMaxHops, useOverlayParams } from './state';
+import { OVERLAY_UI } from './tunables';
 import { useOverlayView } from './useOverlayView';
 import './overlays.css';
 
@@ -106,6 +107,8 @@ function OverlayPills({ shown, activeId }: { shown: ShownOverlay[]; activeId: st
             <StateMark state={state} />
             <span className={cx('gm-overlay-label', short !== undefined && 'has-short')}>{on ? <Strong>{info.label}</Strong> : info.label}</span>
             {short !== undefined && <span className="gm-overlay-label is-short">{on ? <Strong>{short}</Strong> : short}</span>}
+            {/* on: an × says a second click turns it off */}
+            {on && <span className="gm-overlay-off" aria-hidden="true"><CloseIcon size={12} /></span>}
           </PillButton>
         );
       })}
@@ -114,6 +117,38 @@ function OverlayPills({ shown, activeId }: { shown: ShownOverlay[]; activeId: st
 }
 
 // ---- the card ----
+
+/** Dependency reach: how many hops to walk from the selection, 1..reachSliderMax, then "All". */
+function HopSlider() {
+  const maxHops = useOverlayParams((s) => s.maxHops);
+  const id = useId();
+  const top = OVERLAY_UI.reachSliderMax;
+  const step = Number.isFinite(maxHops) ? Math.min(Math.max(1, maxHops), top) : top + 1;
+  const text = step > top ? 'All' : String(step);
+  return (
+    <div className="gm-ov-hops">
+      <div className="gm-ov-hops-head">
+        <label htmlFor={id}>Hops</label>
+        <Strong>{text}</Strong>
+      </div>
+      <input
+        id={id}
+        className="gm-slider"
+        type="range"
+        min={1}
+        max={top + 1}
+        step={1}
+        value={step}
+        style={{ '--gm-slider-fill': `${((step - 1) / top) * 100}%` } as CSSProperties}
+        aria-valuetext={step > top ? 'All hops' : `${step} ${step === 1 ? 'hop' : 'hops'}`}
+        onChange={(e) => {
+          const next = Number(e.target.value);
+          setMaxHops(next > top ? Infinity : next);
+        }}
+      />
+    </div>
+  );
+}
 
 function Swatch({ color, label }: { color: string; label: string }) {
   return (
@@ -142,10 +177,38 @@ function LegendRows({ legend }: { legend: OverlayLegend }) {
         {legend.categories.map((c) => <Swatch key={c.label} color={c.color} label={c.label} />)}
         <Swatch color={legend.unknown.color} label={legend.unknown.label} />
       </ul>
-      {legend.status === 'partial' && <p className="gm-ov-line" role="status">Filling in · {percent(legend.coverage ?? 0)}</p>}
+      {legend.status === 'partial' && (
+        // the line follows every batch; what is announced moves in quarters, so a screen reader hears it four times, not a hundred
+        <p className="gm-ov-line">
+          <span aria-hidden="true">Filling in · {percent(legend.coverage ?? 0)}</span>
+          <span className="gm-visually-hidden" role="status">Filling in, {announcedPercent(legend.coverage ?? 0)}%</span>
+        </p>
+      )}
       {legend.status === 'pending' && <p className="gm-ov-line" role="status">Waiting for data</p>}
     </div>
   );
+}
+
+/** Spread between the strongest and weakest channel of a #rgb / #rrggbb colour; −1 for any other form. */
+function vividness(color: string): number {
+  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(color.trim())?.[1];
+  if (!hex) return -1;
+  const full = hex.length === 3 ? [...hex].map((c) => c + c).join('') : hex;
+  const rgb = [0, 2, 4].map((i) => parseInt(full.slice(i, i + 2), 16));
+  return Math.max(...rgb) - Math.min(...rgb);
+}
+
+/** Dependency reach's accent: the red of its ramp in each mode. */
+const REACH_ACCENT = { dark: OVERLAY_COLORS.dark.reach[2], light: OVERLAY_COLORS.light.reach[0] } as const;
+
+function mostVivid(colors: string[]): string | null {
+  let best: string | null = null;
+  let score = -2;
+  for (const c of colors) {
+    const v = vividness(c);
+    if (v > score) { best = c; score = v; }
+  }
+  return best;
 }
 
 function Overlays() {
@@ -173,6 +236,25 @@ function Overlays() {
   const chosen = contributors.find((c) => c.id === contributorId) ?? contributors[0] ?? null;
   const { view, seeds } = useOverlayView(active, chosen?.id);
 
+  // The map's edge takes the overlay's colour while one is on: the most saturated colour in its
+  // legend. Set on the root, so the frame (overlays.css) and the active pill can both use it.
+  // Dependency reach is always ringed in its red hot end, even before anything is selected.
+  const mode = useThemeMode();
+  const legend = active && view ? legendFor(view) : null;
+  const accent = active?.id === 'reach'
+    ? REACH_ACCENT[mode]
+    : legend ? mostVivid(legend.stops.map((st) => st.color)) : null;
+  useEffect(() => {
+    const root = document.documentElement;
+    if (!active || !accent) return;
+    root.dataset.overlay = active.id;
+    root.style.setProperty('--gm-overlay-accent', accent);
+    return () => {
+      delete root.dataset.overlay;
+      root.style.removeProperty('--gm-overlay-accent');
+    };
+  }, [active, accent]);
+
   // an overlay that is not on offer (hidden, or switched off in config) cannot stay selected
   const stale = replica !== null && activeId !== null && active === null;
   useEffect(() => { if (stale) setActiveOverlay(null); }, [stale]);
@@ -187,10 +269,11 @@ function Overlays() {
             <div className="gm-ov-title"><Strong>{active.label}</Strong></div>
             {active.id === 'ownership' && <ContributorPicker contributors={contributors} chosen={chosen} onChoose={setContributor} />}
             {active.id === 'reach' && <Segmented label="Direction" value={direction} options={DIRECTIONS} onChange={setDirection} className="gm-ov-direction" />}
+            {active.id === 'reach' && <HopSlider />}
             {/* with nothing selected there is no reach to explain, only how to get one */}
             {active.id === 'reach' && seeds.length === 0
               ? <p className="gm-ov-line gm-ov-hint" role="status">Select a file to see its reach</p>
-              : <LegendRows legend={legendFor(view)} />}
+              : legend && <LegendRows legend={legend} />}
           </Card>
         </div>
       )}

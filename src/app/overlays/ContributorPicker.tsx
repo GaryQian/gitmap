@@ -2,6 +2,7 @@
 // contributors, most commits first, when it has focus; typing narrows the list, with a typo forgiven.
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import type { HistoryContributor } from '../../overlays';
+import { LAYER, useDismissable } from '../keys';
 import { cx } from '../ui';
 import { filterContributors } from './logic';
 import { OVERLAY_UI } from './tunables';
@@ -41,6 +42,12 @@ export function ContributorPicker({ contributors, chosen, onChoose }: Contributo
     input.current?.blur();
   };
 
+  // Escape closes the list and keeps the choice; the card it is in stays (one layer per press, keys.ts)
+  useDismissable(open, () => {
+    close();
+    input.current?.blur();
+  }, { layer: LAYER.list, owns: (field) => field === input.current });
+
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.nativeEvent.isComposing) return;
     switch (e.key) {
@@ -61,13 +68,6 @@ export function ContributorPicker({ contributors, chosen, onChoose }: Contributo
       case 'Enter':
         e.preventDefault();
         if (at >= 0) choose(rows[at]!);
-        break;
-      case 'Escape':
-        // Closes the list and keeps the choice. Stopped here so it does not also clear the selection.
-        e.preventDefault();
-        e.stopPropagation();
-        close();
-        input.current?.blur();
         break;
     }
   };

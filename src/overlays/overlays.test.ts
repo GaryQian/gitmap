@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { config } from '../config';
 import { createModelStore, edgeId, type Layer, type StructureTables } from '../model';
 import { tablesToOps } from '../testing/synthetic';
-import { LAYER_DEFS, OVERLAYS, OVERLAY_RAMP, RECENCY_OLDER, buildAdjacency, computeReach, legendFor, overlayView, ownershipShare, type OverlayId, type OwnershipExtra } from './index';
+import { LAYER_DEFS, OVERLAYS, RECENCY_OLDER, buildAdjacency, computeReach, legendFor, overlayFact, overlayView, ownershipShare, type OverlayId, type OwnershipExtra } from './index';
 
 /** Units a..f in one district with the given dependency edges (src depends on dst). */
 function model(ids: string[], edges: [string, string][]) {
@@ -95,7 +95,7 @@ describe('overlayView', () => {
     expect(OVERLAYS.map((o) => o.id)).toEqual(config.overlays.enabled);
   });
 
-  it('recency falls off fast: newer is brighter, "older than the window" is the faded end, unknown stays NaN', () => {
+  it('recency spans newest to oldest file on a log scale, and hovering tells the age', () => {
     const values = [NOW - DAY, NOW - 30 * DAY, RECENCY_OLDER, NaN];
     const view = overlayView('recency', { replica, mode: 'dark', layer: layerOf('recency', values), now: NOW });
     const [a, b, c, d] = ['a', 'b', 'c', 'd'].map((id) => at(view.values, id));
@@ -106,18 +106,24 @@ describe('overlayView', () => {
     expect(d).toBeNaN();
     expect(view.domain).toEqual([0, 1]);
     expect(view.status).toBe('partial');
-    // steep: a file one half-life old is at half brightness, and one many half-lives old is all but faded
-    const half = OVERLAY_RAMP.recencyHalfLifeSeconds;
-    const steep = overlayView('recency', { replica, mode: 'dark', layer: layerOf('recency', [NOW, NOW - half, NOW - 8 * half, NaN]), now: NOW });
-    expect(at(steep.values, 'a')).toBeCloseTo(1, 5);
-    expect(at(steep.values, 'b')).toBeCloseTo(0.5, 5);
-    expect(at(steep.values, 'c')).toBeLessThan(0.01);
-    expect(steep.labels.high).toBe('Now');
-    // a dormant repo is measured from its latest change, and the legend says so
-    const dormant = overlayView('recency', { replica, mode: 'dark', layer: layerOf('recency', [NOW - 400 * DAY, NOW - 400 * DAY - half, NaN, NaN]), now: NOW });
+    // the ends are the newest and oldest files, whatever their ages; the log scale falls off fast
+    const span = overlayView('recency', { replica, mode: 'dark', layer: layerOf('recency', [NOW, NOW - DAY, NOW - 1000 * DAY, NaN]), now: NOW });
+    expect(at(span.values, 'a')).toBeCloseTo(1, 5);
+    expect(at(span.values, 'c')).toBeCloseTo(0, 5);
+    expect(at(span.values, 'b')).toBeLessThan(0.7);   // one day out of a thousand already loses a third
+    expect(at(span.values, 'b')).toBeGreaterThan(0.2);
+    expect(span.labels.high).toBe('Newest, now');
+    expect(span.labels.low).toBe('Oldest, 3 years ago');
+    // a dormant repo still spans the whole ramp
+    const dormant = overlayView('recency', { replica, mode: 'dark', layer: layerOf('recency', [NOW - 400 * DAY, NOW - 800 * DAY, NaN, NaN]), now: NOW });
     expect(at(dormant.values, 'a')).toBeCloseTo(1, 5);
-    expect(at(dormant.values, 'b')).toBeCloseTo(0.5, 5);
-    expect(dormant.labels.high).toMatch(/^Latest change, /);
+    expect(at(dormant.values, 'b')).toBeCloseTo(0, 5);
+    expect(dormant.labels.high).toBe('Newest, 13 months ago');
+    // hovering tells the age
+    const hovered = { ...replica, layers: new Map([['recency', layerOf('recency', [NOW - 3 * DAY, RECENCY_OLDER, NaN, NaN])]]) } as unknown as typeof replica;
+    expect(overlayFact(span, hovered, units.slotOf('a'), NOW)).toBe('Last changed 3 days ago');
+    expect(overlayFact(span, hovered, units.slotOf('b'), NOW)).toBe('Last changed before the history walked');
+    expect(overlayFact(span, hovered, units.slotOf('c'), NOW)).toBe('Age not yet known');
   });
 
   it('ownership shows the chosen contributor, the top one by default', () => {
@@ -127,10 +133,17 @@ describe('overlayView', () => {
     };
     const layer = layerOf('ownership', [4, 4, NaN, NaN], extra);
     const top = overlayView('ownership', { replica, mode: 'dark', layer });
-    expect([at(top.values, 'a'), at(top.values, 'b'), at(top.values, 'c')]).toEqual([0.75, 1, NaN]);
+    // any share at all starts at the purple floor; none stays at the grey end
+    expect(at(top.values, 'a')).toBeCloseTo(0.1 + 0.9 * 0.75, 5);
+    expect(at(top.values, 'b')).toBe(1);
+    expect(at(top.values, 'c')).toBeNaN();
     expect(top.labels.high).toContain('Bo');
     const ada = overlayView('ownership', { replica, mode: 'dark', layer, contributorId: 1 });
-    expect([at(ada.values, 'a'), at(ada.values, 'b')]).toEqual([0.25, 0]);
+    expect(at(ada.values, 'a')).toBeCloseTo(0.1 + 0.9 * 0.25, 5);
+    expect(at(ada.values, 'b')).toBe(0);
+    expect(overlayFact(ada, replica, units.slotOf('a'))).toBe('25% of commits by Ada');
+    expect(overlayFact(ada, replica, units.slotOf('b'))).toBe('No commits by Ada');
+    expect(overlayFact(top, replica, units.slotOf('b'))).toBe('100% of commits by Bo');
   });
 
   it('tests is discrete with one stop per category; reach puts the seed at the hot end', () => {
@@ -139,10 +152,18 @@ describe('overlayView', () => {
     expect(tests.stops.map((s) => s.t)).toEqual([0, 0.5, 1]);
     expect(tests.domain).toEqual([0, 2]);
     expect(legendFor(tests).categories.map((c) => c.color)).toEqual(tests.stops.map((s) => s.color));
+    expect(overlayFact(tests, replica, units.slotOf('c'))).toBe('Not referenced by any test');
+    const risk = overlayView('knowledgeRisk', { replica, mode: 'dark', layer: layerOf('knowledgeRisk', [0.82, NaN, NaN, NaN]) });
+    expect(overlayFact(risk, replica, units.slotOf('a'))).toBe('Top author made 82% of commits');
 
     const reach = overlayView('reach', { replica, mode: 'dark', seeds: ['u:a'], direction: 'dependsOn' });
     expect([at(reach.values, 'a'), at(reach.values, 'b'), at(reach.values, 'c')]).toEqual([0, 1, NaN]);
     expect(reach.domain[0]).toBe(0);
     expect(reach.domain[1]).toBeGreaterThan(1);
+    expect(overlayFact(reach, replica, units.slotOf('a'))).toBe('In the selection');
+    expect(overlayFact(reach, replica, units.slotOf('b'))).toBe('1 hop from the selection');
+    expect(overlayFact(reach, replica, units.slotOf('c'))).toBe('Not a dependency');
+    const limited = overlayView('reach', { replica, mode: 'dark', seeds: ['u:a'], direction: 'dependsOn', maxHops: 2 });
+    expect(overlayFact(limited, replica, units.slotOf('c'))).toBe('Not a dependency within 2 hops');
   });
 });

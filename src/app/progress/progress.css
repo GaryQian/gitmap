@@ -7,7 +7,14 @@
   border-left: 1px solid var(--gm-hairline);
 }
 
-.gm-info-pill { max-width: min(520px, 60vw); }
+/* The quiet line: a sentence, at most one action, and a way to dismiss it. A long sentence is cut
+   with an ellipsis and can be read in full from its title. */
+.gm-info-pill { max-width: min(640px, 72vw); transition: opacity var(--gm-status-fade-ms, 600ms) ease; }
+.gm-info-pill.is-leaving { opacity: 0; }
 .gm-info-text { overflow: hidden; text-overflow: ellipsis; }
-.gm-info-close { color: var(--gm-text-dim); padding-left: 10px; }
+.gm-info-action { flex: none; }
+.gm-info-close { flex: none; color: var(--gm-text-dim); padding-left: 10px; }
 .gm-info-close:hover { color: var(--gm-text); }
+/* after an action segment the close button is a second, narrower segment: only the last one is flush with the pill's end */
+.gm-info-pill .gm-info-action { margin-right: 0; padding-right: 12px; border-radius: 0; }
+.gm-info-pill .gm-info-close-after { margin-left: 0; }

@@ -12,13 +12,18 @@
   --gm-syn-type: oklch(var(--gm-syn-l) var(--gm-syn-c) 195);
   --gm-syn-function: oklch(var(--gm-syn-l) var(--gm-syn-c) 100);
   --gm-syn-escape: oklch(var(--gm-syn-l) var(--gm-syn-c) 25);
-  --gm-syn-comment: color-mix(in srgb, var(--gm-text) 56%, var(--gm-sidebar));
+  /* comments and line numbers are the quietest text here: theme.ts keeps that colour at 4.5:1 */
+  --gm-syn-comment: var(--gm-text-quiet);
   --gm-syn-punctuation: color-mix(in srgb, var(--gm-text) 74%, var(--gm-sidebar));
   --gm-syn-property: color-mix(in oklab, var(--gm-text) 62%, var(--gm-syn-keyword));
-  --gm-reader-gutter: color-mix(in srgb, var(--gm-text) 34%, var(--gm-sidebar));
+  --gm-reader-gutter: var(--gm-text-quiet);
   --gm-reader-selection: color-mix(in srgb, var(--gm-halo) 26%, var(--gm-sidebar));
   --gm-reader-fill: color-mix(in srgb, var(--gm-text) 7%, var(--gm-sidebar));
+  --gm-reader-active: color-mix(in srgb, var(--gm-text) 4%, var(--gm-sidebar));
+  --gm-reader-match: color-mix(in srgb, var(--gm-text) 13%, var(--gm-sidebar));
   --gm-reader-pad: 20px;
+  /* the surface is opaque, so a focus ring in here needs no band behind it (ui.css) */
+  --gm-focus-band: transparent;
 
   position: relative;
   box-sizing: border-box;
@@ -71,7 +76,8 @@
 .gm-reader-resize:hover::after,
 .gm-reader-resize:focus-visible::after { opacity: 0.55; }
 .gm-reader-resize.is-dragging::after { opacity: 1; }
-.gm-reader-resize:focus-visible { outline-offset: -2px; }
+/* the handle straddles the edge, half of it over the map: its ring is drawn inside, on the surface colour */
+.gm-reader-resize:focus-visible { outline-offset: -2px; background: var(--gm-surface); }
 
 /* ---- header ---- */
 
@@ -119,6 +125,62 @@
   color: var(--gm-text-dim);
 }
 .gm-reader-close { flex: none; color: var(--gm-text); }
+.gm-reader-action { flex: none; padding: 0 12px; color: var(--gm-text); }
+.gm-reader-save { font-weight: 500; }
+
+/* Unsaved changes: a dot after the name, as editors do. */
+.gm-reader-dirty {
+  flex: none;
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.8;
+  align-self: center;
+}
+.gm-reader-tab .gm-reader-dirty { width: 6px; height: 6px; margin-left: 7px; vertical-align: 1px; }
+
+.gm-reader-status {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  letter-spacing: 0.035em;
+  color: var(--gm-text-dim);
+}
+.gm-reader-status.is-error { color: var(--gm-syn-escape); }
+
+/* The tab that brings the closed panel back: flush with the right edge, halfway down. */
+.gm-reader-handle {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 3;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 44px;
+  height: 104px;
+  padding: 0 0 0 2px;
+  border: 1px solid var(--gm-hairline);
+  border-right: none;
+  border-radius: 14px 0 0 14px;
+  background: var(--gm-pill-bg);
+  color: var(--gm-text);
+  cursor: pointer;
+  transition: background-color 140ms var(--gm-ease), border-color 140ms var(--gm-ease), width 140ms var(--gm-ease);
+}
+.gm-reader-handle:hover {
+  width: 50px;
+  background: var(--gm-pill-bg-strong);
+  border-color: color-mix(in srgb, var(--gm-text) 34%, transparent);
+}
+.gm-reader-handle:focus-visible { outline-offset: -3px; }
+.gm-reader-handle-dot { position: absolute; top: 10px; right: 10px; width: 7px; height: 7px; }
 
 .gm-reader-meta {
   display: flex;
@@ -202,6 +264,16 @@
 .gm-reader-code { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
 .gm-reader-cm { flex: 1 1 0; min-height: 0; }
 .gm-reader-cm[hidden], .gm-md[hidden] { display: none; }
+
+/* Markdown source beside its preview; one above the other when the panel is narrow. */
+.gm-reader-body { container-type: inline-size; }
+.gm-reader-split { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
+.gm-reader-split > * { flex: 1 1 0; min-height: 0; min-width: 0; }
+.gm-reader-split-preview { display: flex; flex-direction: column; border-top: 1px solid var(--gm-hairline); }
+@container (min-width: 720px) {
+  .gm-reader-split { flex-direction: row; }
+  .gm-reader-split-preview { border-top: none; border-left: 1px solid var(--gm-hairline); }
+}
 .gm-reader-cm .cm-content:focus-visible { outline-offset: -2px; }
 .gm-reader-plain {
   flex: 1 1 0;

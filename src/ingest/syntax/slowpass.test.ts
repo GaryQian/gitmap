@@ -79,7 +79,7 @@ describe('runSlowPass', () => {
   it('reports progress and batches, and resolves with what finished when the signal aborts', async () => {
     const files: Record<string, string> = {};
     for (let i = 0; i < 12; i++) files[`src/f${String(i).padStart(2, '0')}.ts`] = `export function f${i}() { return ${i}; }\n`;
-    const cfg = withConfig({ parser: { batchBytes: 8 } }); // one file per batch
+    const cfg = withConfig({ parser: { slowBatchBytes: 1 } }); // one file per batch
     const batches: SyntaxFacts[][] = [];
     const progress: [number, number][] = [];
     const whole = await slowPass(files, cfg, { onBatch: (b) => batches.push(b), onProgress: (d, t) => progress.push([d, t]) });

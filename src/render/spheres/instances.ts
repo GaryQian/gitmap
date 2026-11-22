@@ -65,7 +65,7 @@ export function writeInstance(b: InstanceBuffers, slot: number, row: UnitRow | n
   }
   const lang = langs.entry(row.lang);
   b.slot[s] = slot; b.slot[s + 1] = row.district; b.slot[s + 2] = row.city;
-  b.shape[h] = row.radius; b.shape[h + 1] = row.glow; b.shape[h + 2] = row.loc; b.shape[h + 3] = 1;
+  b.shape[h] = row.radius; b.shape[h + 1] = row.glow; b.shape[h + 2] = row.bytes; b.shape[h + 3] = 1;
   b.color[c] = lang.rgb[0]; b.color[c + 1] = lang.rgb[1]; b.color[c + 2] = lang.rgb[2]; b.color[c + 3] = lang.index;
 }
 
@@ -96,12 +96,12 @@ export function projectUnits(buffers: InstanceBuffers, batch: PatchBatch, rebuil
 }
 
 /** The size slider's rule (PLAN.md §8.1): small files are hidden, glowing files never are. */
-export function hiddenByMinLines(loc: number, glow: number, minLines: number): boolean {
-  return loc < minLines && glow <= 0;
+export function hiddenByMinBytes(bytes: number, glow: number, minBytes: number): boolean {
+  return bytes < minBytes && glow <= 0;
 }
 
 /** Units not hidden by the size slider, per city, for the pills. */
-export function visibleCounts(replica: ModelReplica, minLines: number, visual: Config['visual']): Map<NodeRef, { visible: number; total: number }> {
+export function visibleCounts(replica: ModelReplica, minBytes: number, visual: Config['visual']): Map<NodeRef, { visible: number; total: number }> {
   const units = replica.table('unit'), districts = replica.table('district'), cities = replica.table('city');
   const out = new Map<NodeRef, { visible: number; total: number }>();
   const perCity: ({ visible: number; total: number } | undefined)[] = [];
@@ -116,7 +116,7 @@ export function visibleCounts(replica: ModelReplica, minLines: number, visual: C
     const entry = d >= 0 ? perCity[districts.refSlots.city[d] ?? -1] : undefined;
     if (!entry) continue;
     entry.total++;
-    if (!hiddenByMinLines(units.cols.loc[u], glowAmount(units.cols.importancePct[u], visual), minLines)) entry.visible++;
+    if (!hiddenByMinBytes(units.cols.bytes[u], glowAmount(units.cols.importancePct[u], visual), minBytes)) entry.visible++;
   }
   return out;
 }

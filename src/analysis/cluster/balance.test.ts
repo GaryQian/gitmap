@@ -8,6 +8,7 @@ import type { UnitEdges } from '../edges';
 import type { UnitTable } from '../units';
 import { effectiveCount, evenShareCount } from './balance';
 import { cluster, type ClusterResult } from './index';
+import { settleStragglers } from './refine';
 
 function unitTable(paths: string[]): UnitTable {
   return {
@@ -120,5 +121,57 @@ describe('bias against megacities and mega-districts', () => {
     let changes = 0;
     for (let i = 1; i < 900; i++) if (r.unitDistrict[i] !== r.unitDistrict[i - 1]) changes++;
     expect(changes).toBeLessThan(records.size * 3);
+  });
+});
+
+describe('belonging comes before balance', () => {
+  it('a large flat directory may become several districts but stays in one city', () => {
+    const paths: string[] = [];
+    for (let f = 0; f < 900; f++) paths.push(`data/records/r${String(f).padStart(4, '0')}.txt`);
+    for (let s2 = 0; s2 < 8; s2++) for (let f = 0; f < 15; f++) paths.push(`src/mod${s2}/f${String(f).padStart(2, '0')}.ts`);
+    const pairs: [number, number][] = [];
+    for (let s2 = 0; s2 < 8; s2++) for (let f = 1; f < 15; f++) pairs.push([900 + s2 * 15 + f, 900 + s2 * 15]);
+    const r = cluster(unitTable(paths), unitEdges(paths.length, pairs), withBias(1), undefined, 'demo');
+    const cityOf = new Map(r.districts.map((d) => [d.id, d.city]));
+    const recordCities = new Set(r.unitDistrict.slice(0, 900).map((d) => cityOf.get(d)));
+    expect(recordCities.size).toBe(1);
+    expect(new Set(r.unitDistrict.slice(0, 900)).size).toBeGreaterThan(3);
+  });
+
+  it('a file goes to the community that holds most of its connections', () => {
+    // nodes 0–3 in community 0, nodes 4–7 in community 1; node 3 is tied twice to community 1 and once to its own
+    const labels = Int32Array.from([0, 0, 0, 0, 1, 1, 1, 1]);
+    const pairs: [number, number][] = [[0, 1], [1, 2], [0, 2], [3, 0], [3, 4], [3, 5], [4, 5], [5, 6], [6, 7], [4, 7]];
+    const edges = { count: pairs.length, a: Int32Array.from(pairs, (p) => p[0]), b: Int32Array.from(pairs, (p) => p[1]), w: new Float64Array(pairs.length).fill(1) };
+    const settled = settleStragglers(labels, edges);
+    expect(settled[3]).toBe(settled[4]);
+    expect(settled[0]).toBe(settled[1]);
+    expect(settled[0]).not.toBe(settled[4]);
+  });
+});
+
+describe('what cluster() returns', () => {
+  it('has no empty district and no empty city, whatever the shape of the repo', () => {
+    // small random repos: a few top-level folders, sub-folders of uneven size, sparse random imports
+    for (let seed = 1; seed <= 40; seed++) {
+      const rnd = mulberry32(seed);
+      const paths: string[] = [];
+      const tops = 2 + Math.floor(rnd() * 4);
+      for (let t = 0; t < tops; t++) {
+        const subs = 1 + Math.floor(rnd() * 4);
+        for (let s2 = 0; s2 < subs; s2++) {
+          const files = 1 + Math.floor(rnd() * 14);
+          for (let f = 0; f < files; f++) paths.push(`top${t}/sub${s2}/f${String(f).padStart(2, '0')}.ts`);
+        }
+      }
+      paths.sort();
+      const pairs: [number, number][] = [];
+      for (let i = 0; i < paths.length; i++) if (rnd() < 0.7) pairs.push([i, Math.floor(rnd() * paths.length)]);
+      const r = cluster(unitTable(paths), unitEdges(paths.length, pairs.filter(([a, b]) => a !== b)), config, undefined, 'demo');
+      const used = new Set(r.unitDistrict);
+      expect(new Set(r.districts.map((d) => d.id)), `seed ${seed}: districts`).toEqual(used);
+      expect(new Set(r.cities.map((c) => c.id)), `seed ${seed}: cities`).toEqual(new Set(r.districts.map((d) => d.city)));
+      expect(r.unitDistrict.every((d) => typeof d === 'string' && d !== ''), `seed ${seed}: every unit placed`).toBe(true);
+    }
   });
 });

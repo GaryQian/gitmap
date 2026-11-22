@@ -8,6 +8,10 @@ export { buildDigest, buildDigestText, buildDetailContext, digestHash, poiCount 
 export type { CityContext, DetailContext, Digest, DigestInput, DigestText, DigestTokens } from './digest';
 export { CHARS_PER_TOKEN, estimateTokens } from './tokens';
 
+// ---- provider (anywhere): which one is in use, and its three model tiers (synthesis, tour, bulk) ----
+export { activeAi, resolveProviderId, tierModels } from './active';
+export type { ActiveAi, AiEnv, TierModels } from './active';
+
 // ---- client (worker, main thread or Node): the four routes, typed ----
 export { createAiClient, sleep } from './client/http';
 export type { AiClient, AiClientOptions, CallOptions } from './client/http';
@@ -15,7 +19,7 @@ export { AiClientError, describeAiError, toAiErrorInfo } from './client/errors';
 export type { AiClientErrorCode, AiErrorInfo, AiServerErrorCode } from './client/errors';
 
 // ---- orchestration (worker or Node): map → reduce → on demand, as ModelPatch operations ----
-export { generateAnnotations, idleDetails, poiId, poisFromResponse, stepsFromResponse, summaryId, TOUR_ID } from './client/generate';
+export { generateAnnotations, idleDetails, poiId, poisFromResponse, reduceHeadStart, stepsFromResponse, summaryId, TOUR_ID } from './client/generate';
 export type { AiProgress, AiStage, AiStageError, GenerateOptions, GenerateResult } from './client/generate';
 export { generateDetail, withheldMessage } from './client/detail';
 export type { DetailOptions, DetailResult } from './client/detail';

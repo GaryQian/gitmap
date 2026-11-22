@@ -12,6 +12,10 @@ export type Decoded =
       truncated: boolean;
       totalBytes: number;
       shownBytes: number;
+      /** The file starts with a UTF-8 byte order mark (dropped from `text`, put back on save). */
+      bom: boolean;
+      /** Some bytes were not valid UTF-8 and show as U+FFFD: saving would change them. */
+      lossy: boolean;
     };
 
 /** A NUL byte in the first `sniffBytes` is how git, and this reader, tell binary from text. */
@@ -44,17 +48,22 @@ export function decodeContent(bytes: Uint8Array, capBytes: number, sniffBytes: n
   if (looksBinary(bytes, sniffBytes)) return { kind: 'binary' };
   const shownBytes = cutPoint(bytes, capBytes);
   // not fatal: a stray byte in an otherwise readable file shows as U+FFFD instead of hiding the file
-  const text = new TextDecoder('utf-8').decode(bytes.subarray(0, shownBytes));
-  return { kind: 'text', text, lines: countLines(text), truncated: shownBytes < bytes.length, totalBytes: bytes.length, shownBytes };
+  const shown = bytes.subarray(0, shownBytes);
+  const text = new TextDecoder('utf-8').decode(shown);
+  let lossy = false;
+  try { new TextDecoder('utf-8', { fatal: true }).decode(shown); } catch { lossy = true; }
+  const bom = bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf;
+  return { kind: 'text', text, lines: countLines(text), truncated: shownBytes < bytes.length, totalBytes: bytes.length, shownBytes, bom, lossy };
 }
 
-/** "812 bytes", "14 KB", "2 MB", "5.3 MB". */
-export function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} ${bytes === 1 ? 'byte' : 'bytes'}`;
-  const units = ['KB', 'MB', 'GB'];
-  let value = bytes / 1024;
-  let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) { value /= 1024; unit++; }
-  const shown = value >= 10 || Math.abs(value - Math.round(value)) < 0.05 ? String(Math.round(value)) : value.toFixed(1);
-  return `${shown} ${units[unit]}`;
+export { formatBytes } from '../units';
+
+/** Text back to the bytes a save writes, with the byte order mark the file had. */
+export function encodeContent(text: string, bom: boolean): Uint8Array {
+  const body = new TextEncoder().encode(text);
+  if (!bom) return body;
+  const out = new Uint8Array(body.length + 3);
+  out.set([0xef, 0xbb, 0xbf]);
+  out.set(body, 3);
+  return out;
 }

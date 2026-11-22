@@ -30,6 +30,7 @@ export function useOverlayView(active: OverlayInfo | null, contributorId: number
   const mode = useThemeMode();
   const selection = useSelection();
   const direction = useOverlayParams((s) => s.direction);
+  const maxHops = useOverlayParams((s) => s.maxHops);
   /** Counts the rebuilds that data arriving has asked for. */
   const [dataTick, setDataTick] = useState(0);
 
@@ -83,16 +84,23 @@ export function useOverlayView(active: OverlayInfo | null, contributorId: number
       ctx.adjacency = g.adjacency;
       ctx.seeds = seeds;
       ctx.direction = direction;
+      ctx.maxHops = maxHops;
     }
     return overlayView(active.id, ctx);
     // dataTick stands for the replica's contents, which change in place
-  }, [active, replica, mode, contributorId, direction, seeds, dataTick]);
+  }, [active, replica, mode, contributorId, direction, maxHops, seeds, dataTick]);
 
   useEffect(() => {
     if (!render) return;
     // the renderer may still be another package's stub; a failure there must not take the pills down
     try { render.setOverlay(view); } catch (err) { console.warn('starmap: setOverlay failed', err); }
   }, [render, view]);
+
+  // the hover tooltip reads the view to tell a file's age or hops
+  useEffect(() => {
+    useOverlayParams.setState({ shown: view });
+    return () => useOverlayParams.setState({ shown: null });
+  }, [view]);
 
   return { view, seeds };
 }

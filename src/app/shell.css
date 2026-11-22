@@ -49,11 +49,12 @@
   height: 100%;
   display: block;
   opacity: 0;
-  outline: none;
   touch-action: none;
   transition: opacity 600ms ease;
 }
 .gm-app[data-phase='map'] .gm-map-canvas { opacity: 1; }
+/* should the canvas ever take the keyboard focus, its ring is drawn inside the window's edge */
+.gm-map-canvas:focus-visible { outline-offset: -4px; }
 
 /* ---- landing ---- */
 

@@ -3,7 +3,7 @@
 //   diffManifest(previousFiles, manifest)            what changed, by blob oid
 //   knownFiles(state, store)                         the files the map shows, with the oids they were parsed from
 //   checkWorkingTree(repo, indexEntries | manifest)  tracked files whose size or time on disk is not the index's
-//   confirmWorkingTree(repo, paths, known, config)   of those, the ones whose content really differs
+//   confirmWorkingTree(repo, paths, config)          of those, the ones whose content is not the staged blob
 //   planUpdate(previous, manifest, workingTree?)     the lists and the N of "N files changed · Update"
 //   applyUpdate(deps, state, workingTree?, opts?)    re-parse what changed and merge it into the state
 //

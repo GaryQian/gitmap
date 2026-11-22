@@ -320,8 +320,10 @@ function checkTour(raw: unknown, allowed: ReadonlySet<string>, minSteps: number,
 
 const tour = route<TourRequest, TourResponse>('tour', tourRequest, async (body, ctx) => {
   const allowed = new Set<string>(body.refs);
+  // One call to the mid tier. The prefix is the same text the points of interest are given, but a
+  // cache is per model, so it is shared only when both tiers are configured with the same model id.
   const steps = await generateChecked(ctx, {
-    role: 'synthesis',
+    role: 'tour',
     cachedPrefix: reducePrefix(body),
     prompt: tourPrompt(body),
     schema: REDUCE_SCHEMA,

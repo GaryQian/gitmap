@@ -10,7 +10,7 @@ import './pills.css';
 function ScenePills() {
   const render = useRender();
   const session = useSession();
-  const minLines = useApp((s) => s.minLines);
+  const minBytes = useApp((s) => s.minBytes);
   const host = useRef<HTMLDivElement>(null);
   const layer = useRef<PillLayer | null>(null);
 
@@ -22,9 +22,17 @@ function ScenePills() {
   }, [render, session]);
 
   // the size slider changes the "visible / total" counts; by now the renderer has the new threshold
-  useEffect(() => { layer.current?.invalidate(); }, [minLines]);
+  useEffect(() => { layer.current?.invalidate(); }, [minBytes]);
 
-  return <div ref={host} className="gm-scene-pills" role="group" aria-label="Cities and districts" />;
+  return (
+    <div
+      ref={host}
+      className="gm-scene-pills"
+      role="group"
+      aria-label="Cities and districts"
+      aria-description="Arrow keys move between them. Enter flies to one. Shift with an arrow key moves it on the map."
+    />
+  );
 }
 
 const mount: AppMount = { region: 'scene', order: 0, Component: ScenePills };

@@ -17,18 +17,21 @@ import { checkWorkingTree, confirmWorkingTree } from './workingTree';
  * a saved `{ path, oid }` list, or the manifest it was parsed from) with a freshly built manifest,
  * adjusted by an optional working-tree result. `count` is the N of "N files changed · Update".
  *
- * A file the working-tree check reports is read from disk rather than from git. Three cases:
+ * A file the working-tree check reports is read from disk rather than from git. The cases:
  * - missing on disk: taken off the map (and not re-added while it stays missing);
- * - its hash on disk is the oid the map already has (an earlier Update took it from disk): nothing to do;
+ * - its hash on disk is the oid the manifest lists: it is the staged blob after all, nothing special;
+ * - its hash on disk is the oid the map already has (an earlier Update took it from disk), or it
+ *   was not hashed and has the size the map has: still a disk file, but nothing to do;
  * - otherwise: re-parsed from the working tree.
  * Working-tree paths that the manifest does not list are ignored.
  */
 export function planUpdate(previous: readonly KnownFile[] | Manifest, manifest: Manifest, workingTree?: WorkingTreeInput): UpdatePlan {
   const files: readonly KnownFile[] = Array.isArray(previous) ? previous : (previous as Manifest).entries;
   const diff = diffManifest(files, manifest);
-  const shown = new Map<string, string>();
-  for (const f of files) shown.set(f.path, f.oid ?? '');
-  const listed = new Set(manifest.entries.map((e) => e.path));
+  const shown = new Map<string, KnownFile>();
+  for (const f of files) shown.set(f.path, f);
+  const listed = new Map<string, string>();
+  for (const e of manifest.entries) listed.set(e.path, e.oid);
 
   const reparse = new Set([...diff.added, ...diff.changed]);
   const drop = new Set(diff.removed);
@@ -38,13 +41,19 @@ export function planUpdate(previous: readonly KnownFile[] | Manifest, manifest: 
     const change: WorkingTreeChange = typeof item === 'string' ? { path: item, oid: '' } : item;
     const { path } = change;
     if (!listed.has(path)) continue;
+    const was = shown.get(path);
     if (change.missing) {
       missing.add(path);
       reparse.delete(path);
-      if (shown.has(path)) drop.add(path);
+      if (was) drop.add(path);
+    } else if (change.oid !== '' && change.oid === listed.get(path)) {
+      continue;
     } else {
       fromDisk.set(path, change);
-      if (change.oid !== '' && shown.get(path) === change.oid) reparse.delete(path);
+      const sameContent = change.oid !== ''
+        ? was?.oid === change.oid
+        : change.bytes !== undefined && was !== undefined && was.oid === '' && was.bytes === change.bytes;
+      if (sameContent) reparse.delete(path);
       else reparse.add(path);
     }
   }
@@ -112,7 +121,7 @@ export async function applyUpdate(deps: PipelineDeps, state: PipelineState, work
   const known = knownFiles(state, deps.store);
   let found = workingTree;
   if (!found && opts.checkWorkingTree) {
-    found = await confirmWorkingTree(repo, await checkWorkingTree(repo, fresh, { signal }), known, config, { signal });
+    found = await confirmWorkingTree(repo, await checkWorkingTree(repo, fresh, { signal }), config, { signal });
   }
   if (signal?.aborted) throw abortError(signal);
   const plan = planUpdate(known, fresh, found);

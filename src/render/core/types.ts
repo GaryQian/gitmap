@@ -86,7 +86,7 @@ export interface ViewState {
   selection: NodeRef[];
   highlights: NodeRef[];
   typeFilter: LangId[];
-  minLines: number;
+  minBytes: number;
   overlay: OverlayView | null;
   particles: boolean;
 }
@@ -97,7 +97,7 @@ export interface SceneEvents {
   selection: NodeRef[];
   highlights: NodeRef[];
   typeFilter: LangId[];
-  minLines: number;
+  minBytes: number;
   overlay: OverlayView | null;
   particles: boolean;
   theme: ThemeMode;

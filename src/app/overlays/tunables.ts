@@ -5,4 +5,6 @@ export const OVERLAY_UI = {
   recomputeMs: 250,
   /** Contributors listed in the picker before "N more"; typing narrows the list. */
   contributorsShown: 60,
+  /** Dependency reach: the hop slider runs 1..this; one step further is "All". */
+  reachSliderMax: 10,
 } as const;

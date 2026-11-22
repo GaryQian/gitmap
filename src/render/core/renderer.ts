@@ -58,7 +58,7 @@ export function createSceneRenderer(init: RenderInit): RenderApi {
   rig.topHeight = 2 * maxUnitRadius(config.visual);
   const pointer = new PointerRouter(canvas);
   const state: ViewState = {
-    revealed: false, selection: [], highlights: [], typeFilter: [], minLines: config.legend.minLinesDefault, overlay: null,
+    revealed: false, selection: [], highlights: [], typeFilter: [], minBytes: config.legend.minBytesDefault, overlay: null,
     particles: init.particles ?? config.settings.particles,
   };
   const counters = { edgesDrawn: 0, quality: 0 };
@@ -314,7 +314,7 @@ export function createSceneRenderer(init: RenderInit): RenderApi {
     setSelection(refs) { setState('selection', refs.slice()); },
     setHighlights(refs) { setState('highlights', refs.slice()); },
     setTypeFilter(langs) { setState('typeFilter', langs.slice()); },
-    setMinLines(n) { setState('minLines', Math.max(0, n)); },
+    setMinBytes(n) { setState('minBytes', Math.max(0, n)); },
 
     flyTo(ref, opts) {
       const a = disposed ? null : ctx.anchor(ref);

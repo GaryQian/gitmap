@@ -84,7 +84,12 @@ export function toAiErrorInfo(err: unknown): AiErrorInfo {
     const { code, retryAfterSeconds } = err as { code?: unknown; retryAfterSeconds?: unknown };
     if (typeof code === 'string' && (CODES as readonly string[]).includes(code)) {
       const wait = typeof retryAfterSeconds === 'number' && Number.isFinite(retryAfterSeconds) ? retryAfterSeconds : undefined;
-      const info: AiErrorInfo = { code: code as AiClientErrorCode, message: describeAiError(code as AiClientErrorCode, wait) };
+      // A plain object that already carries its own sentence (an outcome sent over from the coordinator,
+      // such as "AI notes are written from a fresh parse…") keeps it: the code alone would say less.
+      // An Error's message is not trusted for display; it is described from its code.
+      const own = !(err instanceof Error) ? (err as { message?: unknown }).message : undefined;
+      const message = typeof own === 'string' && own.trim() ? own : describeAiError(code as AiClientErrorCode, wait);
+      const info: AiErrorInfo = { code: code as AiClientErrorCode, message };
       if (wait !== undefined) info.retryAfterSeconds = wait;
       return info;
     }

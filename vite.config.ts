@@ -100,6 +100,20 @@ export default defineConfig({
   server: { port: 5173, strictPort: false, headers: isolation },
   preview: { headers: isolation },
   worker: { format: 'es' },
+  // Every browser dependency is pre-bundled at start-up, including the ones only workers import.
+  // Left to discovery, the dev server finds them one at a time as workers load, re-bundles in the
+  // middle of a session, and a tab that is already open then asks for modules that no longer exist:
+  // its coordinator and compute workers fail to load with no message at all.
+  optimizeDeps: {
+    entries: ['index.html', 'dev.html', 'src/compute/worker.ts', 'src/physics/worker.ts', 'src/pipeline/coordinator.worker.ts'],
+    include: [
+      'react', 'react-dom', 'react-dom/client', 'react/jsx-runtime', 'react/jsx-dev-runtime', 'zustand', 'three',
+      'd3-force', 'd3-delaunay', 'fflate', 'graphology', 'graphology-communities-louvain', 'picomatch',
+      '@leeoniya/ufuzzy', 'web-tree-sitter', 'marked', 'dompurify',
+      '@codemirror/state', '@codemirror/view', '@codemirror/language', '@codemirror/commands',
+      '@codemirror/autocomplete', '@codemirror/search', '@codemirror/language-data', '@lezer/highlight',
+    ],
+  },
   build: {
     target: 'es2022',
     rollupOptions: {

@@ -30,6 +30,16 @@
   color: var(--gm-text-dim);
   overflow-wrap: anywhere;
 }
+/* The active overlay's word on the file: its age (Recency) or hops from the selection (Dependency reach). */
+.gm-tooltip-overlay {
+  margin-top: 7px;
+  padding-top: 6px;
+  border-top: 1px solid var(--gm-hairline);
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
 .gm-tooltip-facts {
   display: flex;
   flex-wrap: wrap;
@@ -46,7 +56,10 @@
   padding: 13px 15px 14px;
   background: var(--gm-pill-bg-strong);
 }
-.gm-detail-head { display: flex; align-items: flex-start; gap: 10px; }
+/* the top bar is the card's handle: drag it to move the card off what it covers */
+.gm-detail-head { display: flex; align-items: flex-start; gap: 10px; margin: -13px -15px 0; padding: 13px 15px 0; cursor: grab; touch-action: none; user-select: none; }
+.gm-detail-head:active { cursor: grabbing; }
+.gm-detail-head .gm-icon-button { cursor: pointer; }
 .gm-detail-title {
   flex: 1 1 auto;
   min-width: 0;
@@ -75,7 +88,8 @@
 }
 .gm-detail-facts dt { color: var(--gm-text-dim); white-space: nowrap; }
 .gm-detail-facts dd { margin: 0; min-width: 0; }
-.gm-detail-names { display: flex; flex-wrap: wrap; gap: 1px 10px; margin-top: 2px; }
+/* each name is a 24 px target, so the rows need no gap of their own */
+.gm-detail-names { display: flex; flex-wrap: wrap; align-items: center; gap: 0 10px; }
 
 /* A file name that takes you to that file: the halo colour is the chrome's link colour. */
 .gm-detail-link {
@@ -85,8 +99,9 @@
   border: 0;
   border-radius: 3px;
   background: none;
-  color: var(--gm-halo);
+  color: var(--gm-link);
   font: inherit;
+  line-height: 24px;
   letter-spacing: inherit;
   text-align: left;
   overflow: hidden;

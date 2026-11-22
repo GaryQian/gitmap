@@ -1,15 +1,15 @@
-// Bottom right: the file-type legend and the minimum-lines slider in one translucent card
+// Bottom right: the file-type legend and the minimum-size slider in one translucent card
 // (PLAN.md §9, §17.6). A row isolates its type (Shift+click for several); the slider hides small,
 // unimportant files without moving anything.
 import { useId, useMemo, useState, type CSSProperties, type MouseEvent } from 'react';
 import { config } from '../../config';
 import type { AppMount } from '../../contracts/app';
 import { languageColor } from '../../shared';
-import { setMinLines, setTypeFilter, useApp, useReplica, useReplicaVersion } from '../store';
+import { setMinBytes, setTypeFilter, useApp, useReplica, useReplicaVersion } from '../store';
 import { APP_LOCAL } from '../tunables';
 import { Card, Strong, cx } from '../ui';
-import { countLabel, languageName } from '../units';
-import { countBelow, hideableLines, languageCounts, linesToSlider, nextTypeFilter, sliderToLines } from './slider';
+import { countLabel, formatBytes, languageName } from '../units';
+import { countBelow, hideableSizes, languageCounts, minBytesValueText, nextTypeFilter, sizeToSlider, sliderToSize } from './slider';
 import './legend.css';
 
 const STEPS = APP_LOCAL.legend.sliderSteps;
@@ -30,7 +30,7 @@ function TypeRows() {
   const onClick = (lang: string) => (e: MouseEvent) => setTypeFilter(nextTypeFilter(useApp.getState().typeFilter, lang, e.shiftKey));
 
   return (
-    <ul className="gm-legend-rows" aria-label="File types. Select one to isolate it; hold Shift to choose several.">
+    <ul className="gm-legend-rows" aria-label="File types. Enter or Space shows one type alone; with Shift held it adds a type or takes it out.">
       {rows.map(({ lang, count }) => {
         const on = typeFilter.includes(lang);
         const name = languageName(replica.meta, lang);
@@ -41,7 +41,7 @@ function TypeRows() {
               className={cx('gm-legend-row', on && 'is-active', filtering && !on && 'is-dimmed')}
               aria-pressed={on}
               aria-label={`${name}, ${countLabel(count, 'file', 'files')}`}
-              title={on ? 'Show all types again' : `Show only ${name} (Shift+click to add)`}
+              title={on ? 'Show all types again' : `Show only ${name} (Shift+click or Shift+Enter to add)`}
               onClick={onClick(lang)}
             >
               <span className="gm-lang-dot" style={{ background: languageColor(lang, config.visual, replica.meta?.languages?.[lang]?.color) }} aria-hidden="true" />
@@ -55,36 +55,36 @@ function TypeRows() {
   );
 }
 
-function MinLines() {
+function MinBytes() {
   const replica = useReplica();
   const rev = useReplicaVersion();
-  const minLines = useApp((s) => s.minLines);
+  const minBytes = useApp((s) => s.minBytes);
   const id = useId();
 
-  const { maxLines, hideable, total } = useMemo(() => {
-    if (!replica) return { maxLines: 0, hideable: [] as number[], total: 0 };
+  const { maxBytes, hideable, total } = useMemo(() => {
+    if (!replica) return { maxBytes: 0, hideable: [] as number[], total: 0 };
     const units = replica.table('unit');
     const live = (slot: number) => units.ids[slot] != null;
     let max = 0;
-    for (let i = 0; i < units.capacity; i++) if (live(i) && units.cols.loc[i]! > max) max = units.cols.loc[i]!;
-    return { maxLines: max, hideable: hideableLines(units.cols.loc, units.cols.importancePct, config.visual, live), total: units.count };
+    for (let i = 0; i < units.capacity; i++) if (live(i) && units.cols.bytes[i]! > max) max = units.cols.bytes[i]!;
+    return { maxBytes: max, hideable: hideableSizes(units.cols.bytes, units.cols.importancePct, config.visual, live), total: units.count };
   }, [replica, rev]);
 
-  // The thumb keeps its own position: several positions round to the same line count at the low
+  // The thumb keeps its own position: several positions round to the same size at the low
   // end, and a thumb driven by the rounded value would jump under the pointer.
-  const [step, setStep] = useState(() => Math.round(linesToSlider(minLines, maxLines) * STEPS));
-  const shownStep = sliderToLines(step / STEPS, maxLines) === Math.min(minLines, maxLines)
+  const [step, setStep] = useState(() => Math.round(sizeToSlider(minBytes, maxBytes) * STEPS));
+  const shownStep = sliderToSize(step / STEPS, maxBytes) === Math.min(minBytes, maxBytes)
     ? step
-    : Math.round(linesToSlider(minLines, maxLines) * STEPS); // the threshold or the model changed elsewhere
+    : Math.round(sizeToSlider(minBytes, maxBytes) * STEPS); // the threshold or the model changed elsewhere
 
-  const hidden = countBelow(hideable, minLines);
+  const hidden = countBelow(hideable, minBytes);
   const summary = hidden === 0 ? 'Showing every file' : `Hiding ${hidden.toLocaleString()} of ${countLabel(total, 'file', 'files')}`;
 
   return (
     <div className="gm-minlines">
       <div className="gm-minlines-head">
-        <label htmlFor={id}>Minimum lines</label>
-        <Strong>{minLines.toLocaleString()}</Strong>
+        <label htmlFor={id}>Minimum file size</label>
+        <Strong>{formatBytes(minBytes)}</Strong>
       </div>
       <input
         id={id}
@@ -94,16 +94,17 @@ function MinLines() {
         max={STEPS}
         step={1}
         value={shownStep}
-        disabled={maxLines === 0}
+        disabled={maxBytes === 0}
         style={{ '--gm-slider-fill': `${(shownStep / STEPS) * 100}%` } as CSSProperties}
-        aria-valuetext={`${countLabel(minLines, 'line', 'lines')}. ${summary}`}
+        aria-valuetext={minBytesValueText(minBytes, hidden, total)}
         onChange={(e) => {
           const next = Number(e.target.value);
           setStep(next);
-          setMinLines(sliderToLines(next / STEPS, maxLines));
+          setMinBytes(sliderToSize(next / STEPS, maxBytes));
         }}
       />
-      <div className="gm-minlines-summary" aria-live="polite">{summary}</div>
+      {/* not a live region: the slider's value text already says this once per step */}
+      <div className="gm-minlines-summary">{summary}</div>
     </div>
   );
 }
@@ -114,7 +115,7 @@ function Legend() {
   return (
     <Card blur className="gm-legend" role="group" aria-label="File types and size filter">
       <TypeRows />
-      <MinLines />
+      <MinBytes />
     </Card>
   );
 }

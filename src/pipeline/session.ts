@@ -14,13 +14,6 @@ import { createRenderer } from '../render';
 import { Emitter } from '../shared';
 import type { CoordinatorCalls, CoordinatorMethod, FromCoordinator, MainCalls, ToCoordinator } from './protocol';
 
-function appearance(config: Config): 'dark' | 'light' {
-  const a = config.settings.appearance;
-  if (a === 'light') return 'light';
-  if (a === 'system' && typeof matchMedia !== 'undefined' && matchMedia('(prefers-color-scheme: light)').matches) return 'light';
-  return 'dark';
-}
-
 /**
  * Where file contents come from (PLAN.md §12.1): the user's folder, or a demo's content pack read one
  * entry at a time and checked against the blob ids the map recorded. Null when there is neither.
@@ -101,7 +94,7 @@ export function createBrowserSession(source: RepoSource, config: Config): Sessio
       if (render) return render;
       render = createRenderer({
         canvas, config, replica, positions: physics.positions,
-        theme: opts.theme ?? appearance(config),
+        theme: opts.theme ?? 'dark',
         particles: opts.particles ?? config.settings.particles,
         reducedMotion: opts.reducedMotion ?? (typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches),
       });
@@ -182,6 +175,23 @@ export function createBrowserSession(source: RepoSource, config: Config): Sessio
     setSelectedOverlay(layer) { send({ type: 'selectedOverlay', layer }); },
     reportFrame(frameMs, interacting) { send({ type: 'frame', frameMs, interacting }); },
     loadFullHistory: () => call('loadFullHistory'),
+    ai: {
+      get available() {
+        return worker !== null && config.ai.enabled && source.kind !== 'demo'
+          && source.kind !== 'synthetic' && !(source.kind === 'snapshot' && !source.locator);
+      },
+      start: () => call('aiStart'),
+      async requestDetail(poiId, question) {
+        // The file itself says more than its skeleton: read it here, where the folder is, when it can be read.
+        const poi = replica.annotations.find((a) => a.type === 'poi' && a.id === poiId);
+        let text: string | null = null;
+        try {
+          if (poi?.type === 'poi' && content) text = new TextDecoder().decode(await content.read(poi.parent));
+        } catch { /* the skeleton will do */ }
+        return call('aiDetail', poiId, question, text);
+      },
+      cancel() { void call('aiCancel').catch(() => { /* nothing was running */ }); },
+    },
     async search(query, limit = 20): Promise<SearchHit[]> {
       // The index lives in the coordinator, beside the store (src/search). The substring match below
       // only answers while no coordinator is running: before start() and after dispose().

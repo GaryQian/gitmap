@@ -1,6 +1,7 @@
 // Messages between the main-thread Session and the coordinator worker.
 import type { Config } from '../config';
-import type { PipelineEvents, RepoSource, SearchHit } from '../contracts/pipeline';
+import type { DetailQuestion } from '../contracts/ai';
+import type { AiOutcome, PipelineEvents, RepoSource, SearchHit } from '../contracts/pipeline';
 import type { SettleReport } from '../contracts/physics';
 import type { LayoutSnapshot, RepoModel } from '../model/types';
 
@@ -23,6 +24,11 @@ export interface CoordinatorCalls {
   search(query: string, limit: number): SearchHit[];
   /** "Load full history": resolves when the uncapped walk has ended. */
   loadFullHistory(): void;
+  /** Generate the AI annotations that are missing. Called only once the viewer has agreed (PLAN.md §11). */
+  aiStart(): AiOutcome;
+  /** Answer one detail button. `fileText` is the file as the page could read it, or null. */
+  aiDetail(poiId: string, question: DetailQuestion, fileText: string | null): AiOutcome;
+  aiCancel(): void;
 }
 export type CoordinatorMethod = keyof CoordinatorCalls;
 

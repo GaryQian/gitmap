@@ -10,10 +10,12 @@ import { fromWireError, type FromWorker, type ToWorker } from './protocol';
  * script cannot load, so a new one would fail the same way). The slot is retired instead.
  */
 const MAX_FAILED_STARTS = 3;
+/** A task whose worker died is given to the replacement worker this many times before it fails. */
+const MAX_TASK_RETRIES = 2;
 
 interface Slot {
   worker: Worker | null;
-  running: { id: number; resolve(value: unknown): void; reject(error: Error): void } | null;
+  running: { id: number; resolve(value: unknown): void; reject(error: Error): void; task: string; input: unknown; canResend: boolean; retries: number } | null;
   /** setRepo calls waiting for this worker's acknowledgement, by seq. */
   acks: Map<number, () => void>;
   failedStarts: number;
@@ -37,7 +39,11 @@ export function createWorkerBackend(config: Config, size: number): PoolBackend {
     worker.onmessage = (ev: MessageEvent<FromWorker>) => { if (slot.worker === worker) onMessage(slot, ev.data); };
     worker.onerror = (ev) => {
       ev.preventDefault?.();
-      if (slot.worker === worker) onFailure(i, new Error(`compute worker ${i} failed: ${ev.message || 'unknown error'}`));
+      // No message at all means the script (or one of its imports) could not be loaded.
+      const why = ev.message || (import.meta.env?.DEV
+        ? 'its script could not be loaded (if the dev server restarted or rebuilt, reload the page)'
+        : 'its script could not be loaded');
+      if (slot.worker === worker) onFailure(i, new Error(`compute worker ${i} failed: ${why}`));
     };
     worker.onmessageerror = () => {
       if (slot.worker === worker) onFailure(i, new Error(`compute worker ${i} sent a message that could not be read`));
@@ -75,7 +81,18 @@ export function createWorkerBackend(config: Config, size: number): PoolBackend {
     // waiting on an acknowledgement need; a retired worker has nothing left to acknowledge.
     for (const ack of slot.acks.values()) ack();
     slot.acks.clear();
-    running?.reject(error);
+    // One lost worker should not fail a parse: hand its task to the replacement, unless the input's
+    // buffers were transferred away with the first attempt.
+    if (running && slot.worker && running.canResend && running.retries < MAX_TASK_RETRIES) {
+      const id = nextId++;
+      slot.running = { ...running, id, retries: running.retries + 1 };
+      try {
+        send(slot, { type: 'run', id, task: running.task, input: running.input });
+      } catch (e) {
+        slot.running = null;
+        running.reject(e as Error);
+      }
+    } else running?.reject(error);
     if (slot.retired) backend.onWorkerLost?.(i, error);
   }
 
@@ -87,7 +104,7 @@ export function createWorkerBackend(config: Config, size: number): PoolBackend {
       return new Promise<unknown>((resolve, reject) => {
         if (!slot.worker) { reject(new Error(`compute worker ${i} is not running`)); return; }
         const id = nextId++;
-        slot.running = { id, resolve, reject };
+        slot.running = { id, resolve, reject, task: req.type, input: req.input, canResend: !req.transfer?.length, retries: 0 };
         try {
           send(slot, { type: 'run', id, task: req.type, input: req.input }, req.transfer ?? []);
         } catch (e) {

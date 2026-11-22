@@ -157,10 +157,12 @@ async function runPipeline(args: Args): Promise<RepoModel> {
  * Walk history once to compute the overlay layers (Recency, Ownership, Knowledge risk) and the
  * contributor table, write them into `ctx.model.layers` / `ctx.model.tables.contributor`, then
  * discard the history: no commits, trees or diffs go into the snapshot.
- * Currently a no-op: the snapshot has no history layers.
+ * Nothing is left to do here: runHeadless (step 1) walks the history itself and returns the model
+ * with the three layers and the contributor table in it, and keeps no commits. finishModel strips
+ * the contributors' addresses.
  */
 async function computeHistoryLayers(_ctx: BuildContext): Promise<void> {
-  // filled in by the history package
+  // done by the pipeline: src/pipeline/history.ts
 }
 
 /**

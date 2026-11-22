@@ -5,7 +5,7 @@ import { Background } from './Background';
 import { Landing } from './landing/Landing';
 import { Region } from './mounts';
 import { attachCanvas } from './session';
-import { useApp, usePhase, useReducedMotion, useRepoName, useSession } from './store';
+import { setContextLost, useApp, usePhase, useReducedMotion, useRepoName, useSession } from './store';
 import { Waiting } from './waiting/Waiting';
 
 /** How long the map canvas takes to fade in over the background at the reveal; matches shell.css. */
@@ -17,7 +17,22 @@ function MapCanvas() {
   const sessionId = useApp((s) => s.sessionId);
   const canvas = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
-    if (session && canvas.current) attachCanvas(canvas.current);
+    const el = canvas.current;
+    if (!session || !el) return;
+    // The canvas itself says when its WebGL context goes and comes back; the renderer stops and
+    // starts drawing on the same two events. Listening first means a context that is already gone
+    // when the renderer is created is not missed.
+    // (disposing a renderer also loses its context: that one belongs to a map already closed)
+    const lost = () => { if (useApp.getState().session === session) setContextLost(true); };
+    const restored = () => setContextLost(false);
+    el.addEventListener('webglcontextlost', lost);
+    el.addEventListener('webglcontextrestored', restored);
+    attachCanvas(el);
+    return () => {
+      el.removeEventListener('webglcontextlost', lost);
+      el.removeEventListener('webglcontextrestored', restored);
+      setContextLost(false);
+    };
   }, [session]);
   if (!session) return null;
   return <canvas key={sessionId} ref={canvas} className="gm-map-canvas" aria-label="Map of the repository" />;

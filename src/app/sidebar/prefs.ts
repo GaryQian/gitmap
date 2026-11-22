@@ -3,7 +3,7 @@
 import { create } from 'zustand';
 import { SIDEBAR_LOCAL as T } from './tunables';
 
-export type MarkdownView = 'preview' | 'source';
+export type MarkdownView = 'preview' | 'split' | 'source';
 export interface ReaderPrefs { width: number; markdown: MarkdownView }
 
 const DEFAULTS: ReaderPrefs = { width: T.widthDefaultPx, markdown: 'preview' };
@@ -15,7 +15,7 @@ function load(): ReaderPrefs {
     const { width, markdown } = saved as Partial<ReaderPrefs>;
     return {
       width: typeof width === 'number' && Number.isFinite(width) ? width : DEFAULTS.width,
-      markdown: markdown === 'source' ? 'source' : 'preview',
+      markdown: markdown === 'source' || markdown === 'split' ? markdown : 'preview',
     };
   } catch {
     return DEFAULTS; // no storage, or something else wrote the key

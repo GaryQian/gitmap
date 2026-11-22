@@ -1,0 +1,66 @@
+/* Status cards of the map screen (PLAN.md §17.6): chrome material, tokens only, no shadows. */
+
+/* Centred over the canvas, in the overlay layer. Not a modal: the layer lets the pointer through,
+   so the chrome around the card stays usable. */
+.gm-status-center {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  pointer-events: none;
+}
+.gm-status-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  max-width: min(380px, 100%);
+  padding: 16px 20px;
+  text-align: center;
+}
+.gm-status-card-text { margin: 0; font-size: 13px; line-height: 1.5; text-wrap: balance; }
+/* the one action carries the halo, like the button segment of an action pill */
+.gm-pill.gm-status-card-action { color: var(--gm-halo); font-weight: 500; }
+
+/* ---- the landing page's line, when it offers something to do ---- */
+
+.gm-message-action {
+  margin: 0 0 0 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--gm-halo);
+  font: inherit;
+  font-weight: 500;
+  letter-spacing: inherit;
+  cursor: pointer;
+  border-radius: 3px;
+}
+.gm-message-action:hover { text-decoration: underline; }
+.gm-message-action:disabled { color: var(--gm-text-dim); cursor: default; text-decoration: none; }
+
+/* ---- the waiting screen ---- */
+
+/* A stage with no count to show still shows that something is happening: a short run of the line
+   travels along the pill's lower edge. Reduced motion cuts it short, like every other animation. */
+@keyframes gm-status-travel {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(340%); }
+}
+.gm-waiting-pill .gm-line.gm-line-busy > span {
+  width: 30%;
+  transform: none;
+  animation: gm-status-travel 1600ms ease-in-out infinite;
+}
+.gm-waiting-note {
+  position: absolute;
+  top: calc(50% + 34px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  font-size: 13px;
+  line-height: 20px;
+  text-align: center;
+  color: var(--gm-text-dim);
+}

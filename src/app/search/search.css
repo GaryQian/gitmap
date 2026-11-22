@@ -9,8 +9,8 @@
 :root[data-theme='dark'] .gm-search-pill:hover:not(.is-expanded) { box-shadow: 0 0 16px color-mix(in srgb, var(--gm-halo) 16%, transparent); }
 
 /* The focus ring belongs to the whole pill, not to the bare field inside it. */
-.gm-search-pill:has(.gm-search-input:focus-visible) { outline: 2px solid var(--gm-halo); outline-offset: 2px; }
-.gm-search-input:focus-visible { outline: none; }
+.gm-search-pill:has(.gm-search-input:focus-visible) { outline: 2px solid var(--gm-halo); outline-offset: 2px; box-shadow: 0 0 0 5px var(--gm-focus-band); }
+.gm-search-input:focus-visible { outline: none; --gm-focus-band: transparent; }
 
 .gm-search-icon { flex: 0 0 auto; }
 
@@ -88,6 +88,6 @@
 .gm-search-dir { font-size: 12px; line-height: 16px; color: var(--gm-text-dim); }
 
 /* Matched characters: the halo colour, at the weight of the text around them. */
-.gm-search-hit { background: none; color: var(--gm-halo); font: inherit; }
+.gm-search-hit { background: none; color: var(--gm-link); font: inherit; }
 
 .gm-search-empty { margin: 0; padding: 7px 10px; color: var(--gm-text-dim); }

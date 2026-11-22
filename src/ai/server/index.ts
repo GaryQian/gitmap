@@ -18,8 +18,10 @@ export { AiError } from './errors';
 export type { AiErrorCode } from './errors';
 export { clientIp, createMemoryLimiter } from './limiter';
 export type { Limiter, LimitResult } from './limiter';
-export { createAnthropicProvider, createCannedProvider, estimateTokens, getProvider } from './provider';
+export { createAnthropicProvider, createCannedProvider, estimateTokens, getProvider, resolveProviderId } from './provider';
 export type { AnthropicProviderOptions, CannedProvider, CannedReply, CannedScript, Env } from './provider';
+export { createOpenAiProvider, matchesSchema, strictSchemaIssues } from './openai';
+export type { OpenAiProviderOptions } from './openai';
 
 /**
  * Dependencies for the handlers, from the environment. Never throws: a missing key or an unknown

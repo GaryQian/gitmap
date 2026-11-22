@@ -9,7 +9,7 @@ import { parseRef, unitRef } from '../../model/types';
 import type { ColumnChunk, NodeRef, StructureTables } from '../../model/types';
 import { syntheticTables, tablesToFullBatch } from '../../testing/synthetic';
 import { matcher } from './filters';
-import { buildDetailContext, buildDigest, buildDigestText, poiCount } from './index';
+import { buildDetailContext, buildDigest, buildDigestText, digestHash, poiCount } from './index';
 import type { DigestInput } from './index';
 
 // ---- a hand-made repository on top of the synthetic clusters ----
@@ -153,9 +153,37 @@ describe('digest builder', () => {
     const files = (refs: NodeRef[]) => refs.filter((r) => r.startsWith('u:'));
     expect(files(other.refs)).not.toEqual(files(a.refs));
 
-    const otherModels = await buildDigest(input(repo, withConfig({ ai: { digestTokens: tight.ai.digestTokens, models: { bulk: 'another-model' } } })));
+    // Both providers' blocks change, so this holds whichever provider the environment selects.
+    const swapped = { bulk: 'another-model' };
+    const otherModels = await buildDigest(input(repo, withConfig({ ai: { digestTokens: tight.ai.digestTokens, models: swapped, openaiModels: swapped } })));
     expect(otherModels.digest).toBe(a.digest);
     expect(otherModels.hash).not.toBe(a.hash);
+  });
+
+  it('hashes the active provider and its own models, so switching provider regenerates', async () => {
+    const anthropic = await digestHash('the digest', config, { VITE_AI_PROVIDER: 'anthropic' });
+    const openai = await digestHash('the digest', config, { VITE_AI_PROVIDER: 'openai' });
+    expect(openai).not.toBe(anthropic);
+    expect(await digestHash('the digest', config, { VITE_AI_PROVIDER: ' OpenAI ' })).toBe(openai);
+    // No variable set: config.ai.provider decides.
+    expect(await digestHash('the digest', withConfig({ ai: { provider: 'openai' } }), {})).toBe(openai);
+
+    // Each of the three tiers is part of the hash: changing only the tour's model is a new hash
+    // (and so a new set of annotations, not only a new tour).
+    for (const tier of ['synthesis', 'tour', 'bulk'] as const) {
+      const changed = withConfig({ ai: { models: { [tier]: 'another-model' } } });
+      expect(await digestHash('the digest', changed, { VITE_AI_PROVIDER: 'anthropic' }), tier).not.toBe(anthropic);
+      expect(await digestHash('the digest', changed, { VITE_AI_PROVIDER: 'openai' }), tier).toBe(openai);
+    }
+
+    // Only the active provider's models count.
+    const otherOpenAi = withConfig({ ai: { openaiModels: { synthesis: 'another-model' } } });
+    expect(await digestHash('the digest', otherOpenAi, { VITE_AI_PROVIDER: 'openai' })).not.toBe(openai);
+    expect(await digestHash('the digest', otherOpenAi, { VITE_AI_PROVIDER: 'anthropic' })).toBe(anthropic);
+
+    // Same ids under another provider's name are still another provider.
+    const sameIds = withConfig({ ai: { openaiModels: config.ai.models } });
+    expect(await digestHash('the digest', sameIds, { VITE_AI_PROVIDER: 'openai' })).not.toBe(anthropic);
   });
 
   it('never shows excluded, test or secret material, in the digest or in any city context', () => {

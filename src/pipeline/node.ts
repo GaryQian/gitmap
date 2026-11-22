@@ -2,6 +2,7 @@
 // Parse → resolve → cluster → settle → history layers → model, with an in-process pool and physics engine.
 import { createInlinePool } from '../compute';
 import type { Config } from '../config';
+import type { AiClient } from '../ai';
 import type { FactsCache } from '../contracts/ingest';
 import type { PhysicsEngine, SettleReport } from '../contracts/physics';
 import type { PipelineEvents, RepoSource, SearchHit } from '../contracts/pipeline';
@@ -11,9 +12,10 @@ import { createModelStore } from '../model';
 import type { RepoModel } from '../model/types';
 import { memoryBlobStore, openPersistence } from '../persist';
 import { createPhysicsEngine } from '../physics';
+import { createPipelineAi, type PipelineAi } from './ai';
 import { runSource, type PipelineDeps, type PipelineState } from './core';
 import type { PipelinePersistence } from './persist';
-import { afterReveal } from './post';
+import { afterReveal, update } from './post';
 import { createPipelineSearch } from './search';
 import { allTasks } from './tasks';
 
@@ -25,6 +27,21 @@ export interface HeadlessResult {
   model: RepoModel;
   /** The same path search the app's Session.search answers with. */
   search(query: string, limit?: number): SearchHit[];
+  /**
+   * "N files changed · Update", as the app runs it: re-parse what changed in the folder, place it,
+   * re-layout. Resolves with the model as it is afterwards (`model` above stays the first one).
+   */
+  update(): Promise<RepoModel>;
+  /**
+   * Wait for what is still trickling in (the history walk, a pending snapshot write) and return the
+   * model as it is now: after `ai.start()`, say.
+   */
+  finish(): Promise<RepoModel>;
+  /**
+   * AI annotations, as the app's Session.ai runs them. Nothing is generated until `start` is called.
+   * Results land in `store`; a snapshot write follows them when there is storage.
+   */
+  ai: PipelineAi;
   dispose(): void;
 }
 
@@ -46,6 +63,11 @@ export interface HeadlessOptions {
   persist?: HeadlessPersistence;
   /** Walk git history for the overlay layers and wait for it before returning. Default true. */
   history?: boolean;
+  /**
+   * The client `ai` calls through. Default: the same-origin /api/ai routes, which a Node process
+   * does not have; pass one whose `fetch` calls the handlers of src/ai/server (see src/ai/README.md).
+   */
+  aiClient?: AiClient;
   onEvent?<E extends keyof PipelineEvents>(evt: E, payload: PipelineEvents[E]): void;
 }
 
@@ -86,15 +108,25 @@ export async function runHeadless(source: RepoSource, baseConfig: Config, opts: 
     history: opts.history,
   };
   const state = await runSource(source, deps);
+  const ai = createPipelineAi(deps, () => state, opts.aiClient);
   await afterReveal(deps, state);
   // Nothing follows a headless run, so everything that would trickle in after the reveal is waited for.
-  await state.history?.done;
-  if (state.saver) await state.saver.flush();
-  const model = store.toModel(await physics.getLayout());
+  const finished = async (): Promise<RepoModel> => {
+    await state.history?.done;
+    if (state.saver) await state.saver.flush();
+    return store.toModel(await physics.getLayout());
+  };
+  const model = await finished();
   return {
-    store, physics, state, model,
+    store, physics, state, model, ai,
     search: (query, limit) => search.search(query, limit),
+    finish: finished,
+    async update() {
+      await update(deps, state);
+      return finished();
+    },
     dispose() {
+      ai.cancel();
       state.history?.dispose();
       state.saver?.dispose();
       search.dispose();

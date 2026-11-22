@@ -1,45 +1,37 @@
-// AI in the chrome (PLAN.md §11.4): asking once per repository before any code excerpt leaves the
-// machine, starting generation once the answer is yes, answering the detail buttons, and one quiet
-// line when something fails. While generation runs nothing is added to the screen: the shell's
-// progress pill already shows the `ai` subsystem.
-import { useEffect, useId, useMemo, type CSSProperties } from 'react';
-import { aiAllowed, shouldAsk } from '../../ai';
+// AI in the chrome (PLAN.md §11.4): the prompt at the bottom centre (asking before any code excerpt
+// leaves the machine, and afterwards one pill for as long as AI is not writing notes for this map),
+// starting generation once the answer is yes, answering the detail buttons, and one quiet line when
+// something fails. While generation runs nothing is added to the screen: the shell's progress pill
+// already shows the `ai` subsystem. The settings card's "AI notes" row is in AiSettingsRow.tsx.
+import { useEffect, useId, useLayoutEffect, useRef, type CSSProperties } from 'react';
 import type { AppMount } from '../../contracts/app';
 import { setDetailRequester } from '../poi';
-import { useReplica, useSession } from '../store';
+import { useApp, useSession } from '../store';
 import { Card, Pill, PillButton } from '../ui';
-import { sessionController } from './controller';
-import { clearAiFailure, getAiConsent, requestDetail, setAiConsent, startGeneration, useAiUi } from './state';
+import { aiCanRun, aiPrompt, inFlight, type AiPrompt } from './rules';
+import { clearAiFailure, generationPending, requestDetail, retryGeneration, startGeneration, switchAi, useAiUi } from './state';
 import { AI_UI } from './tunables';
+import { useAiFacts } from './useAiFacts';
 import './ai.css';
 
-/** How a provider id from `config.ai.provider` is written in a sentence. */
-const PROVIDER_NAMES: Record<string, string> = { anthropic: 'Anthropic', openai: 'OpenAI', google: 'Google' };
-function providerName(id: string): string {
-  return PROVIDER_NAMES[id.toLowerCase()] ?? (id ? id[0].toUpperCase() + id.slice(1) : 'the AI provider');
-}
+const NO_PROMPT: AiPrompt = { kind: 'none' };
 
 /**
- * The consent prompt, and the wiring that follows from the answer. A card at the bottom centre of
- * the overlay layer: it does not block the map and does not take the focus; its two buttons are
- * ordinary tab stops.
+ * The prompt, and the wiring that follows from the answer. One slot at the bottom centre, above the
+ * tour pill: the consent card while the viewer has not answered, and after that a single pill
+ * whenever AI is not writing notes for this map (rules.ts has the cases). Neither blocks the map or
+ * takes the focus; their buttons are ordinary tab stops.
  */
-function AiConsent() {
-  const session = useSession();
-  const replica = useReplica(); // re-renders as the model changes: meta arriving, annotations stored
-  const explicit = useAiUi((s) => s.controller);
-  const consentRev = useAiUi((s) => s.consentRev);
+function AiPromptSlot() {
+  const { session, replica, controller, meta, consent } = useAiFacts();
+  const progress = useApp((s) => s.progress.ai);
   const titleId = useId();
+  const pill = useRef<HTMLButtonElement>(null);
+  /** "Not now" was pressed: its button is about to go, and the pill that replaces it takes the focus. */
+  const handFocusOn = useRef(false);
 
-  const controller = useMemo(() => explicit ?? sessionController(session), [explicit, session]);
-  const meta = replica?.meta ?? null;
-  const repoId = meta?.id ?? null;
-  // consentRev is the change signal for the stored answer
-  const consent = useMemo(() => (repoId === null ? null : getAiConsent(repoId)), [repoId, consentRev]);
-
-  const usable = session !== null && aiAllowed(session.config, meta) && controller.available;
-  const granted = usable && consent === 'granted';
-  const ask = usable && shouldAsk({ config: session.config, meta, annotations: replica?.annotations ?? [], consent });
+  const available = controller.available;
+  const granted = session !== null && consent === 'granted' && aiCanRun({ config: session.config, meta, available });
 
   // Consent given (now, or on an earlier visit): generate what is missing. A stored set that is
   // complete for the current digest makes no request, so this is safe on every visit.
@@ -55,22 +47,41 @@ function AiConsent() {
     return () => setDetailRequester(null);
   }, [granted, session, controller]);
 
-  if (!ask || !session || repoId === null) return null;
-  return (
-    <div className="gm-ai-consent-wrap">
-      <Card blur className="gm-ai-consent" role="region" aria-labelledby={titleId}>
+  const prompt = session === null ? NO_PROMPT : aiPrompt({
+    config: session.config, meta, available, consent,
+    annotations: replica?.annotations ?? [],
+    busy: generationPending(session) || inFlight(progress),
+  });
+
+  const kind = prompt.kind;
+  useLayoutEffect(() => {
+    const nowhere = !document.activeElement || document.activeElement === document.body;
+    if (kind === 'pill' && handFocusOn.current && nowhere) pill.current?.focus({ preventScroll: true });
+    handFocusOn.current = false;
+  }, [kind]);
+
+  if (!session || prompt.kind === 'none') return null;
+  if (prompt.kind === 'card') {
+    return (
+      <Card blur className="gm-ai-prompt gm-ai-consent" role="region" aria-labelledby={titleId}>
         <h2 className="gm-ai-consent-title" id={titleId}>Add AI notes to this map?</h2>
         <p className="gm-ai-consent-text">
-          Writing the summaries, points of interest and tour sends code excerpts
-          to {providerName(session.config.ai.provider)}: signatures, doc comments and README excerpts, not whole files.
+          Adds city summaries, points of interest and a guided tour.
         </p>
-        <p className="gm-ai-consent-text">Asking for more about a point of interest sends the one file it stands on.</p>
         <div className="gm-ai-consent-actions">
-          <PillButton size="small" onClick={() => setAiConsent(repoId, 'declined')}>Not now</PillButton>
-          <PillButton size="small" className="gm-ai-allow" onClick={() => setAiConsent(repoId, 'granted')}>Allow for this repo</PillButton>
+          <PillButton size="small" onClick={() => { handFocusOn.current = true; switchAi(session, controller, 'off'); }}>Not now</PillButton>
+          <PillButton size="small" className="gm-ai-allow" onClick={() => switchAi(session, controller, 'on')}>Allow for this repo</PillButton>
         </div>
       </Card>
-    </div>
+    );
+  }
+  const act = prompt.action === 'retry'
+    ? () => retryGeneration(session, controller)
+    : () => switchAi(session, controller, 'on');
+  return (
+    <PillButton blur ref={pill} className="gm-ai-prompt gm-ai-prompt-pill" onClick={act}>
+      {prompt.label}
+    </PillButton>
   );
 }
 
@@ -102,9 +113,10 @@ function AiFailure() {
   );
 }
 
+// Bottom centre, top to bottom: the failure line (5), the prompt (7), the tour pill (10). The top
+// row is full, and a line this long would push its pills around.
 const mounts: AppMount[] = [
-  { region: 'overlay', order: 10, Component: AiConsent },
-  // bottom centre, above the tour pill (10): the top row is full, and a line this long would push its pills around
   { region: 'bottomCenter', order: 5, Component: AiFailure },
+  { region: 'bottomCenter', order: 7, Component: AiPromptSlot },
 ];
 export default mounts;

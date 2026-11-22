@@ -13,6 +13,7 @@ import {
   createSnapshotWriter, recordFromModel, snapshotFileName,
   type BlobStore, type RepoRegistry, type SnapshotStore, type SnapshotWriter,
 } from '../persist';
+import { settleDetails } from './ai';
 
 /** The storage the pipeline uses. `openPersistence()` gives the first two; all three have in-memory twins. */
 export interface PipelinePersistence {
@@ -87,7 +88,8 @@ export function startSaving(opts: SavingOptions): SnapshotWriter {
     onError: opts.onError,
     async getModel() {
       if (!store.replica.meta) return null;
-      const model = store.toModel(await opts.getLayout());
+      // a detail still being written when the tab closes would be stored as loading for ever
+      const model = settleDetails(store.toModel(await opts.getLayout()));
       // The snapshot is still worth writing when the record cannot be: opening the folder finds it by id.
       try { await persist.registry.put(recordFromModel(model, locator)); } catch (err) { opts.onError?.(err); }
       return model;

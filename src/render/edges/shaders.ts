@@ -51,7 +51,7 @@ float gmPulseHead(float len, float w01, float ph, vec2 rr, out float travel) {
 
 const GLSL_ENDS = GLSL_POSITIONS + /* glsl */ `
 uniform float uTime; uniform float uPixelWorld;
-uniform float uAlpha; uniform float uMinLines; uniform float uFadeIn;
+uniform float uAlpha; uniform float uMinBytes; uniform float uFadeIn;
 attribute vec4 aEnds; attribute vec4 aW; attribute vec4 aFx;
 #ifdef RIBBON
 attribute vec3 aCa; attribute vec3 aCb;
@@ -60,7 +60,7 @@ int gmSlot(float f) { return f < 0.0 ? -1 : int(f + 0.5); }
 /** How visible this instance is (0: skip it), and its two ends. ra, rb = radii of the spheres at the ends. */
 float gmEdge(out vec3 a, out vec3 b, out float ra, out float rb, out vec3 ca, out vec3 cb) {
   float fade = clamp((uTime - aFx.x) / max(uFadeIn, 1e-3), 0.0, 1.0);
-  float vis = uAlpha * fade * step(uMinLines, aFx.y);
+  float vis = uAlpha * fade * step(uMinBytes, aFx.y);
   #ifdef RIBBON
     vec2 ga = gmCity(gmSlot(aEnds.z)).xy + gmDistrict(gmSlot(aEnds.x)).xy;
     vec2 gb = gmCity(gmSlot(aEnds.w)).xy + gmDistrict(gmSlot(aEnds.y)).xy;

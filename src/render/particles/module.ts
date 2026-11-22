@@ -70,13 +70,13 @@ export function createParticles(): SceneModule {
   function chooseAmbientHosts(): void {
     hostsDirty = false;
     const units = ctx.replica.table('unit');
-    const visual = ctx.config.visual, minLines = ctx.state.minLines;
+    const visual = ctx.config.visual, minBytes = ctx.state.minBytes;
     const shown = ctx.state.typeFilter.length ? new Set(ctx.state.typeFilter) : null;
     const weight = new Float32Array(units.capacity);
     for (let u = 0; u < units.capacity; u++) {
       if (units.ids[u] == null || (units.refSlots.district[u] ?? -1) < 0) continue;
       const pct = units.cols.importancePct[u];
-      if (units.cols.loc[u] < minLines && glowAmount(pct, visual) <= 0) continue;   // hidden by the size slider
+      if (units.cols.bytes[u] < minBytes && glowAmount(pct, visual) <= 0) continue;   // hidden by the size slider
       if (shown && !shown.has(units.cols.lang[u])) continue;                        // dimmed by the type filter
       weight[u] = windWeight(pct);
     }
@@ -177,7 +177,7 @@ export function createParticles(): SceneModule {
 
     unsubscribe.push(
       ctx.bus.on('burst', (b) => burst(b.ref, b.kind)),
-      ctx.bus.on('minLines', markHostsDirty),
+      ctx.bus.on('minBytes', markHostsDirty),
       ctx.bus.on('typeFilter', markHostsDirty),
       ctx.bus.on('particles', () => ctx.invalidate()),
     );

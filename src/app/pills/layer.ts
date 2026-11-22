@@ -6,6 +6,8 @@ import type { Session } from '../../contracts/pipeline';
 import type { FrameInfo, RenderApi, ScreenPoint } from '../../contracts/render';
 import { cityRef, districtRef, type NodeRef } from '../../model/types';
 import { clamp, groundToPixels, sceneObstacles } from '../anchor';
+import { useApp } from '../store';
+import { sceneFadeFloor } from '../theme';
 import { APP_LOCAL } from '../tunables';
 import { distanceFade, keepPills, type PillBox, type Rect } from './place';
 
@@ -52,6 +54,9 @@ interface Drag {
   moved: boolean;
 }
 
+/** Shift+arrow moves a focused pill's city or district this far on screen: the keyboard's drag. CSS pixels. */
+const KEY_NUDGE_PX = 24;
+
 export interface PillLayer {
   /** Counts or names may have changed (the size slider moved): rebuild the labels on the next update. */
   invalidate(): void;
@@ -83,6 +88,9 @@ export function createPillLayer(container: HTMLElement, render: RenderApi, sessi
   /** Where the fixed chrome is, in scene coordinates; re-read now and then, never per frame. */
   let chrome: Rect[] = [];
   let chromeReadAt = -Infinity;
+  /** The least opacity a distance-faded pill may have, for the mode it was worked out for. */
+  let minFade = 0;
+  let fadeMode: string | null = null;
 
   // ---- elements ----
 
@@ -224,18 +232,22 @@ export function createPillLayer(container: HTMLElement, render: RenderApi, sessi
     const now = performance.now();
     const positions = session.physics.positions;
     const cameraDistance = lastFrame?.cameraDistance ?? Infinity;
+    // a far pill fades, but never below what keeps its text readable over a bright star (theme.ts)
+    const mode = useApp.getState().mode;
+    if (mode !== fadeMode) { fadeMode = mode; minFade = sceneFadeFloor(mode); }
+    const fade = (depth: number): number => Math.max(minFade, distanceFade(depth, cameraDistance));
 
     candidates.length = 0;
     for (const city of cities) {
       const at = render.project(city.ref);
       if (!at) continue;
       const radius = positions.city[3 * city.slot + 2] ?? 0;
-      if (at.visible) offer(city, at, radius, distanceFade(at.depth, cameraDistance));
+      if (at.visible) offer(city, at, radius, fade(at.depth));
       // districts are always named, even when their city's centre is off screen; where pills would
       // overlap, the city's wins (keepPills)
       for (const district of city.districts) {
         const dAt = render.project(district.ref);
-        if (dAt?.visible) offer(district, dAt, positions.district[3 * district.slot + 2] ?? 0, distanceFade(dAt.depth, cameraDistance));
+        if (dAt?.visible) offer(district, dAt, positions.district[3 * district.slot + 2] ?? 0, fade(dAt.depth));
       }
     }
 
@@ -360,11 +372,28 @@ export function createPillLayer(container: HTMLElement, render: RenderApi, sessi
     void render.flyTo(pill.label!.ref).catch(() => {});
   }
 
+  /** The keyboard's drag: one step on screen, then let go, exactly as a short drag with the pointer would. */
+  function nudge(pill: Pill, dx: number, dy: number): void {
+    const ref = pill.label!.ref;
+    const at = render.project(ref);
+    const ground = at ? render.screenToGround(at.x + dx, at.y + dy) : null;
+    if (!ground) return;
+    try {
+      session.physics.drag(ref, ground.x, ground.z);
+      session.physics.release(ref);
+    } catch (err) { console.warn('starmap: physics.drag failed', err); }
+    schedule();
+  }
+
   function onKeyDown(e: KeyboardEvent): void {
-    const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const dx = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+    const dy = e.key === 'ArrowDown' ? 1 : e.key === 'ArrowUp' ? -1 : 0;
+    const step = dx || dy;
     const pill = step === 0 ? null : pillOf(e.target);
     if (!pill || order.length === 0) return;
     e.preventDefault();
+    if (e.shiftKey) { nudge(pill, dx * KEY_NUDGE_PX, dy * KEY_NUDGE_PX); return; }
     const at = order.indexOf(pill);
     order[(at + step + order.length) % order.length]!.el.focus();
   }

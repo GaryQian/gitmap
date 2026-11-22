@@ -81,10 +81,10 @@ export function createSpheres(): SceneModule {
   let langDimTex!: THREE.DataTexture;
   let rampTex!: THREE.DataTexture;
   let knownLangs = 0;
-  let counts: { rev: number; minLines: number; map: Map<NodeRef, { visible: number; total: number }> } | null = null;
+  let counts: { rev: number; minBytes: number; map: Map<NodeRef, { visible: number; total: number }> } | null = null;
 
   const own = {
-    uGrow: { value: 1 }, uMinLines: { value: 0 }, uSelScale: { value: 1 }, uBreathe: { value: 1.5 }, uSpikesFrom: { value: 0.75 },
+    uGrow: { value: 1 }, uMinBytes: { value: 0 }, uSelScale: { value: 1 }, uBreathe: { value: 1.5 }, uSpikesFrom: { value: 0.75 },
     uOverlayMix: { value: 0 }, uOverlayBlend: { value: 1 }, uMinPx: { value: S.minPixelRadius },
     uUnknown: { value: new THREE.Vector3(0.5, 0.5, 0.5) }, uUnknownFrom: { value: new THREE.Vector3(0.5, 0.5, 0.5) },
     uEmphasis: { value: new THREE.Vector4(S.breatheScale, S.hoverScale, S.selectedGlow, S.highlightGlow) }, uHoverGlow: { value: S.hoverGlow },
@@ -193,7 +193,7 @@ export function createSpheres(): SceneModule {
     allocateViewState(buffers.capacity);
 
     own.uGrow.value = Math.max(0.001, (config.reveal.growMs * RENDER_LOCAL.reveal.grow) / 1000);
-    own.uMinLines.value = ctx.state.minLines;
+    own.uMinBytes.value = ctx.state.minBytes;
     own.uSelScale.value = config.visual.selectedScale;
     own.uBreathe.value = Math.max(0.05, star.breatheMs / 1000);
     // spikes start at an importance percentile; the instance carries glow (0 at glowFromPct, 1 at the top)
@@ -243,14 +243,14 @@ export function createSpheres(): SceneModule {
       ctx.bus.on('selection', syncFlags),
       ctx.bus.on('highlights', syncFlags),
       ctx.bus.on('typeFilter', syncLangDim),
-      ctx.bus.on('minLines', (n) => { own.uMinLines.value = n; }),
+      ctx.bus.on('minBytes', (n) => { own.uMinBytes.value = n; }),
       ctx.bus.on('overlay', (view) => { fade.set(view, live); ctx.animate(2 * S.overlayFadeMs + 100); }),
     );
 
     const api: SpheresApi = {
       visibleCounts() {
-        const rev = ctx.replica.rev, minLines = ctx.state.minLines;
-        if (!counts || counts.rev !== rev || counts.minLines !== minLines) counts = { rev, minLines, map: visibleCounts(ctx.replica, minLines, config.visual) };
+        const rev = ctx.replica.rev, minBytes = ctx.state.minBytes;
+        if (!counts || counts.rev !== rev || counts.minBytes !== minBytes) counts = { rev, minBytes, map: visibleCounts(ctx.replica, minBytes, config.visual) };
         return counts.map;
       },
       setHover(slot) {
@@ -270,7 +270,7 @@ export function createSpheres(): SceneModule {
         if (stateData[slot * STATE_ITEMS + 1] > ctx.now()) return false;
         const h = slot * SHAPE_ITEMS;
         const selected = (stateData[slot * STATE_ITEMS] & FLAG_SELECTED) !== 0;
-        return selected || !(buffers.shape[h + 2] < ctx.state.minLines && buffers.shape[h + 1] <= 0);
+        return selected || !(buffers.shape[h + 2] < ctx.state.minBytes && buffers.shape[h + 1] <= 0);
       },
     };
     ctx.provide('spheres', api);

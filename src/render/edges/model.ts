@@ -43,7 +43,7 @@ export interface EdgeModel {
   unitEdges: Int32Array | null;
 }
 
-export function buildEdgeModel(replica: ModelReplica, visual: Config['visual'], minLines: number, typeFilter: readonly string[]): EdgeModel {
+export function buildEdgeModel(replica: ModelReplica, visual: Config['visual'], minBytes: number, typeFilter: readonly string[]): EdgeModel {
   const edges = replica.table('edge'), units = replica.table('unit'), districts = replica.table('district');
   const E = edges.capacity, U = units.capacity, D = districts.capacity;
 
@@ -58,7 +58,7 @@ export function buildEdgeModel(replica: ModelReplica, visual: Config['visual'], 
     const d = units.refSlots.district[u] ?? -1;
     unitDistrict[u] = d >= 0 && d < D && districtCity[d] >= 0 ? d : -1;
     // glowing files are exempt from the size slider (PLAN.md §8.1)
-    unitHideAt[u] = glowAmount(units.cols.importancePct[u], visual) > 0 ? NEVER_HIDDEN : units.cols.loc[u];
+    unitHideAt[u] = glowAmount(units.cols.importancePct[u], visual) > 0 ? NEVER_HIDDEN : units.cols.bytes[u];
     if (shown && !shown.has(units.cols.lang[u])) unitDim[u] = 1;
   }
 
@@ -82,7 +82,7 @@ export function buildEdgeModel(replica: ModelReplica, visual: Config['visual'], 
     dim[e] = unitDim[s] | unitDim[t];
     hideAt[e] = Math.min(unitHideAt[s], unitHideAt[t]);
     bright[e] = (EDGE_LOCAL.lowConfidence + (1 - EDGE_LOCAL.lowConfidence) * conf) * (dim[e] ? EDGE_LOCAL.dimmed : 1);
-    rank[e] = hideAt[e] < minLines ? 0 : w * (dim[e] ? EDGE_LOCAL.dimmed : 1);
+    rank[e] = hideAt[e] < minBytes ? 0 : w * (dim[e] ? EDGE_LOCAL.dimmed : 1);
     sum += w; n++;
     if (rank[e] > 0) { perDistrict[ds]++; if (dt !== ds) perDistrict[dt]++; }
   }

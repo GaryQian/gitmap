@@ -23,7 +23,7 @@ export interface OverlayPalette {
 export const OVERLAY_COLORS: Record<ThemeMode, OverlayPalette> = {
   dark: {
     recency: '#3CF08A',
-    ownership: '#B574FF',
+    ownership: '#A64DFF',
     knowledgeRisk: '#FFB02E',
     reach: ['#FFF2B8', '#FFA13D', '#F0503C'],
     tests: { test: '#5BB4FF', covered: '#3C9B78', uncovered: '#FF6A45' },
@@ -43,14 +43,18 @@ export const OVERLAY_RAMP = {
   /** Share of the bright colour at the middle of a two-ended ramp. Below 0.5 keeps brightness for the top. */
   midBright: 0.42,
   /**
-   * Recency falls off fast: brightness halves every this many seconds of age (exponential decay), so
-   * only files changed in the last few weeks read as green and everything older recedes.
+   * Recency runs on a log scale from the newest file (bright) to the oldest (faded): t = 1 −
+   * log(1 + age / unit) / log(1 + span / unit). A smaller unit makes the first hours fall off faster.
    */
-  recencyHalfLifeSeconds: 14 * 86400,
-  /** Recency: after this many half-lives a file is drawn at the faded end (the legend's low label). */
-  recencyFadedAfterHalfLives: 6,
-  /** Recency: when the latest change is within this many seconds of the present, the legend says "Now". */
+  recencyLogUnitSeconds: 60,
+  /** Recency: an age within this many seconds of the present reads "now". */
   recencyNowSlackSeconds: 2 * 86400,
+  /**
+   * Ownership: no share stays at the grey faded end; any share at all starts at this ramp position,
+   * drawn this far from grey toward the purple, and rises to the full purple at a 100% share.
+   */
+  ownershipFloorT: 0.1,
+  ownershipFloorBright: 0.5,
   /** Knowledge risk: the ramp starts at this share. Half or less means two people know the file. */
   knowledgeRiskFrom: 0.5,
   /** Reach: the ramp spans at most this many hops; units farther away take the faded end. */
@@ -82,6 +86,27 @@ export function fadedToBright(faded: string, bright: string): ColorStop[] {
     { t: 0.5, color: mixHex(faded, bright, OVERLAY_RAMP.midBright) },
     { t: 1, color: bright },
   ];
+}
+
+/**
+ * Ownership: grey up to `floorT` (only a zero share sits there), then a jump to a clear purple that
+ * rises to the full colour. Values are placed by ownershipT().
+ */
+export function ownershipStops(faded: string, bright: string): ColorStop[] {
+  const { ownershipFloorT: floor, ownershipFloorBright: k } = OVERLAY_RAMP;
+  return [
+    { t: 0, color: faded },
+    { t: floor / 2, color: faded },
+    { t: floor, color: mixHex(faded, bright, k) },
+    { t: 1, color: bright },
+  ];
+}
+
+/** Ramp position of an ownership share: 0 stays 0, anything above starts at the purple floor. NaN stays NaN. */
+export function ownershipT(share: number): number {
+  if (!(share > 0)) return share;
+  const floor = OVERLAY_RAMP.ownershipFloorT;
+  return floor + (1 - floor) * Math.min(1, share);
 }
 
 /** Hot at t = 0, through the given colours, faded at t = 1. */

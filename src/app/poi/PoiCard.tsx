@@ -9,7 +9,7 @@ import { setFocus, setSelection } from '../store';
 import { Card, CloseIcon, PillButton, cx } from '../ui';
 import { renderMarkdown } from './markdown';
 import type { PoiParent } from './pois';
-import { closePoi, usePoiUi } from './state';
+import { usePoiUi } from './state';
 
 /** The kinds in plain words. */
 const KIND_WORDS: Record<PoiKind, string> = { entry: 'Entry point', core: 'Core', boundary: 'Boundary', data: 'Data', risk: 'Risk' };
@@ -40,10 +40,13 @@ export interface PoiCardProps {
   poi: Poi;
   parent: PoiParent;
   render: RenderApi;
+  id?: string;
+  /** Close the card and put the focus back on its pill. */
+  onClose: () => void;
   ref?: Ref<HTMLDivElement>;
 }
 
-export function PoiCard({ poi, parent, render, ref }: PoiCardProps) {
+export function PoiCard({ poi, parent, render, id, onClose, ref }: PoiCardProps) {
   const requester = usePoiUi((s) => s.requester);
   const [active, setActive] = useState<DetailQuestion | null>(null);
   const [asked, setAsked] = useState<Asked>({});
@@ -79,12 +82,13 @@ export function PoiCard({ poi, parent, render, ref }: PoiCardProps) {
   const panelId = `gm-poi-panel-${poi.id}`;
 
   return (
-    <Card className="gm-poi-card" role="dialog" aria-label={`${poi.label}, point of interest`} tabIndex={-1} ref={ref}>
+    // a labelled group, not a dialog: it does not hold the focus, and the map around it stays in reach
+    <Card id={id} className="gm-poi-card" role="group" aria-label={`${poi.label}, point of interest`} tabIndex={-1} ref={ref}>
       <div className="gm-poi-head">
         <span className="gm-poi-dot" aria-hidden="true" />
         <h2 className="gm-poi-title">{poi.label}</h2>
         <span className="gm-poi-kind">{KIND_WORDS[poi.kind] ?? poi.kind}</span>
-        <button type="button" className="gm-poi-close" aria-label="Close" title="Close" onClick={closePoi}>
+        <button type="button" className="gm-poi-close" aria-label="Close" title="Close (Esc)" onClick={onClose}>
           <CloseIcon size={14} />
         </button>
       </div>

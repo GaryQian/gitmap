@@ -25,8 +25,8 @@ const STORE = 'kv';
 const SOURCE_KEY = 'source';
 const VIEW_KEY = 'starmap.dev.view';
 
-type View = Pick<AppState, 'selection' | 'focus' | 'activeOverlay' | 'typeFilter' | 'minLines' | 'openFile'>;
-const VIEW_FIELDS = ['selection', 'focus', 'activeOverlay', 'typeFilter', 'minLines', 'openFile'] as const;
+type View = Pick<AppState, 'selection' | 'focus' | 'activeOverlay' | 'typeFilter' | 'minBytes' | 'openFile'>;
+const VIEW_FIELDS = ['selection', 'focus', 'activeOverlay', 'typeFilter', 'minBytes', 'openFile'] as const;
 
 let db: Promise<IDBDatabase> | null = null;
 function openDb(): Promise<IDBDatabase> {
@@ -95,7 +95,7 @@ function usableView(v: Partial<View>): Partial<View> {
   out.openFile = ref(v.openFile);
   if (typeof v.activeOverlay === 'string' || v.activeOverlay === null) out.activeOverlay = v.activeOverlay;
   if (Array.isArray(v.typeFilter) && v.typeFilter.every((t) => typeof t === 'string')) out.typeFilter = v.typeFilter;
-  if (typeof v.minLines === 'number' && Number.isFinite(v.minLines)) out.minLines = v.minLines;
+  if (typeof v.minBytes === 'number' && Number.isFinite(v.minBytes)) out.minBytes = v.minBytes;
   return out;
 }
 

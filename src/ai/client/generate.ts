@@ -4,8 +4,10 @@
 //           the city (label and text), emitted before the reduce step starts: the chrome shows it
 //           when the pointer rests on the city's pill, so it should not wait for the slower calls
 //   reduce  `pois` and `tour`, both given the digest, the summaries that succeeded and the digest's
-//           refs; the tour is sent a moment after the points of interest so that it can be served
-//           from the prompt cache the first request writes
+//           refs, byte-identical. They are written by different model tiers (the most capable one
+//           and the mid one), which cannot share a prompt cache, so the two requests go out
+//           together. Only when both tiers are configured with the same model id is the tour sent a
+//           moment after the points of interest, to be served from the cache that request writes
 //
 // No DOM and no store: the caller hands in the replica and the facts and gets `ModelPatch`
 // operations back, stage by stage through `emit` and in total in the result. It runs in the
@@ -23,6 +25,8 @@ import type {
   Annotation, ModelPatch, NodeRef, Poi, PoiDetail, PoiKind, Summary, Tour, TourFrame, TourStep, UnitRef,
 } from '../../model/types';
 import { hash32 } from '../../shared';
+import { activeAi } from '../active';
+import type { AiEnv, TierModels } from '../active';
 import { buildDigest, poiCount } from '../digest';
 import type { DigestInput } from '../digest';
 import { describeAiError, toAiErrorInfo } from './errors';
@@ -57,8 +61,16 @@ export interface GenerateOptions {
   emit?: (ops: ModelPatch[]) => void;
   /** What is stored. Default: `input.replica.meta.digestHash` and `input.replica.annotations`. */
   existing?: { digestHash?: string; annotations: readonly Annotation[] };
-  /** Overrides of the client tunables, for tests and scripts. */
+  /**
+   * Overrides of the client tunables, for tests and scripts. `reduceHeadStartMs` applies only when
+   * the points of interest and the tour use the same model (see `reduceHeadStart`).
+   */
   timing?: { reduceHeadStartMs?: number; summaryConcurrency?: number };
+  /**
+   * Where the provider selection is read from (see `activeAi`). Default: what the page was built
+   * with. Tests and scripts pass their own so the run does not depend on the environment.
+   */
+  env?: AiEnv;
 }
 
 export interface GenerateResult {
@@ -146,6 +158,17 @@ export function stepsFromResponse(steps: TourResponse['steps'], replica: ModelRe
 
 // ---- the sequence ----
 
+/**
+ * How long the points-of-interest request runs alone before the tour request is sent. The two are
+ * given byte-identical shared fields, but a provider's prompt cache is per model: with the tour on
+ * its own tier there is nothing to wait for, and both go out at once (0). When the two tiers are
+ * configured with the same model id the wait is back, so the tour can be served from the cache the
+ * first request writes.
+ */
+export function reduceHeadStart(models: Pick<TierModels, 'synthesis' | 'tour'>, headStartMs: number): number {
+  return models.synthesis === models.tour ? Math.max(0, headStartMs) : 0;
+}
+
 /** Failures that hold for every route, so the rest of the run is not attempted. */
 const STOPS: readonly AiClientErrorCode[] = ['disabled', 'no_key', 'unavailable', 'aborted'];
 
@@ -165,7 +188,7 @@ export async function generateAnnotations(options: GenerateOptions): Promise<Gen
   const input: DigestInput = config === options.input.config ? options.input : { ...options.input, config };
   const { replica } = input;
 
-  const digest = await buildDigest(input);
+  const digest = await buildDigest(input, options.env);
   const existing = options.existing ?? { digestHash: replica.meta?.digestHash, annotations: replica.annotations };
   const same = existing.digestHash === digest.hash;
   // Annotations of another digest describe a structure that has changed: they are replaced, not reused.
@@ -275,9 +298,10 @@ export async function generateAnnotations(options: GenerateOptions): Promise<Gen
       };
 
       const poisRun = needPois ? pois() : null;
-      if (poisRun && needTour) {
-        // The tour waits for the head start, or for the first call to be over if that comes sooner.
-        const headStart = options.timing?.reduceHeadStartMs ?? CLIENT_LOCAL.reduceHeadStartMs;
+      // Different tiers: no wait, the two requests leave together. The same model on both: the tour
+      // waits for the head start, or for the first call to be over if that comes sooner.
+      const headStart = reduceHeadStart(activeAi(config, options.env).models, options.timing?.reduceHeadStartMs ?? CLIENT_LOCAL.reduceHeadStartMs);
+      if (poisRun && needTour && headStart > 0) {
         await new Promise<void>((resolve) => {
           const timer = setTimeout(resolve, headStart);
           void poisRun.then(() => { clearTimeout(timer); resolve(); });

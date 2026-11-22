@@ -21,10 +21,12 @@ import type { LayoutSnapshot, RepoMeta, RepoModel } from '../model/types';
 import type { SnapshotWriter } from '../persist';
 import { hash32, now as defaultNow } from '../shared';
 import { syntheticMeta, syntheticTables } from '../testing/synthetic';
+import { settleDetails } from './ai';
 import { createRevealGate, type GateClock, type RevealGate } from './gate';
 import { startHistory, type HistoryRun } from './history';
 import { findSavedMap, type PipelinePersistence } from './persist';
 import type { PipelineSearch } from './search';
+import type { WorkingTreeChange } from './update';
 
 /** The part of physics the pipeline drives. In the browser these are messages to the main thread. */
 export interface PipelinePhysics {
@@ -74,8 +76,13 @@ export interface PipelineState {
   settle: SettleReport | null;
   /** A folder was shown from its stored snapshot instead of being parsed (the return visit, PLAN.md §12). */
   fromSnapshot: boolean;
-  /** Paths that differ between that snapshot and the folder; 0 after a parse. */
+  /**
+   * The N of "N files changed · Update" as last announced: paths that differ between the map and the
+   * folder, by blob id (a return visit) and by what the working-tree check found edited on disk.
+   */
   changedFiles: number;
+  /** What the background working-tree check confirmed (PLAN.md §6.3.1); absent until it has run. */
+  workingTree?: WorkingTreeChange[];
   /** The history walk and its layers; null when the source has no git history to walk. */
   history: HistoryRun | null;
   /** The debounced snapshot writer, once the map is revealed and there is storage to write to. */
@@ -85,6 +92,16 @@ export interface PipelineState {
 }
 
 const fmt = (n: number) => n.toLocaleString('en-US');
+
+/**
+ * How long a settle may run. The plan's cap (reveal.settleMaxMs) suits small and medium maps; a
+ * larger one needs longer to come to rest with nothing overlapping, so the cap grows with the number
+ * of files, up to a ceiling. Waiting a few more seconds beats revealing a map that is still overlapped.
+ */
+export function settleCap(config: Config, units: number): number {
+  const r = config.reveal;
+  return Math.min(Math.max(r.settleMaxMs, r.settleCeilingMs), Math.max(r.settleMaxMs, units * r.settleMsPerFile));
+}
 
 export function repoId(name: string, remoteUrl: string | null): string {
   return remoteUrl ? `git:${remoteUrl}` : `local:${name}:${hash32(name).toString(16)}`;
@@ -101,13 +118,26 @@ export function previousStructure(store: ModelStore): AnalysisInput['previous'] 
 }
 
 /** Run analysis on the pool and propose the difference to the store as one batch. */
-export async function analyzeAndApply(deps: PipelineDeps, state: PipelineState, opts: { keepIds: boolean; extraMeta?: Partial<RepoMeta> }): Promise<AnalysisResult> {
+export interface AnalyzeOptions {
+  /** Hand analysis the current memberships and names, so ids stay stable where communities persist. */
+  keepIds: boolean;
+  /**
+   * With keepIds: an Update. Units stay in their districts and only new ones are placed
+   * (AnalysisInput.previous.incremental). Leave it out for "Apply", which re-clusters.
+   */
+  incremental?: boolean;
+  extraMeta?: Partial<RepoMeta>;
+}
+
+export async function analyzeAndApply(deps: PipelineDeps, state: PipelineState, opts: AnalyzeOptions): Promise<AnalysisResult> {
+  const previous = opts.keepIds ? previousStructure(deps.store) : undefined;
+  if (previous && opts.incremental) previous.incremental = true;
   const input: AnalysisInput = {
     repoName: state.manifest?.repoName ?? 'repo',
     files: state.facts,
     syntax: state.syntax.length ? state.syntax : undefined,
     syntaxComplete: state.syntaxComplete,
-    previous: opts.keepIds ? previousStructure(deps.store) : undefined,
+    previous,
   };
   const result = await deps.pool.run<AnalysisResult, AnalysisInput>({ type: 'analysis.analyze', lane: 'parse', input });
   const ops = diffStructure(deps.store.replica, result.tables);
@@ -151,7 +181,7 @@ export async function runSource(source: RepoSource, deps: PipelineDeps): Promise
     state.structure = 'full';
     lap('structure');
     stage('layout', 'Settling layout');
-    state.settle = await deps.physics.settle(config.reveal.settleMaxMs);
+    state.settle = await deps.physics.settle(settleCap(config, store.replica.table('unit').count));
     lap('layout');
     stage('revealed', '');
     emit('reveal', { structure: 'full' });
@@ -160,14 +190,15 @@ export async function runSource(source: RepoSource, deps: PipelineDeps): Promise
 
   /** A finished model, from a file, a demo or local storage: one full batch, its saved layout, the reveal. */
   async function showModel(model: RepoModel): Promise<void> {
-    store.load(model);
+    // An answer that was being written when the map was saved or exported will never arrive.
+    store.load(settleDetails(model));
     // Maps saved before the Tests overlay existed get it now; it needs nothing but the structure.
     if (!store.replica.layers.has('tests')) store.propose([testsLayer(store.replica, config)]);
     state.structure = model.meta.structure;
     lap('load');
     stage('layout', 'Settling layout');
     if (model.layout) await deps.physics.loadLayout(model.layout);
-    else state.settle = await deps.physics.settle(config.reveal.settleMaxMs);
+    else state.settle = await deps.physics.settle(settleCap(config, store.replica.table('unit').count));
     lap('layout');
     stage('revealed', '');
     emit('reveal', { structure: state.structure });
@@ -287,7 +318,7 @@ export async function runSource(source: RepoSource, deps: PipelineDeps): Promise
 
   stage('layout', 'Settling layout');
   emit('progress', { subsystem: 'layout', done: 0, total: 1 });
-  state.settle = await deps.physics.settle(config.reveal.settleMaxMs);
+  state.settle = await deps.physics.settle(settleCap(config, store.replica.table('unit').count));
   emit('progress', { subsystem: 'layout', done: 1, total: 1 });
   lap('layout');
 

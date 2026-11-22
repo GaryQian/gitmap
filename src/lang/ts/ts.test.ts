@@ -121,3 +121,62 @@ describe('ts/js resolver', () => {
     expect(parseJsonc('not json')).toBeUndefined();
   });
 });
+
+describe('ts/js resolver: conventional aliases and component files', () => {
+  const index = createRepoIndex([
+    // A Vite / SvelteKit style project: no tsconfig in the repo maps '@', '~' or '$lib'.
+    file('web/package.json', '{ "name": "web" }'),
+    file('web/src/main.ts'),
+    file('web/src/views/Home.ts'),
+    file('web/src/components/Button.tsx'),
+    file('web/src/lib/util.ts'),
+    file('web/src/App.vue'),
+    file('web/src/Card.ts'),
+    file('web/src/Card.vue'),
+    file('web/src/routes/Page.svelte'),
+    file('web/layouts/default.ts'),
+    file('web/src/scope/pkg.ts'), // what '@scope/pkg' would hit if it were read as the '@/' alias
+    file('web/src/other/thing.ts'),
+    // A project whose tsconfig maps '@/*' somewhere else than src/.
+    file('mapped/tsconfig.json', '{ "compilerOptions": { "paths": { "@/*": ["./app/*"] } } }'),
+    file('mapped/src/main.ts'),
+    file('mapped/src/components/Button.ts'),
+    file('mapped/app/components/Button.ts'),
+    file('packages/pkg/package.json', '{ "name": "@scope/pkg" }'),
+    file('packages/pkg/src/index.ts'),
+  ]);
+  const resolver = tsResolver(index);
+  const resolve = (spec: string, from = 'web/src/views/Home.ts') => resolver.resolve(index.get(from)!, { spec, kind: 'import' });
+  const to = (spec: string, from?: string) => resolve(spec, from).map((r) => r.path);
+
+  it('falls back to the src/ convention for @/ and ~/, and to src/lib for $lib', () => {
+    expect(to('@/components/Button')).toEqual(['web/src/components/Button.tsx']);
+    expect(to('~/components/Button')).toEqual(['web/src/components/Button.tsx']);
+    expect(to('$lib/util')).toEqual(['web/src/lib/util.ts']);
+    expect(to('~/layouts/default')).toEqual(['web/layouts/default.ts']); // beside the package.json, as in Nuxt
+    expect(to('@/missing')).toEqual([]);
+    expect(to('$lib/missing')).toEqual([]);
+    // A convention is a guess: less sure than a mapping read from the repo.
+    expect(resolve('@/components/Button')[0].confidence).toBeLessThan(1);
+    expect(resolve('@/components/Button')[0].confidence).toBeGreaterThan(0.5);
+  });
+
+  it('lets a tsconfig mapping win over the convention', () => {
+    const hit = resolve('@/components/Button', 'mapped/src/main.ts');
+    expect(hit).toEqual([{ path: 'mapped/app/components/Button.ts', confidence: 1 }]);
+  });
+
+  it('does not take a scoped package for the @/ alias', () => {
+    expect(resolve('@scope/pkg')).toEqual([{ path: 'packages/pkg/src/index.ts', confidence: 1 }]);
+    expect(to('@other/thing')).toEqual([]); // not a package of the repo: external
+  });
+
+  it('finds a component file when the extension is left off, after the script extensions', () => {
+    expect(to('./App', 'web/src/main.ts')).toEqual(['web/src/App.vue']);
+    expect(to('./App.vue', 'web/src/main.ts')).toEqual(['web/src/App.vue']);
+    expect(to('./routes/Page', 'web/src/main.ts')).toEqual(['web/src/routes/Page.svelte']);
+    expect(to('@/App')).toEqual(['web/src/App.vue']);
+    expect(to('./Card', 'web/src/main.ts')).toEqual(['web/src/Card.ts']);
+    expect(to('./Card.vue', 'web/src/main.ts')).toEqual(['web/src/Card.vue']);
+  });
+});

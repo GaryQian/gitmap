@@ -1,10 +1,10 @@
 // Top left, under the title pill: one pill per selected file, each removable, with "+N more" beyond a
 // handful and a clear-all action (PLAN.md §9, §17.6). Escape clears the selection.
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import type { AppMount } from '../../contracts/app';
 import type { NodeRef } from '../../model/types';
 import { clearSelection, removeFromSelection, setFocus, useFocus, useRender, useReplica, useSelection } from '../store';
-import { isTyping } from '../keys';
+import { LAYER, useDismissable } from '../keys';
 import { APP_LOCAL } from '../tunables';
 import { CloseIcon, Pill, PillButton, Strong } from '../ui';
 import { unitName } from '../units';
@@ -16,18 +16,24 @@ function SelectionPills() {
   const replica = useReplica();
   const render = useRender();
   const [expanded, setExpanded] = useState(false);
+  const list = useRef<HTMLUListElement>(null);
+  /** Where in the list the keyboard focus goes once a removed pill is gone. */
+  const refocus = useRef<number | null>(null);
 
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      // a popup that closes on Escape takes the key in the capture phase, so it never reaches here
-      if (e.key === 'Escape' && !e.defaultPrevented && !isTyping(e.target)) clearSelection();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
+  // Escape clears the selection, after everything that lies over it has closed (keys.ts)
+  useDismissable(selection.length > 0, clearSelection, { layer: LAYER.selection });
 
   const many = selection.length > APP_LOCAL.selection.pillsShown;
   useEffect(() => { if (!many) setExpanded(false); }, [many]);
+
+  // the pill that held the focus was removed: the one that took its place gets it
+  useEffect(() => {
+    const at = refocus.current;
+    refocus.current = null;
+    if (at === null) return;
+    const names = list.current?.querySelectorAll<HTMLButtonElement>('.gm-selected-name');
+    names?.[Math.min(at, names.length - 1)]?.focus();
+  }, [selection]);
 
   if (selection.length === 0 || !replica) return null;
   // the newest selections are the ones kept in view, and the focused one always is
@@ -42,19 +48,37 @@ function SelectionPills() {
     setFocus(ref);
     void render?.flyTo(ref).catch(() => {});
   };
+  const remove = (ref: NodeRef, at: number, e: { currentTarget: Element }) => {
+    // only when the focus is in this pill: a click with the pointer leaves the focus where it was
+    if (e.currentTarget.closest('li')?.contains(document.activeElement)) refocus.current = at;
+    removeFromSelection(ref);
+  };
+  const onNameKey = (ref: NodeRef, at: number) => (e: KeyboardEvent<HTMLButtonElement>) => {
+    if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+    e.preventDefault();
+    remove(ref, at, e);
+  };
 
   return (
     <div className="gm-selected" role="group" aria-label={`Selection, ${selection.length} ${selection.length === 1 ? 'file' : 'files'}`}>
-      <ul className={expanded ? 'gm-selected-list is-expanded' : 'gm-selected-list'}>
-        {shown.map((ref) => {
+      <ul className={expanded ? 'gm-selected-list is-expanded' : 'gm-selected-list'} ref={list}>
+        {shown.map((ref, at) => {
           const name = unitName(replica, ref) ?? ref.slice(2);
           return (
             <li key={ref}>
               <Pill size="small" active={ref === focus} className="gm-selected-pill">
-                <button type="button" className="gm-selected-name" title={ref.slice(2)} aria-pressed={ref === focus} onClick={() => show(ref)}>
+                <button
+                  type="button"
+                  className="gm-selected-name"
+                  data-ref={ref}
+                  title={`${ref.slice(2)} (Delete removes it from the selection)`}
+                  aria-pressed={ref === focus}
+                  onClick={() => show(ref)}
+                  onKeyDown={onNameKey(ref, at)}
+                >
                   {ref === focus ? <Strong>{name}</Strong> : name}
                 </button>
-                <button type="button" className="gm-icon-button" aria-label={`Remove ${name} from the selection`} title="Remove from the selection" onClick={() => removeFromSelection(ref)}>
+                <button type="button" className="gm-icon-button" aria-label={`Remove ${name} from the selection`} title="Remove from the selection" onClick={(e) => remove(ref, at, e)}>
                   <CloseIcon size={12} />
                 </button>
               </Pill>

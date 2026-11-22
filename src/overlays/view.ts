@@ -5,7 +5,7 @@ import type { ColorStop, OverlayView } from '../contracts/render';
 import type { ModelReplica } from '../contracts/store';
 import { parseRef, type Layer, type LayerStatus, type NodeRef } from '../model/types';
 import { buildAdjacency, computeReach, type Adjacency, type ReachDirection } from './adjacency';
-import { OVERLAY_COLORS, OVERLAY_RAMP, fadedColor, fadedToBright, hotToFaded, unknownColor, type OverlayPalette } from './colors';
+import { OVERLAY_COLORS, OVERLAY_RAMP, fadedColor, fadedToBright, hotToFaded, ownershipStops, ownershipT, unknownColor, type OverlayPalette } from './colors';
 import { ownershipContributors, ownershipShare } from './ownership';
 import { RECENCY_OLDER, type OverlayId } from './types';
 
@@ -40,6 +40,8 @@ export interface OverlayViewInfo extends OverlayView {
   status: LayerStatus;
   /** 0..1, for the progress ring. */
   coverage: number;
+  /** Ownership: the contributor whose share is shown, for the hover line. */
+  contributor?: string;
   labels: {
     /** What t = 0 and t = 1 mean. */
     low: string;
@@ -77,6 +79,45 @@ export function formatAge(seconds: number): string {
   if (days < 60) return say(days, 'day');
   if (days < 720) return say(days / 30.44, 'month');
   return say(days / 365.25, 'year');
+}
+
+/** "now", or "3 days ago". */
+function ago(seconds: number): string {
+  return seconds <= OVERLAY_RAMP.recencyNowSlackSeconds ? 'now' : `${formatAge(seconds)} ago`;
+}
+
+const hopsText = (n: number): string => `${n} ${n === 1 ? 'hop' : 'hops'}`;
+
+/**
+ * One line about a unit under the active overlay, for the hover tooltip: the statistic the overlay
+ * colours by (age, hops from the selection, a contributor's share, the top author's share, the test
+ * category), or why it is not known. Null when the overlay has nothing to add.
+ */
+export function overlayFact(view: OverlayViewInfo, replica: ModelReplica, slot: number, now: number = Date.now() / 1000): string | null {
+  if (view.id === 'recency') {
+    const v = replica.layers.get('recency')?.values[slot];
+    if (v === undefined || v !== v) return 'Age not yet known';
+    if (v <= RECENCY_OLDER) return 'Last changed before the history walked';
+    return `Last changed ${ago(now - v)}`;
+  }
+  if (view.id === 'reach') {
+    const h = view.values[slot];
+    if (h === undefined || h !== h) return view.labels.unknown;
+    return h === 0 ? 'In the selection' : `${hopsText(h)} from the selection`;
+  }
+  const v = view.values[slot];
+  if (v === undefined || v !== v) return view.labels.unknown;
+  const pct = (share: number) => `${Math.round(Math.min(1, Math.max(0, share)) * 100)}%`;
+  if (view.id === 'ownership') {
+    // undo ownershipT: the floor stands for "any share at all"
+    const floor = OVERLAY_RAMP.ownershipFloorT;
+    const share = v > 0 ? (v - floor) / (1 - floor) : 0;
+    const who = view.contributor ?? 'them';
+    return share > 0 ? `${share < 0.005 ? 'Under 1%' : pct(share)} of commits by ${who}` : `No commits by ${who}`;
+  }
+  if (view.id === 'knowledgeRisk') return `Top author made ${pct(v)} of commits`;
+  if (view.id === 'tests') return view.labels.categories?.[Math.round(v)] ?? null;
+  return null;
 }
 
 function seedSlots(seeds: readonly NodeRef[] | readonly number[], replica: ModelReplica): number[] {
@@ -117,27 +158,31 @@ export function overlayView(id: OverlayId, ctx: OverlayContext): OverlayViewInfo
     case 'recency': {
       const values = perSlot(layer?.values, capacity);
       const now = ctx.now ?? Date.now() / 1000;
-      const halfLife = OVERLAY_RAMP.recencyHalfLifeSeconds;
-      // Age is measured from the latest change on the map, so a dormant repo or a demo built some
-      // time ago still shows its most recent burst of work. In an active repo that is the present.
-      let newest = -Infinity;
-      for (const v of values) if (v > RECENCY_OLDER && v > newest) newest = v;
-      const reference = newest === -Infinity ? now : Math.min(now, newest);
+      // No fixed scale: the newest file on the map is the bright end and the oldest the faded end,
+      // so a dormant repo or an old demo still spans the whole ramp.
+      let newest = -Infinity, oldest = Infinity;
+      for (const v of values) {
+        if (!(v > RECENCY_OLDER)) continue;
+        if (v > newest) newest = v;
+        if (v < oldest) oldest = v;
+      }
+      // Log of the age behind the newest file: the first hours and days take most of the ramp, so
+      // brightness falls off fast and the old bulk of the repo sits together near the faded end.
+      const unit = OVERLAY_RAMP.recencyLogUnitSeconds;
+      const span = Math.log1p(Math.max(0, newest - oldest) / unit);
       for (let s = 0; s < capacity; s++) {
         const v = values[s];
         if (v !== v) continue;
         if (v <= RECENCY_OLDER) { values[s] = 0; continue; }
-        // Steep on purpose: brightness halves every half-life, so the files that really changed
-        // recently stand out instead of the whole map reading as green.
-        const t = Math.pow(0.5, Math.max(0, reference - v) / halfLife);
-        values[s] = t > 1 ? 1 : t;
+        const t = span > 0 ? 1 - Math.log1p(Math.max(0, newest - v) / unit) / span : 1;
+        values[s] = t < 0 ? 0 : t > 1 ? 1 : t;
       }
-      const behind = Math.max(0, now - reference);
+      const known = newest !== -Infinity;
       return {
         id, values, domain: [0, 1], stops: fadedToBright(faded, palette.recency), unknown, status, coverage,
         labels: {
-          low: `${formatAge(halfLife * OVERLAY_RAMP.recencyFadedAfterHalfLives)} earlier or more`,
-          high: behind <= OVERLAY_RAMP.recencyNowSlackSeconds ? 'Now' : `Latest change, ${formatAge(behind)} ago`,
+          low: known ? `Oldest, ${ago(now - oldest)}` : 'Oldest',
+          high: known ? `Newest, ${ago(now - newest)}` : 'Newest',
           unknown: notYet,
         },
       };
@@ -146,9 +191,11 @@ export function overlayView(id: OverlayId, ctx: OverlayContext): OverlayViewInfo
       const contributors = ownershipContributors(layer);
       const who = ctx.contributorId ?? contributors[0]?.id;
       const values = ctx.share ? perSlot(ctx.share, capacity) : who === undefined ? perSlot(undefined, capacity) : ownershipShare(layer, who, replica);
+      // none stays grey; any share at all is clearly purple, rising to full purple (and glow) at all
+      for (let s = 0; s < capacity; s++) values[s] = ownershipT(values[s]);
       const name = contributors.find((c) => c.id === who)?.name;
       return {
-        id, values, domain: [0, 1], stops: fadedToBright(faded, palette.ownership), unknown, status, coverage,
+        id, values, domain: [0, 1], stops: ownershipStops(faded, palette.ownership), unknown, status, coverage, contributor: name,
         labels: { low: name ? `None by ${name}` : 'None', high: name ? `All by ${name}` : 'All', unknown: status === 'complete' ? 'No history' : notYet },
       };
     }
@@ -171,17 +218,24 @@ export function overlayView(id: OverlayId, ctx: OverlayContext): OverlayViewInfo
     }
     case 'reach': {
       const direction = ctx.direction ?? 'dependsOn';
+      const maxHops = ctx.maxHops ?? Infinity;
       const hops = ctx.reach
         ? perSlot(ctx.reach, capacity)
-        : computeReach(ctx.adjacency ?? buildAdjacency(replica), seedSlots(ctx.seeds ?? [], replica), direction, ctx.maxHops);
+        : computeReach(ctx.adjacency ?? buildAdjacency(replica), seedSlots(ctx.seeds ?? [], replica), direction, maxHops);
       let far = 1;
       for (const h of hops) if (h > far) far = h;
       // The ramp ends one step past the farthest unit, so everything reached stands out from the
-      // unreached, and never spans more than reachHops, so the first few hops stay clearly apart.
-      const end = Math.min(far + 1, OVERLAY_RAMP.reachHops);
+      // unreached. With no hop limit it never spans more than reachHops, so the first few hops stay
+      // clearly apart; a limit set by the viewer is the span itself.
+      const end = Number.isFinite(maxHops) ? far + 1 : Math.min(far + 1, OVERLAY_RAMP.reachHops);
+      const not = direction === 'dependsOn' ? 'Not a dependency' : 'Not a dependent';
       return {
         id, values: hops, domain: [0, end], stops: hotToFaded(palette.reach, faded), unknown, status: 'complete', coverage: 1,
-        labels: { low: 'Selection', high: far + 1 > end ? `${end}+ hops` : `${far} ${far === 1 ? 'hop' : 'hops'}`, unknown: direction === 'dependsOn' ? 'Not a dependency' : 'Not a dependent' },
+        labels: {
+          low: 'Selection',
+          high: far + 1 > end ? `${end}+ hops` : hopsText(far),
+          unknown: Number.isFinite(maxHops) ? `${not} within ${hopsText(maxHops)}` : not,
+        },
       };
     }
   }

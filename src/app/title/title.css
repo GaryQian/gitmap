@@ -3,7 +3,9 @@
 
 /* The app title is also the way back to the landing page. */
 .gm-title-home {
-  margin: 0;
+  /* as tall as the pill allows, so the target is not just the height of the letters */
+  align-self: stretch;
+  margin: 3px 0;
   padding: 0;
   border: 0;
   border-radius: 4px;
@@ -15,4 +17,5 @@
   letter-spacing: 0.14em;
   cursor: pointer;
 }
-.gm-title-home:hover { color: var(--gm-halo); }
+/* not the halo colour: link-coloured text needs a more opaque material than a pill (theme.ts) */
+.gm-title-home:hover { text-decoration: underline; text-underline-offset: 3px; }

@@ -91,14 +91,18 @@ export function syntaxFactsFromBytes(
     let bundle: GrammarBundle | null = null;
     let query = null;
     if (plugin.syntax) {
-      const name = plugin.syntax.grammar(entry.path);
+      // With the text in hand the plug-in can tell what the path alone cannot (an Objective-C `.h`).
+      const name = plugin.syntax.grammar(entry.path, text);
       if (name === null) return skip('no-grammar'); // the plug-in opts this file out
-      const source = plugin.syntax.queries[name];
-      bundle = grammars.get(name) ?? null;
-      if (bundle && typeof source === 'string') {
-        query = bundle.query(plugin.id, source);
-        if (!query) return skip('error'); // a query that does not compile is a plug-in bug, not a missing grammar
-      } else bundle = null;
+      // '' is the plug-in asking for its extractSymbols on this file: not a grammar that is missing.
+      if (name !== '') {
+        const source = plugin.syntax.queries[name];
+        bundle = grammars.get(name) ?? null;
+        if (bundle && typeof source === 'string') {
+          query = bundle.query(plugin.id, source);
+          if (!query) return skip('error'); // a query that does not compile is a plug-in bug, not a missing grammar
+        } else bundle = null;
+      }
     }
     if (!bundle || !query) {
       if (!plugin.extractSymbols) return skip('no-grammar');
@@ -156,7 +160,8 @@ export function createSlowPassTask(options: SlowPassTaskOptions = {}): TaskDef<S
         if (!plugin?.syntax || e.read === 'none') continue;
         let name: string | null = null;
         try { name = plugin.syntax.grammar(e.path); } catch { /* reported per file below */ }
-        if (name === null) continue;
+        // '' asks for extractSymbols: there is no grammar to load, and none to record as failed
+        if (name === null || name === '') continue;
         let owners = wanted.get(name);
         if (!owners) wanted.set(name, (owners = new Map()));
         const source = plugin.syntax.queries[name];
