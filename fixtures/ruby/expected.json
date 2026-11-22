@@ -1,0 +1,39 @@
+{
+  "imports": [
+    ["mygem.gemspec", "lib/mygem/version.rb"],
+    ["lib/mygem.rb", "lib/mygem/version.rb"],
+    ["lib/mygem.rb", "lib/mygem/client.rb"],
+    ["lib/mygem.rb", "lib/mygem/formatter.rb"],
+    ["lib/mygem/client.rb", "lib/mygem/transport/http.rb"],
+    ["lib/mygem/client.rb", "lib/mygem/formatter.rb"],
+    ["lib/mygem/client.rb", "lib/mygem/version.rb"],
+    ["lib/mygem/transport/http.rb", "lib/mygem/version.rb"],
+    ["lib/tasks/report.rake", "app/controllers/admin/users_controller.rb"],
+    ["lib/tasks/report.rake", "app/models/user.rb"],
+    ["app/controllers/users_controller.rb", "app/controllers/application_controller.rb"],
+    ["app/controllers/users_controller.rb", "app/models/user.rb"],
+    ["app/controllers/users_controller.rb", "app/mailers/user_mailer.rb"],
+    ["app/controllers/users_controller.rb", "app/models/legacy_account.rb"],
+    ["app/controllers/users_controller.rb", "lib/mygem/client.rb"],
+    ["app/controllers/admin/users_controller.rb", "app/controllers/application_controller.rb"],
+    ["app/controllers/admin/users_controller.rb", "app/models/user.rb"],
+    ["app/models/user.rb", "app/models/concerns/trackable.rb"],
+    ["app/mailers/user_mailer.rb", "app/models/user.rb"]
+  ],
+  "notImports": [
+    ["app/controllers/admin/users_controller.rb", "app/controllers/users_controller.rb"],
+    ["app/controllers/users_controller.rb", "app/controllers/admin/users_controller.rb"],
+    ["lib/tasks/report.rake", "app/controllers/users_controller.rb"],
+    ["lib/mygem/transport/http.rb", "lib/mygem/formatter.rb"],
+    ["lib/mygem/formatter.rb", "lib/mygem/client.rb"],
+    ["lib/mygem/client.rb", "lib/mygem.rb"],
+    ["app/models/legacy_account.rb", "app/models/user.rb"]
+  ],
+  "calls": [
+    ["app/controllers/users_controller.rb", "app/models/user.rb", "active"],
+    ["app/controllers/users_controller.rb", "app/mailers/user_mailer.rb", "welcome"],
+    ["app/controllers/users_controller.rb", "lib/mygem/client.rb", "account"],
+    ["lib/mygem/client.rb", "lib/mygem/transport/http.rb", "get"],
+    ["lib/mygem/client.rb", "lib/mygem/formatter.rb", "pretty"]
+  ]
+}

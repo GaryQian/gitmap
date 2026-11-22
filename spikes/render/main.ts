@@ -93,8 +93,8 @@ const radius = new Float32Array(N);
 for (let i = 0; i < N; i++) {
   const rMin = 0.8, rMax = 12;
   const rSize = Math.min(rMax, Math.max(rMin, 0.8 * Math.cbrt(lines[i])));
-  const rImp = rMin + (rMax - rMin) * impPct[i];
-  radius[i] = 0.7 * rSize + 0.3 * rImp;
+  // file size sets the radius; importance enlarges it by up to half, on a curve that favours the top
+  radius[i] = rSize * (1 + 0.5 * impPct[i] * impPct[i]);
 }
 // layout: sunflower in district, greedy spiral pack districts into cities, cities into world
 function packCircles(r: number[], gap: number): [number, number][] {
@@ -188,7 +188,7 @@ const STAR_VERT = GLSL_COMMON + STAR_VARY + /* glsl */ `
   void main() {
     int i = gl_InstanceID; float r; vec3 c = centerOf(i, r);
     vec4 C = texelFetch(uColor, tc(i), 0);
-    vGlow = smoothstep(0.70, 1.0, C.w);       // importance glow, from the 70th percentile
+    vGlow = smoothstep(0.90, 1.0, C.w);       // importance glow: about the top 10% of files
     vSuper = smoothstep(0.975, 1.0, C.w);     // the top few percent flare like a supernova
     #ifdef CORONA
       vScale = 1.35 + 1.7 * vGlow + 2.4 * vSuper;
@@ -468,7 +468,7 @@ if (POOLS) {
       void main() {
         int i = gl_InstanceID; float r; vec3 c = centerOf(i, r);
         vec4 C = texelFetch(uColor, tc(i), 0);
-        vGlow = smoothstep(0.70, 1.0, C.w); float sup = smoothstep(0.975, 1.0, C.w);
+        vGlow = smoothstep(0.90, 1.0, C.w); float sup = smoothstep(0.975, 1.0, C.w);
         float R = r * (2.0 + 3.0 * vGlow + 3.0 * sup);
         vQ = position.xy; vCol = C.rgb;
         gl_Position = projectionMatrix * viewMatrix * vec4(c.x + position.x * R, 0.05, c.z + position.y * R, 1.0);

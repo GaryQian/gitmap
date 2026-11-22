@@ -2,9 +2,12 @@
 import type { BuildManifest, RunFastPass, RunSlowPass } from '../contracts/ingest';
 import { runFastPass as fastPass } from './fastpass';
 import { buildManifest as manifest } from './manifest';
+import { runSlowPass as slowPass } from './syntax/slowpass';
 
 export type { OpenGit } from './manifest';
 export { FAST_PASS_TASK } from './fastpass.task';
+export { SLOW_PASS_TASK } from './syntax/slowpass.task';
+export { hasSlowPass } from './syntax/slowpass';
 
 /**
  * The files on the map and how each is read: from .git/index when the repo has one, otherwise from
@@ -15,6 +18,9 @@ export const buildManifest: typeof manifest & BuildManifest = manifest;
 /** Fast pass over every manifest entry: line counts, imports, excerpts. Needs the 'ingest.fastPass' task on the pool. */
 export const runFastPass: RunFastPass = fastPass;
 
-export const runSlowPass: RunSlowPass = async () => {
-  throw new Error('not implemented: runSlowPass (package 2B)');
-};
+/**
+ * Slow pass over the entries whose plug-in has a tree-sitter query or an extractSymbols fallback:
+ * definitions (with signature and doc comment) and references. Needs the 'ingest.slowPass' task on
+ * the pool. Results arrive in completion order; an abort resolves with what had finished.
+ */
+export const runSlowPass: RunSlowPass = slowPass;

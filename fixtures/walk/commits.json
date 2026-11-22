@@ -1,0 +1,11 @@
+{
+  "commits": [
+    {
+      "author": "Ada Lovelace",
+      "email": "ada@example.com",
+      "date": "2024-03-01T10:00:00Z",
+      "message": "Project with layered ignore rules",
+      "files": "all"
+    }
+  ]
+}

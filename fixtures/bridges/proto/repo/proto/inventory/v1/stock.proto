@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package inventory.v1;
+
+import "common/types.proto";
+
+message StockRequest { string sku = 1; }
+message StockReply { int32 count = 1; common.Money price = 2; }
+
+service StockService {
+  rpc GetStock(StockRequest) returns (StockReply);
+}

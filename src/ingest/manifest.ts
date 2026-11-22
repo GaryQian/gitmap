@@ -7,14 +7,13 @@ import type { Manifest, ManifestEntry } from '../contracts/ingest';
 import { openGitRepo } from '../git';
 import { pluginForPath } from '../lang';
 import { extname } from '../shared';
+import { walkTree, type WalkedFile } from './walk';
 
 export type OpenGit = (fs: GitFs) => GitRepo;
 
 const MODE_TYPE_MASK = 0o170000;
 const MODE_SYMLINK = 0o120000;
 const MODE_SUBMODULE = 0o160000;
-/** Directory listings and stat calls kept in flight during a folder walk. */
-const WALK_CONCURRENCY = 32;
 
 interface Rules {
   excluded(path: string): boolean;
@@ -48,13 +47,15 @@ function finish(repo: RepoAccess, entries: ManifestEntry[], excluded: number, re
   return manifest;
 }
 
-/** Tracked files from the git index. Null when the index holds nothing. Throws when it cannot be read. */
-function fromIndex(repo: RepoAccess, git: GitRepo, config: Config): Manifest | null {
+/**
+ * Tracked files from the git index. Null when the index holds nothing. Throws when it cannot be read.
+ * `seen` receives every path of the index, including the ones left off the map.
+ */
+function fromIndex(repo: RepoAccess, git: GitRepo, config: Config, seen = new Set<string>()): Manifest | null {
   const rules = rulesFor(config);
   const tracked = git.indexEntries();
   if (tracked.length === 0) return null;
   const entries: ManifestEntry[] = [];
-  const seen = new Set<string>();
   let excluded = 0;
   for (const t of tracked) {
     if (seen.has(t.path)) continue; // a conflicted path is listed once per stage
@@ -72,41 +73,40 @@ function fromIndex(repo: RepoAccess, git: GitRepo, config: Config): Manifest | n
   return finish(repo, entries, excluded, { source: 'git', headOid: git.head().oid, indexChecksum: git.indexChecksum(), remoteUrl: git.remoteUrl() });
 }
 
+/** An entry for a file found by the folder walk: no blob oid, read from the working tree. */
+function walked(file: WalkedFile, rules: Rules): ManifestEntry {
+  return { path: file.path, oid: '', bytes: file.size, lang: pluginForPath(file.path)?.id ?? null, read: rules.unread(file.path, file.size) ? 'none' : 'tree', packOffset: -1 };
+}
+
 /**
- * Every file under the folder, for a plain folder or an unreadable index. Skips .git, node_modules
- * and dot-directories and applies config.parser.exclude; it does not read .gitignore (package 3Q).
+ * Every file under the folder that its .gitignore files do not ignore (src/ingest/walk), for a plain
+ * folder or an unreadable index. Also skips .git, node_modules and dot-directories and applies
+ * config.parser.exclude.
  */
 async function fromWalk(repo: RepoAccess, config: Config, reason: string): Promise<Manifest> {
   const rules = rulesFor(config);
-  const paths: string[] = [];
   let excluded = 0;
-  let pending = [''];
-  while (pending.length) {
-    const dirs = pending.splice(0, WALK_CONCURRENCY);
-    const listings = await Promise.all(dirs.map((d) => repo.tree.list(d)));
-    const found: string[] = [];
-    listings.forEach((items, k) => {
-      for (const item of items) {
-        const path = dirs[k] ? `${dirs[k]}/${item.name}` : item.name;
-        if (item.kind === 'dir') {
-          if (item.name !== 'node_modules' && !item.name.startsWith('.')) found.push(path);
-        } else if (rules.excluded(path)) excluded++;
-        else paths.push(path);
-      }
-    });
-    pending = pending.concat(found);
-  }
-  const entries: ManifestEntry[] = [];
-  for (let i = 0; i < paths.length; i += WALK_CONCURRENCY) {
-    const slice = paths.slice(i, i + WALK_CONCURRENCY);
-    const stats = await Promise.all(slice.map((p) => repo.tree.stat(p)));
-    stats.forEach((stat, k) => {
-      if (!stat) return; // vanished or unreadable
-      const path = slice[k];
-      entries.push({ path, oid: '', bytes: stat.size, lang: pluginForPath(path)?.id ?? null, read: rules.unread(path, stat.size) ? 'none' : 'tree', packOffset: -1 });
-    });
-  }
-  return finish(repo, entries, excluded, { source: 'folder', headOid: null, indexChecksum: null, remoteUrl: null, historyUnavailable: reason });
+  const files = await walkTree(repo.tree, {
+    git: repo.git,
+    skipDir: (_path, name) => name === 'node_modules' || name.startsWith('.'),
+    include: (path) => {
+      if (!rules.excluded(path)) return true;
+      excluded++;
+      return false;
+    },
+  });
+  return finish(repo, files.map((f) => walked(f, rules)), excluded, { source: 'folder', headOid: null, indexChecksum: null, remoteUrl: null, historyUnavailable: reason });
+}
+
+/**
+ * config.parser.includeUntracked: add the files git would report as untracked, which are those the
+ * walk finds that are neither in the index (`tracked`) nor ignored. A subfolder that is a
+ * repository of its own is left out, as git leaves it.
+ */
+async function withUntracked(repo: RepoAccess, manifest: Manifest, tracked: Set<string>, config: Config): Promise<Manifest> {
+  const rules = rulesFor(config);
+  const files = await walkTree(repo.tree, { git: repo.git, skipNestedRepos: true, include: (path) => !tracked.has(path) && !rules.excluded(path) });
+  return finish(repo, manifest.entries.concat(files.map((f) => walked(f, rules))), manifest.excluded, manifest);
 }
 
 /**
@@ -116,13 +116,15 @@ async function fromWalk(repo: RepoAccess, config: Config, reason: string): Promi
 export async function buildManifest(repo: RepoAccess, config: Config, openGit: OpenGit = openGitRepo): Promise<Manifest> {
   let reason = 'This folder is not a git repository.';
   if (repo.git) {
+    const tracked = new Set<string>();
+    let manifest: Manifest | null = null;
     try {
-      const manifest = fromIndex(repo, openGit(repo.git), config);
-      if (manifest) return manifest;
-      reason = 'The git index lists no files.';
+      manifest = fromIndex(repo, openGit(repo.git), config, tracked);
+      if (!manifest) reason = 'The git index lists no files.';
     } catch (e) {
       reason = `The git index could not be read (${e instanceof Error ? e.message : String(e)}).`;
     }
+    if (manifest) return config.parser.includeUntracked ? withUntracked(repo, manifest, tracked, config) : manifest;
   }
   return fromWalk(repo, config, reason);
 }

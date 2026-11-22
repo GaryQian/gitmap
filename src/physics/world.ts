@@ -1,15 +1,16 @@
-// The engine's state: the replica, the nodes of all three tiers, their simulations and the position
-// buffers, plus the two things every part of the engine does with them: write rows into the buffers,
-// and carry a radius change up one tier ("space propagates upward", PLAN.md §7.1).
+// The engine's state: the replica, the nodes of all three tiers, their simulations, the district cells
+// and the position buffers, plus what every part of the engine does with them: write rows into the
+// buffers and keep a city's cells current. Radii and how they travel up the tiers are in space.ts.
 import type { Config } from '../config';
 import { GEN_ANY, GEN_CITY, GEN_DISTRICT0, GEN_HOT, type PhysicsInit, type PositionBuffers } from '../contracts/physics';
 import type { ModelReplica } from '../contracts/store';
 import { createReplica } from '../model';
 import { allocateBuffers, capacityOf, fitCapacity, growBuffers } from './buffers';
+import { cellsCurrent, computeCells, type LocalCell } from './cells';
 import { createCityTier, type CityTier } from './cityTier';
-import { estimateCityRadius, type DistrictSim } from './districtTier';
-import type { FileSim } from './fileTier';
-import { enclosingRadius, isHot, refreshRadii, reheat, type PNode } from './sim';
+import type { DistrictSim } from './districtTier';
+import { fitInflate, type FileSim } from './fileTier';
+import { isHot, type PNode } from './sim';
 import { tuningFrom, type Tuning } from './tuning';
 
 export interface World {
@@ -35,6 +36,20 @@ export interface World {
   pending: { city: boolean; districts: Set<PNode>; files: Set<FileSim> };
   /** Simulations in slot order, rebuilt lazily after the maps change. */
   lists: { districts: DistrictSim[]; files: FileSim[] } | null;
+  /**
+   * False until the first settle() or loadLayout(). Nothing ticks before then: the map is not shown
+   * until it is settled (PLAN.md §6.8), and a layout that starts from the same state every time is
+   * reproducible however the batches were spread over time.
+   */
+  revealed: boolean;
+  /** Inside settle(): radii take their measured value at once instead of easing. */
+  settling: boolean;
+  /** Each district's Voronoi cell by district slot, local to the district centre (cells.ts). */
+  cells: (LocalCell | undefined)[];
+  /** Districts and cities whose radius is easing toward its goal. */
+  easing: Set<PNode>;
+  /** District simulations whose cells may be out of date: a centre or the city radius moved. */
+  cellsDirty: Set<DistrictSim>;
 }
 
 export function createWorld(init: PhysicsInit, buffers?: PositionBuffers): World {
@@ -57,6 +72,11 @@ export function createWorld(init: PhysicsInit, buffers?: PositionBuffers): World
     pins: new Set(),
     pending: { city: false, districts: new Set(), files: new Set() },
     lists: null,
+    revealed: false,
+    settling: false,
+    cells: [],
+    easing: new Set(),
+    cellsDirty: new Set(),
   };
 }
 
@@ -102,7 +122,7 @@ export function flush(w: World): void {
   for (const n of p.districts) {
     if (w.districtNodes[n.slot] !== n) continue;
     const o = 3 * n.slot;
-    district[o] = n.x; district[o + 1] = n.y; district[o + 2] = n.r;
+    district[o] = n.x; district[o + 1] = n.y; district[o + 2] = n.bound;
     Atomics.add(gen, GEN_DISTRICT0 + n.slot, 1);
     any = true;
   }
@@ -136,67 +156,28 @@ export function countHot(w: World): number {
   return hot;
 }
 
+/** Publish how many simulations are hot. Before the reveal nothing runs, so the count is 0. */
 export function publishHot(w: World, extra = 0): number {
-  const hot = countHot(w) + extra;
+  const hot = w.revealed ? countHot(w) + w.easing.size + extra : 0;
   Atomics.store(w.positions.gen, GEN_HOT, hot);
   return hot;
 }
 
-// ---- radii: measured from content, carried upward ----
-
-function significant(w: World, before: number, after: number): boolean {
-  return Math.abs(after - before) > Math.max(w.t.radiusEpsAbs, w.t.radiusEpsRel * before);
-}
-
-/** A district's radius changed: its city's simulation re-reads radii and sizes its containment for the new content. */
-export function districtRadiusChanged(w: World, ds: DistrictSim): void {
-  refreshRadii(ds);
-  ds.estimate = estimateCityRadius(ds.nodes, w.t);
-  ds.containR = ds.estimate;
-  ds.contentDirty = true;
-}
+// ---- cells ----
 
 /**
- * Set a district's radius from where its units are now: the enclosing radius of its spheres, plus pad.
- * `exact` (the file simulation is at rest) records any difference and tightens containment to the
- * measured size; otherwise only a significant change is taken, and that reheats the city's districts
- * so siblings make room.
+ * Bring one city's cells up to date. They are recomputed only when a district centre or radius has
+ * changed by more than `eps` since they were last computed (0 = any change at all).
+ * Returns true when they were recomputed.
  */
-export function measureDistrict(w: World, d: number, exact: boolean): void {
-  const dn = w.districtNodes[d];
-  if (!dn) return;
-  const fs = w.fileSims.get(d);
-  const enclosing = fs ? enclosingRadius(fs.nodes) : 0;
-  if (exact && fs) fs.containR = enclosing;
-  const r = enclosing + w.t.file.pad;
-  const big = significant(w, dn.r, r);
-  if (exact) dn.measured = true;
-  if (!big && !(exact && r !== dn.r)) return;
-  dn.r = r;
-  dn.measured = true;
-  w.pending.districts.add(dn);
-  const ds = w.districtSims.get(dn.parent);
-  if (!ds) return;
-  districtRadiusChanged(w, ds);
-  if (big) reheat(ds.sim, w.t.reheat);
-}
-
-/** As measureDistrict, one tier up: a city's radius from where its districts are now. */
-export function measureCity(w: World, c: number, exact: boolean): void {
-  const cn = w.cityNodes[c];
-  if (!cn) return;
-  const ds = w.districtSims.get(c);
-  const enclosing = ds ? enclosingRadius(ds.nodes) : 0;
-  if (exact && ds) ds.containR = enclosing;
-  const r = enclosing + w.t.district.pad;
-  const big = significant(w, cn.r, r);
-  if (exact) cn.measured = true;
-  if (!big && !(exact && r !== cn.r)) return;
-  cn.r = r;
-  cn.measured = true;
-  w.pending.city = true;
-  refreshRadii(w.cityTier);
-  if (big) reheat(w.cityTier.sim, w.t.reheat);
+export function refreshCells(w: World, ds: DistrictSim, eps: number): boolean {
+  if (cellsCurrent(ds.cells, ds.nodes, eps)) return false;
+  ds.cells = computeCells(ds.nodes, w.t.district.cellWeight, w.cells);
+  for (const n of ds.nodes) {
+    const fs = w.fileSims.get(n.slot);
+    if (fs && fitInflate(fs, w.cells[n.slot], w.t)) fs.collide.refresh();
+  }
+  return true;
 }
 
 /** Unit vector from a district's city toward the weighted mean bearing of the cities it links to. */

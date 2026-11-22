@@ -1,0 +1,38 @@
+/* Controls key and "Reset view" (PLAN.md §17.6): two tiny pills at the bottom left. */
+
+.gm-controls { position: relative; display: inline-flex; pointer-events: auto; }
+
+/* The list opens from the pill, upwards, and never changes the row's layout. */
+.gm-controls-card {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  width: max-content;
+  max-width: min(480px, calc(100vw - 32px));
+  padding: 12px 16px 13px;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(4px) scale(0.98);
+  transform-origin: 0 100%;
+  pointer-events: none;
+  transition: opacity 140ms var(--gm-ease), transform 140ms var(--gm-ease), visibility 0s linear 140ms;
+}
+.gm-controls-card.is-open {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  pointer-events: auto;
+  transition-delay: 0s;
+}
+/* the gap between pill and card must not end the hover on the way up */
+.gm-controls-card::after { content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 9px; }
+
+.gm-controls-list { display: grid; grid-template-columns: auto auto; gap: 5px 18px; margin: 0; font-size: 12.5px; }
+.gm-controls-item { display: contents; }
+.gm-controls-list dt { font-weight: 500; white-space: nowrap; }
+.gm-controls-list dd { margin: 0; color: var(--gm-text-dim); }
+
+/* Dimmed when there is nothing to reset: the camera and the layout are already at their defaults. */
+.gm-reset.is-idle { color: var(--gm-text-dim); cursor: default; opacity: 0.6; }
+.gm-reset.is-idle:hover { background: var(--gm-pill-bg); border-color: var(--gm-hairline); box-shadow: none; }
+:root[data-theme='dark'] .gm-reset.is-idle:hover { box-shadow: none; }

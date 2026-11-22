@@ -1,0 +1,38 @@
+/* Repo pills on the landing page and the repo info pill and card on the map (PLAN.md §17.6, §17.7).
+   Colours come from the --gm-* tokens; nothing here names one. */
+
+/* name in Medium, where it is from beside it, quieter */
+.gm-repo-pill { gap: 10px; max-width: min(340px, 100%); }
+.gm-repo-pill .gm-strong { overflow: hidden; text-overflow: ellipsis; }
+.gm-repo-where { overflow: hidden; text-overflow: ellipsis; color: var(--gm-text-dim); }
+
+/* ---- map: the info pill under the title pill, and its card ---- */
+
+.gm-repo-info { position: relative; display: inline-flex; max-width: 100%; }
+.gm-repo-info-pill { max-width: min(320px, 100%); padding-left: 8px; }
+.gm-repo-info-pill svg { flex: none; color: var(--gm-text-dim); }
+.gm-repo-info-pill.is-active .gm-repo-where,
+.gm-repo-info-pill:hover .gm-repo-where { color: var(--gm-text); }
+
+/* Anchored beneath the pill, left edges aligned. */
+.gm-repo-card {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 292px;
+  z-index: 1;
+}
+.gm-repo-name { margin: 0 0 10px; font-size: 15px; letter-spacing: 0.03em; overflow-wrap: anywhere; }
+.gm-repo-facts {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px 14px;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.gm-repo-facts dt { color: var(--gm-text-dim); font-size: 12px; letter-spacing: 0.035em; line-height: 19px; }
+.gm-repo-facts dd { margin: 0; overflow-wrap: anywhere; }
+.gm-repo-link { color: var(--gm-halo); text-decoration: none; border-radius: 3px; }
+.gm-repo-link:hover { text-decoration: underline; }
+.gm-repo-export { margin-top: 14px; }
+.gm-repo-note { margin: 12px 0 0; font-size: 12px; color: var(--gm-text-dim); }

@@ -1,0 +1,53 @@
+/* Selection pills: a short column under the title pill. They exist in numbers, so no backdrop blur. */
+
+.gm-selected { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; max-width: 100%; }
+
+.gm-selected-list {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.gm-selected-list > li { max-width: 100%; }
+/* "+N more" opened: the whole selection, scrolling inside its own column */
+.gm-selected-list.is-expanded {
+  max-height: min(46vh, 420px);
+  /* room for the focus ring and the active halo inside the scroll box */
+  margin: -4px;
+  padding: 4px;
+  overflow-y: auto;
+  pointer-events: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--gm-hairline) transparent;
+}
+
+.gm-selected-pill { max-width: 280px; gap: 2px; padding-right: 3px; }
+/* the warm light is selection (§17.1): the focused pill's ring is warm, not the halo blue */
+.gm-selected-pill.is-active { border-color: var(--gm-warm); }
+:root[data-theme='dark'] .gm-selected-pill.is-active { box-shadow: 0 0 14px color-mix(in srgb, var(--gm-warm) 14%, transparent); }
+
+.gm-selected-name {
+  min-width: 0;
+  margin: 0;
+  padding: 0 4px 0 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.gm-selected-name:hover { color: var(--gm-halo); }
+.gm-selected-pill .gm-icon-button { width: 20px; height: 20px; }
+
+.gm-selected-actions { display: flex; gap: 6px; }
+.gm-selected-actions .gm-pill { color: var(--gm-text-dim); }
+.gm-selected-actions .gm-pill:hover { color: var(--gm-text); }

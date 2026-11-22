@@ -5,7 +5,7 @@ import type { RenderApi } from '../contracts/render';
 import { createSession } from '../pipeline';
 import type { FakeSessionOptions } from '../testing/fakeSession';
 import {
-  freshView, IDLE_STAGE, pushNotice, setHover, setOpenFile, setSelection, toggleSelection, useApp,
+  addToSelection, freshView, IDLE_STAGE, pushNotice, selectOnly, setHover, setOpenFile, toggleSelection, useApp,
 } from './store';
 
 export function isNotImplemented(err: unknown): boolean {
@@ -122,13 +122,13 @@ export function attachCanvas(canvas: HTMLCanvasElement): void {
   }
   // pointer events from the scene become view state; features read it from the store
   render.on('hover', (e) => setHover(e.ref));
+  // click replaces and focuses, Shift+click adds or removes, a click on empty space clears (selectionState.ts)
   render.on('click', (e) => {
-    if (e.ref === null) { if (!e.shift) setSelection([]); }
-    else if (e.shift) toggleSelection(e.ref);
-    else setSelection([e.ref]);
+    if (!e.shift) selectOnly(e.ref);
+    else if (e.ref !== null) toggleSelection(e.ref);
   });
   render.on('dblclick', (e) => setOpenFile(e.ref));
-  render.on('marquee', (e) => setSelection([...new Set([...useApp.getState().selection, ...e.refs])]));
+  render.on('marquee', (e) => addToSelection(e.refs));
   useApp.setState({ render });
 }
 

@@ -1,0 +1,50 @@
+{
+  "imports": [
+    ["Sources/App/Receipt.swift", "Sources/Core/Money.swift"],
+    ["Sources/App/Checkout.swift", "Sources/Core/Core.swift"],
+    ["Sources/App/ReceiptPrinter.swift", "Sources/Core/Core.swift"],
+    ["Tests/CoreTests/CartTests.swift", "Sources/Core/Cart.swift"],
+    ["Tests/CoreTests/MoneyTests.swift", "Sources/Core/Money.swift"],
+    ["Tests/CoreTests/Fixtures.swift", "Sources/Core/Core.swift"]
+  ],
+  "notImports": [
+    ["Sources/App/Checkout.swift", "Sources/Core/Cart.swift"],
+    ["Sources/App/Checkout.swift", "Sources/Core/Pricing/PriceRule.swift"],
+    ["Sources/App/Checkout.swift", "Sources/App/Receipt.swift"],
+    ["Sources/App/Receipt.swift", "Sources/Core/Core.swift"],
+    ["Sources/Core/Cart.swift", "Sources/Core/Money.swift"],
+    ["Sources/Core/Money.swift", "Sources/Core/Core.swift"],
+    ["Tests/CoreTests/CartTests.swift", "Sources/Core/Money.swift"],
+    ["Tests/CoreTests/CartTests.swift", "Tests/CoreTests/Fixtures.swift"],
+    ["Tests/CoreTests/MoneyTests.swift", "Sources/Core/Cart.swift"],
+    ["Sources/App/Checkout.swift", "Package.swift"]
+  ],
+  "calls": [
+    ["Sources/Core/Cart.swift", "Sources/Core/Money.swift", "zero"],
+    ["Sources/Core/Cart.swift", "Sources/Core/Money.swift", "adding"],
+    ["Sources/Core/Cart.swift", "Sources/Core/LineItem.swift", "subtotal"],
+    ["Sources/Core/Cart.swift", "Sources/Core/Pricing/PriceRule.swift", "adjust"],
+    ["Sources/Core/LineItem.swift", "Sources/Core/Money.swift", "scaled"],
+    ["Sources/Core/Pricing/PriceRule.swift", "Sources/Core/Money.swift", "scaled"],
+    ["Sources/Core/Money.swift", "Sources/Core/Currency.swift", "symbol"],
+    ["Sources/App/Checkout.swift", "Sources/App/ReceiptPrinter.swift", "printReceipt"],
+    ["Sources/App/ReceiptPrinter.swift", "Sources/App/Receipt.swift", "summary"],
+    ["Sources/App/Checkout.swift", "Sources/Core/Cart.swift", "addRule"],
+    ["Sources/App/Checkout.swift", "Sources/Core/Cart.swift", "total"],
+    ["Sources/App/Receipt.swift", "Sources/Core/Money.swift", "formatted"],
+    ["Tests/CoreTests/CartTests.swift", "Tests/CoreTests/Fixtures.swift", "sampleItem"],
+    ["Tests/CoreTests/CartTests.swift", "Sources/Core/Cart.swift", "total"],
+    ["Tests/CoreTests/MoneyTests.swift", "Sources/Core/Money.swift", "adding"],
+    ["Tests/CoreTests/MoneyTests.swift", "Sources/Core/Money.swift", "formatted"]
+  ],
+  "sameModule": [
+    ["Sources/Core/Cart.swift", "Sources/Core/Money.swift"],
+    ["Sources/Core/Cart.swift", "Sources/Core/Pricing/PriceRule.swift"],
+    ["Sources/Core/Core.swift", "Sources/Core/Currency.swift"],
+    ["Sources/Core/LineItem.swift", "Sources/Core/Money.swift"],
+    ["Sources/App/Checkout.swift", "Sources/App/Receipt.swift"],
+    ["Sources/App/Checkout.swift", "Sources/App/ReceiptPrinter.swift"],
+    ["Tests/CoreTests/CartTests.swift", "Tests/CoreTests/Fixtures.swift"],
+    ["Tests/CoreTests/CartTests.swift", "Tests/CoreTests/MoneyTests.swift"]
+  ]
+}

@@ -4,6 +4,12 @@
 // brought in line with it. Only the simulations a batch touches are rebuilt, and each of those gets at
 // most one nodes() and one links() call, followed by a gentle reheat.
 //
+// After the reveal a batch belongs to a user-triggered update (PLAN.md §6.8) and must stay local
+// (IMPLEMENTATION.md §4): a file simulation whose units or links changed is reheated gently; a district
+// or city simulation is woken only when its membership or a radius changed, and then with every node
+// the batch did not touch pinned (space.ts). A change of link weights alone wakes nothing above the
+// file tier: the weights are in place for the next time that tier runs.
+//
 // Which tier an edge belongs to depends on where its two units live:
 //   same district               → a link in that district's file simulation
 //   same city, other district   → weight on a district-pair link in that city's district simulation
@@ -13,11 +19,13 @@
 // simulations: before the batch is applied (where things were) and after (where they are now).
 import type { PatchBatch } from '../model/types';
 import { unitRadius } from '../shared';
+import { clampIntoCell } from './cells';
 import { createDistrictSim, estimateCityRadius, type DistrictSim } from './districtTier';
-import { createFileSim, estimateDistrictRadius, rankTargets } from './fileTier';
+import { createFileSim, estimateDistrictRadius, fitInflate, rankTargets } from './fileTier';
 import { placeCities, placeDistricts, placeUnits } from './placement';
-import { applyTopology, newNode, refreshRadii, reheat, setLinks, type PLink, type PNode } from './sim';
-import { ensureCapacity, externalBearing, type World } from './world';
+import { applyTopology, enclosingRadius, heatFor, isHot, newNode, refreshRadii, reheat, setLinks, type PLink, type PNode } from './sim';
+import { resizeDistrict, wakeTier } from './space';
+import { ensureCapacity, externalBearing, refreshCells, type World } from './world';
 
 /** What a batch touched. Slots are visited once however many operations name them. */
 interface Dirty {
@@ -198,6 +206,7 @@ function reconcile(w: World, dirty: Dirty): void {
       w.districtNodes[s] = n = undefined;
       w.fileSims.delete(s);
       w.external.delete(s);
+      w.cells[s] = undefined;
     }
     if (id === null) continue;
     const c = districts.refSlots.city[s] >= 0 ? districts.refSlots.city[s] : -1;
@@ -210,6 +219,7 @@ function reconcile(w: World, dirty: Dirty): void {
       n.hasHome = false;
       n.fx = n.fy = null;
       w.pins.delete(n);
+      w.cells[s] = undefined;
     } else continue;
     if (c >= 0) { push(districtAdds, c, n); districtNodesDirty.add(c); }
   }
@@ -234,10 +244,11 @@ function reconcile(w: World, dirty: Dirty): void {
       if (n.parent >= 0) fileNodesDirty.add(n.parent);
       n.parent = d;
       n.placed = false;
+      n.hasHome = false;
       if (d >= 0) { push(fileAdds, d, n); fileNodesDirty.add(d); }
     }
     if (n.r !== r) {
-      n.r = r;
+      n.r = n.bound = r;
       if (d >= 0) fileNodesDirty.add(d);
     }
   }
@@ -254,7 +265,14 @@ function reconcile(w: World, dirty: Dirty): void {
     const nodes = w.cityNodes[c] ? kept.concat(districtAdds.get(c) ?? []).sort(bySlot) : [];
     if (ds && kept.length !== ds.nodes.length) dirty.districtLinks.add(c);
     if (!nodes.length) { w.districtSims.delete(c); continue; }
-    if (!ds) w.districtSims.set(c, (ds = createDistrictSim(c, t, (n) => externalBearing(w, n))));
+    if (!ds) {
+      ds = createDistrictSim(c, t, {
+        bearing: (n) => externalBearing(w, n),
+        centroids: (sim) => { refreshCells(w, sim, t.district.cellEps); return sim.cells?.centroids ?? null; },
+      });
+      w.districtSims.set(c, ds);
+    }
+    for (const n of ds.held) if (!nodes.includes(n)) ds.held.delete(n);
     ds.nodes = nodes;
   }
 
@@ -264,7 +282,7 @@ function reconcile(w: World, dirty: Dirty): void {
     const nodes = w.districtNodes[d] ? kept.concat(fileAdds.get(d) ?? []).sort(bySlot) : [];
     if (fs && kept.length !== fs.nodes.length) dirty.fileLinks.add(d);
     if (!nodes.length) { w.fileSims.delete(d); continue; }
-    if (!fs) w.fileSims.set(d, (fs = createFileSim(d, t)));
+    if (!fs) w.fileSims.set(d, (fs = createFileSim(d, t, () => w.cells[d])));
     fs.nodes = nodes;
   }
   w.lists = null;
@@ -335,27 +353,29 @@ function reconcile(w: World, dirty: Dirty): void {
     if (cityLinksChanged) setLinks(w.cityTier, links);
   }
 
-  // 4. sizes, bottom-up. Until a district has been measured from settled units, its radius is an area estimate.
+  // 4. sizes, bottom-up. A district's radius is the disc that holds its units packed; a city's is an area
+  //    estimate until it has been measured from its settled districts.
   const districtRadiiDirty = new Set<number>(); // city slots
+  const resized = new Map<number, PNode[]>(); // districts whose radius changed here, by city slot
+  const resizedCities: PNode[] = [];
   const ranked = new Map<number, PNode[]>();
   for (const d of fileNodesDirty) {
     const dn = w.districtNodes[d];
     if (!dn) continue;
     const fs = w.fileSims.get(d);
-    let r = dn.r;
-    if (!fs) { r = emptyRadius; dn.measured = false; }
-    else {
-      fs.estimate = estimateDistrictRadius(fs.nodes, t);
-      fs.containR = fs.estimate;
-      fs.contentDirty = true;
+    let r = emptyRadius;
+    if (fs) {
+      r = fs.estimate = fs.containR = estimateDistrictRadius(fs.nodes, t);
       ranked.set(d, rankTargets(fs, t));
-      if (!dn.measured) r = fs.estimate;
+      fitInflate(fs, w.cells[d], t); // sim.nodes() below re-reads the collide radii
     }
-    if (r !== dn.r) {
-      dn.r = r;
-      w.pending.districts.add(dn);
-      if (dn.parent >= 0) districtRadiiDirty.add(dn.parent);
-    }
+    if (r === dn.rGoal) continue;
+    const before = dn.r;
+    if (!resizeDistrict(w, dn, r)) continue; // eases in; each step of that wakes the city's districts
+    if (dn.parent < 0) continue;
+    districtRadiiDirty.add(dn.parent);
+    // a change too small to ease is too small to wake anything for
+    if (!w.revealed || Math.abs(r - before) > t.radiusEpsAbs) push(resized, dn.parent, dn);
   }
   for (const c of new Set([...districtNodesDirty, ...districtRadiiDirty])) {
     const cn = w.cityNodes[c];
@@ -365,11 +385,17 @@ function reconcile(w: World, dirty: Dirty): void {
     if (!ds) { r = emptyRadius; cn.measured = false; }
     else {
       ds.estimate = estimateCityRadius(ds.nodes, t);
-      ds.containR = ds.estimate;
+      // room for what is there now as well as for what the estimate says is coming
+      ds.containR = Math.max(ds.estimate, enclosingRadius(ds.nodes.filter((n) => n.placed)));
       ds.contentDirty = true;
       if (!cn.measured) r = ds.estimate;
     }
-    if (r !== cn.r) { cn.r = r; cityRadiiChanged = true; }
+    if (r !== cn.r) {
+      cn.r = cn.rGoal = cn.bound = r;
+      w.easing.delete(cn);
+      cityRadiiChanged = true;
+      resizedCities.push(cn);
+    }
   }
 
   // 5. positions for new nodes, top-down (a district's pull needs its city placed)
@@ -384,15 +410,26 @@ function reconcile(w: World, dirty: Dirty): void {
   }
   for (const [d, adds] of fileAdds) {
     const fs = w.fileSims.get(d);
-    if (fs) placeUnits(fs, adds, ranked.get(d)!, w.seed, t);
+    if (!fs) continue;
+    const cell = w.cells[d];
+    placeUnits(fs, adds, ranked.get(d)!, w.seed, t, cell);
+    if (cell) clampIntoCell(adds, cell); // a newcomer starts inside its district's territory
   }
 
   // 6. hand the changes to d3 and warm the simulations that changed. A first layout starts at alpha 1.
+  //    After the reveal the warming is local: see the note at the top of this file.
+  const live = w.revealed;
   for (const d of new Set([...fileNodesDirty, ...fileLinks.keys()])) {
     const fs = w.fileSims.get(d);
     if (!fs) continue;
     applyTopology(fs, fileNodesDirty.has(d), fileLinks.has(d));
-    reheat(fs.sim, t.reheat);
+    if (!live) reheat(fs.sim, t.reheat);
+    else if (fs.nodes.some((n) => n.hasHome)) {
+      // a district that was on show: its units shuffle gently and briefly
+      const warm = isHot(fs.sim) && !fs.constraintsOnly ? Math.max(fs.sim.alpha(), t.reheat) : t.reheat;
+      heatFor(fs.sim, warm, t.updateTicks);
+      fs.constraintsOnly = false;
+    } // else a district new to the map lays itself out from alpha 1, as before the reveal
     w.pending.files.add(fs);
   }
   for (const c of new Set([...districtNodesDirty, ...districtRadiiDirty, ...districtLinks.keys()])) {
@@ -401,8 +438,12 @@ function reconcile(w: World, dirty: Dirty): void {
     const nodesChanged = districtNodesDirty.has(c);
     applyTopology(ds, nodesChanged, districtLinks.has(c));
     if (!nodesChanged && districtRadiiDirty.has(c)) refreshRadii(ds);
-    reheat(ds.sim, freshDistricts.has(ds) ? 1 : t.reheat);
     for (const n of ds.nodes) w.pending.districts.add(n);
+    if (!live) reheat(ds.sim, freshDistricts.has(ds) ? 1 : t.reheat);
+    else if (freshDistricts.has(ds)) reheat(ds.sim, 1); // a city new to the map: nothing to keep still
+    else if (nodesChanged) wakeTier(w, ds, [...(districtAdds.get(c) ?? []), ...(resized.get(c) ?? [])], true);
+    else if (resized.has(c)) wakeTier(w, ds, resized.get(c)!, false);
+    if (live) w.cellsDirty.add(ds);
   }
   for (const [c, ds] of w.districtSims) {
     // outside pulls changed without a topology change: new bearings, no reheat
@@ -411,7 +452,11 @@ function reconcile(w: World, dirty: Dirty): void {
   if (cityNodesChanged || cityLinksChanged || cityRadiiChanged) {
     applyTopology(w.cityTier, cityNodesChanged, cityLinksChanged);
     if (!cityNodesChanged && cityRadiiChanged) refreshRadii(w.cityTier);
-    if (w.cityTier.nodes.length) reheat(w.cityTier.sim, freshCities ? 1 : t.reheat);
+    for (const n of w.cityTier.held) if (w.cityNodes[n.slot] !== n) w.cityTier.held.delete(n);
     w.pending.city = true;
+    if (!w.cityTier.nodes.length) return;
+    if (!live || freshCities) reheat(w.cityTier.sim, freshCities ? 1 : t.reheat);
+    else if (cityNodesChanged) wakeTier(w, w.cityTier, [...cityAdds, ...resizedCities], true);
+    else if (resizedCities.length) wakeTier(w, w.cityTier, resizedCities, false);
   }
 }

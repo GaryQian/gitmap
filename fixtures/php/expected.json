@@ -1,0 +1,56 @@
+{
+  "imports": [
+    ["public/index.php", "src/Http/Controllers/OrderController.php"],
+    ["public/index.php", "bootstrap/app.php"],
+    ["bootstrap/app.php", "src/Services/OrderService.php"],
+    ["bootstrap/app.php", "src/Services/StripeGateway.php"],
+    ["bootstrap/app.php", "src/Support/helpers.php"],
+    ["src/Http/Controllers/OrderController.php", "src/Models/Customer.php"],
+    ["src/Http/Controllers/OrderController.php", "src/Services/OrderService.php"],
+    ["src/Services/OrderService.php", "src/Models/Order.php"],
+    ["src/Services/OrderService.php", "src/Models/Customer.php"],
+    ["src/Models/Order.php", "src/Support/helpers.php"],
+    ["tests/OrderServiceTest.php", "src/Models/Customer.php"],
+    ["tests/OrderServiceTest.php", "src/Services/OrderService.php"],
+    ["tests/OrderServiceTest.php", "tests/Fakes/FakeGateway.php"],
+    ["tests/Fakes/FakeGateway.php", "src/Services/PaymentGateway.php"]
+  ],
+  "notImports": [
+    ["src/Models/Order.php", "src/Models/HasTimestamps.php"],
+    ["src/Models/Customer.php", "src/Models/HasTimestamps.php"],
+    ["src/Http/Controllers/OrderController.php", "src/Http/Controllers/Controller.php"],
+    ["src/Services/OrderService.php", "src/Services/PaymentGateway.php"],
+    ["src/Services/StripeGateway.php", "src/Services/PaymentGateway.php"],
+    ["bootstrap/app.php", "src/Models/Customer.php"],
+    ["tests/OrderServiceTest.php", "src/Http/Controllers/OrderController.php"],
+    ["tests/OrderServiceTest.php", "bootstrap/app.php"]
+  ],
+  "external": [
+    ["public/index.php", "Illuminate\\Http\\Request"],
+    ["bootstrap/app.php", "Psr\\Log\\NullLogger"],
+    ["src/Http/Controllers/OrderController.php", "Illuminate\\Http\\Request"],
+    ["src/Services/OrderService.php", "Psr\\Log\\LoggerInterface"],
+    ["src/Services/OrderService.php", "RuntimeException"],
+    ["src/Models/HasTimestamps.php", "DateTimeImmutable"],
+    ["tests/OrderServiceTest.php", "PHPUnit\\Framework\\TestCase"],
+    ["tests/OrderServiceTest.php", "Psr\\Log\\NullLogger"]
+  ],
+  "calls": [
+    ["public/index.php", "src/Http/Controllers/OrderController.php", "store"],
+    ["src/Http/Controllers/OrderController.php", "src/Services/OrderService.php", "place"],
+    ["src/Http/Controllers/OrderController.php", "src/Http/Controllers/Controller.php", "json"],
+    ["src/Services/OrderService.php", "src/Models/Order.php", "create"],
+    ["src/Services/OrderService.php", "src/Models/Order.php", "total"],
+    ["src/Models/Order.php", "src/Support/helpers.php", "money"],
+    ["src/Models/Order.php", "src/Models/HasTimestamps.php", "touch"],
+    ["src/Models/Customer.php", "src/Models/HasTimestamps.php", "touch"],
+    ["tests/OrderServiceTest.php", "src/Services/OrderService.php", "place"]
+  ],
+  "sameNamespace": [
+    ["src/Models/Order.php", "src/Models/Customer.php"],
+    ["src/Models/Order.php", "src/Models/HasTimestamps.php"],
+    ["src/Http/Controllers/OrderController.php", "src/Http/Controllers/Controller.php"],
+    ["src/Services/OrderService.php", "src/Services/PaymentGateway.php"],
+    ["src/Services/StripeGateway.php", "src/Services/PaymentGateway.php"]
+  ]
+}

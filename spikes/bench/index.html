@@ -1,0 +1,13 @@
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>gitmap M0 benchmarks</title>
+<style>body{font:15px system-ui;margin:32px;max-width:760px;background:#fff;color:#222}li{margin:10px 0}code{background:#f2f2f4;padding:1px 4px}</style>
+<h2>gitmap M0 benchmarks</h2>
+<p id=iso></p>
+<ol>
+<li><a href="./gpu.html"><b>GPU runner</b></a> — click Run, wait ~1 minute, press Copy results. Use this on the integrated-graphics laptop. Plug the laptop in first.</li>
+<li><a href="../physics/index.html">Physics worker + shared memory</a> — checks cross-origin isolation, SharedArrayBuffer and settle time.</li>
+<li><a href="../fsa/index.html">File read + fast scan</a> — needs Chrome or Edge; pick a local git repo folder.</li>
+<li><a href="../git/browser/walk.html">Git history walk</a> — needs Chrome or Edge; pick a local git repo folder.</li>
+<li><a href="../render/index.html?n=10000">Render scene (interactive, 10k files)</a></li>
+</ol>
+<script>document.getElementById('iso').textContent = 'crossOriginIsolated = ' + crossOriginIsolated + (crossOriginIsolated ? ' ✓' : ' ✗ (shared memory unavailable)');</script>

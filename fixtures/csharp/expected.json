@@ -1,0 +1,61 @@
+{
+  "imports": [
+    ["src/Shop/Program.cs", "src/Shop/Data/OrderRepository.cs"],
+    ["src/Shop/Program.cs", "src/Shop/Models/Order.cs"],
+    ["src/Shop/Program.cs", "src/Shop/Models/Customer.cs"],
+    ["src/Shop/Program.cs", "src/Shop/Models/Money.cs"],
+    ["src/Shop/Program.cs", "src/Shop/Services/OrderService.cs"],
+    ["src/Shop/Program.cs", "src/Shop/Services/PricingService.cs"],
+    ["src/Shop/Program.cs", "src/Shop/Services/IOrderService.cs"],
+    ["src/Shop/Services/OrderService.cs", "src/Shop/Models/Order.cs"],
+    ["src/Shop/Services/OrderService.cs", "src/Shop/Models/Money.cs"],
+    ["src/Shop/Services/OrderService.cs", "src/Shop/Models/Customer.cs"],
+    ["src/Shop/Services/OrderService.cs", "src/Shop/Util/Guard.cs"],
+    ["src/Shop/Services/OrderService.cs", "src/Shop/Data/OrderRepository.cs"],
+    ["src/Shop/Services/IOrderService.cs", "src/Shop/Models/Order.cs"],
+    ["src/Shop/Services/IOrderService.cs", "src/Shop/Models/Money.cs"],
+    ["src/Shop/Services/PricingService.cs", "src/Shop/Models/Order.cs"],
+    ["src/Shop/Services/PricingService.cs", "src/Shop/Models/Money.cs"],
+    ["src/Shop/Data/OrderRepository.cs", "src/Shop/Models/Order.cs"],
+    ["src/Shop/Data/OrderRepository.cs", "src/Shop/Util/Guard.cs"],
+    ["src/Shop/Data/OrderRepository.cs", "src/Shop/Util/TextExtensions.cs"],
+    ["tests/Shop.Tests/OrderServiceTests.cs", "src/Shop/Data/OrderRepository.cs"],
+    ["tests/Shop.Tests/OrderServiceTests.cs", "src/Shop/Services/OrderService.cs"],
+    ["tests/Shop.Tests/OrderServiceTests.cs", "src/Shop/Services/PricingService.cs"],
+    ["tests/Shop.Tests/OrderServiceTests.cs", "src/Shop/Models/Order.cs"],
+    ["tests/Shop.Tests/OrderServiceTests.cs", "src/Shop/Models/Customer.cs"],
+    ["tests/Shop.Tests/OrderServiceTests.cs", "src/Shop/Models/Money.cs"]
+  ],
+  "notImports": [
+    ["src/Shop/Services/OrderService.cs", "src/Shop/Util/TextExtensions.cs"],
+    ["src/Shop/Services/OrderService.cs", "src/Shop/Data/IRepository.cs"],
+    ["src/Shop/Services/OrderService.cs", "src/Shop/Services/PricingService.cs"],
+    ["src/Shop/Services/PricingService.cs", "src/Shop/Data/OrderRepository.cs"],
+    ["src/Shop/Models/Customer.cs", "src/Shop/Models/Order.cs"],
+    ["src/Shop/Models/Order.cs", "src/Shop/Models/Customer.cs"],
+    ["src/Shop/Util/Guard.cs", "src/Shop/Util/TextExtensions.cs"],
+    ["src/Shop/Data/OrderRepository.cs", "src/Shop/Services/OrderService.cs"]
+  ],
+  "calls": [
+    ["src/Shop/Program.cs", "src/Shop/Services/OrderService.cs", "PlaceOrder"],
+    ["src/Shop/Program.cs", "src/Shop/Models/Order.cs", "Add"],
+    ["src/Shop/Program.cs", "src/Shop/Models/Money.cs", "Format"],
+    ["src/Shop/Services/OrderService.cs", "src/Shop/Util/Guard.cs", "NotNull"],
+    ["src/Shop/Services/OrderService.cs", "src/Shop/Data/OrderRepository.cs", "Save"],
+    ["src/Shop/Services/OrderService.cs", "src/Shop/Services/PricingService.cs", "Total"],
+    ["src/Shop/Services/OrderService.cs", "src/Shop/Models/Customer.cs", "Remember"],
+    ["src/Shop/Services/PricingService.cs", "src/Shop/Models/Money.cs", "Plus"],
+    ["src/Shop/Services/PricingService.cs", "src/Shop/Models/Money.cs", "Times"],
+    ["src/Shop/Data/OrderRepository.cs", "src/Shop/Util/Guard.cs", "NotNull"],
+    ["src/Shop/Data/OrderRepository.cs", "src/Shop/Util/TextExtensions.cs", "Shorten"],
+    ["tests/Shop.Tests/OrderServiceTests.cs", "src/Shop/Services/OrderService.cs", "PlaceOrder"]
+  ],
+  "sameNamespace": [
+    ["src/Shop/Models/Customer.cs", "src/Shop/Models/Order.cs"],
+    ["src/Shop/Models/Order.cs", "src/Shop/Models/Money.cs"],
+    ["src/Shop/Services/OrderService.cs", "src/Shop/Services/PricingService.cs"],
+    ["src/Shop/Services/IOrderService.cs", "src/Shop/Services/OrderService.cs"],
+    ["src/Shop/Data/IRepository.cs", "src/Shop/Data/OrderRepository.cs"],
+    ["src/Shop/Util/Guard.cs", "src/Shop/Util/TextExtensions.cs"]
+  ]
+}

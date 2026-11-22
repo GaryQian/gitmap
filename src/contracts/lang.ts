@@ -112,6 +112,13 @@ export interface Resolver {
    * (Java/Kotlin/Scala package, Go package directory, C# namespace, Swift module, Rust crate).
    */
   scopes?(file: FileFacts): string[];
+  /**
+   * Scope keys a file can read without being a member: one-way visibility. The file sees the
+   * symbols of every file whose scopes() include one of these keys, but those files do not see it
+   * (Swift: the modules a file imports; C#: its parent namespaces and the namespaces it uses).
+   * The linker ranks such a match like an import without a listed name.
+   */
+  sees?(file: FileFacts): string[];
 }
 
 /**
@@ -132,6 +139,11 @@ export interface SyntaxSpec {
   grammar(path: string): string | null;
   /** Query source per grammar name. */
   queries: Record<string, string>;
+  /**
+   * Language rule for SymbolDef.exported when it follows from the name alone (Go: upper-case first
+   * letter; Python: no leading underscore). When absent the runner decides from the syntax tree.
+   */
+  exported?(name: string, kind: SymbolKind): boolean;
 }
 
 export interface LanguagePlugin {

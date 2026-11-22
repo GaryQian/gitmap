@@ -35,16 +35,18 @@
   "history": { "maxCommits": 50000, "timeBudgetSeconds": 20, "merges": "skip", "pageBytes": 262144, "pageCacheBytes": 67108864, "objectCacheBytes": 33554432 },
   "clustering": {
     "citiesPerDecade": 3.5, "cityOffset": -2.2, "minCities": 1, "maxCities": 20,
-    "districtsPerDecade": 3.5, "districtOffset": -2.2, "minDistrictSize": 5,
+    "districtsPerDecade": 3.5, "districtOffset": -2.2, "minDistrictSize": 5, "sizeBias": 1,
     "resolution": 1.0, "seed": 1, "directoryAffinity": 0.1, "hubDamping": true
   },
   "importance": { "damping": 0.85, "maxIterations": 100, "tolerance": 1e-9 },
   "analysis": { "topSymbolsPerEdge": 5 },
   "physics": {
     "sliceMs": 8, "reheat": 0.3, "velocityDecay": 0.6, "settleTicks": 150, "alphaMin": 0.001,
+    "packing": 0.5, "containStrength": 0.5, "dragAlphaTarget": 0.3, "resetMs": 600, "loopHz": 60, "postHz": 30,
+    "settleReserve": 0.15, "radiusEpsAbs": 0.25, "radiusEpsRel": 0.02, "overlapTolerance": 0.95, "offFocusEvery": 2,
     "city": { "gap": 40, "linkStrength": 0.5, "charge": -60, "gravity": 0.02 },
-    "district": { "pad": 6, "linkStrength": 0.6, "externalPull": 0.15, "lloyd": 0.1 },
-    "file": { "pad": 0.5, "sizeVsConnectivity": 0.5, "baseStrength": 0.1 }
+    "district": { "pad": 6, "linkStrength": 0.6, "externalPull": 0.15, "externalPullScale": 0.05, "lloyd": 0.1 },
+    "file": { "pad": 0.5, "gap": 2, "radialExtent": 0.85, "sizeVsConnectivity": 0.5, "baseStrength": 0.1 }
   },
   "visual": {
     "radiusMin": 0.8, "radiusMax": 12, "sizeScale": 0.8, "importanceBoost": 0.5, "importanceCurve": 2,

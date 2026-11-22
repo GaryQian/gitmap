@@ -1,0 +1,47 @@
+{
+  "imports": [
+    ["cmd/shopd/main.go", "internal/config/config.go"],
+    ["cmd/shopd/main.go", "internal/server/server.go"],
+    ["cmd/shopd/main.go", "internal/server/routes.go"],
+    ["cmd/shopd/main.go", "internal/store/store.go"],
+    ["cmd/shopd/main.go", "internal/store/ids.go"],
+    ["cmd/shopd/main.go", "internal/store/item.go"],
+    ["internal/server/server.go", "internal/store/store.go"],
+    ["internal/server/server.go", "internal/store/ids.go"],
+    ["internal/server/server.go", "internal/store/item.go"],
+    ["internal/server/routes.go", "internal/store/store.go"],
+    ["internal/server/routes.go", "internal/store/ids.go"],
+    ["internal/server/routes.go", "internal/store/item.go"],
+    ["internal/server/routes.go", "pkg/pricing/pricing.go"],
+    ["internal/server/routes.go", "pkg/pricing/format.go"],
+    ["internal/store/store_test.go", "internal/store/store.go"],
+    ["internal/store/store_test.go", "internal/store/ids.go"],
+    ["internal/store/store_test.go", "internal/store/item.go"]
+  ],
+  "notImports": [
+    ["cmd/shopd/main.go", "internal/store/store_test.go"],
+    ["internal/server/server.go", "internal/store/store_test.go"],
+    ["internal/server/routes.go", "internal/store/store_test.go"],
+    ["internal/config/config.go", "pkg/pricing/pricing.go"],
+    ["internal/config/config.go", "pkg/pricing/format.go"],
+    ["internal/server/server.go", "pkg/pricing/pricing.go"],
+    ["cmd/shopd/main.go", "pkg/pricing/pricing.go"]
+  ],
+  "calls": [
+    ["cmd/shopd/main.go", "internal/config/config.go", "Load"],
+    ["cmd/shopd/main.go", "internal/store/store.go", "New"],
+    ["cmd/shopd/main.go", "internal/server/server.go", "New"],
+    ["internal/store/store.go", "internal/store/ids.go", "newID"],
+    ["internal/server/server.go", "internal/server/routes.go", "logRequests"],
+    ["internal/server/routes.go", "pkg/pricing/pricing.go", "WithTax"],
+    ["internal/server/routes.go", "pkg/pricing/format.go", "Format"],
+    ["internal/store/store_test.go", "internal/store/store.go", "New"]
+  ],
+  "samePackage": [
+    ["internal/store/store.go", "internal/store/ids.go"],
+    ["internal/store/store.go", "internal/store/item.go"],
+    ["internal/store/store.go", "internal/store/store_test.go"],
+    ["internal/server/server.go", "internal/server/routes.go"],
+    ["pkg/pricing/pricing.go", "pkg/pricing/format.go"]
+  ]
+}

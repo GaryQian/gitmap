@@ -2,7 +2,8 @@
 //
 // analyze() is a short pipeline of pure stages, one file each:
 //   resolve.ts     FileFacts            → RawEdge[]   (file → file, kind 'import')
-//   units.ts       files (+ UnitMapper) → UnitTable   (file → unit mapping; one unit per file for now)
+//   units.ts       files (+ UnitMapper) → UnitTable   (file → unit mapping; link/pairs.ts pairs headers)
+//   link/          SyntaxFacts          → RawEdge[]   (file → file, kinds 'call' / 'reference' / 'inherit')
 //   edges.ts       RawEdge[], UnitTable → UnitEdges   (one edge per ordered unit pair, fan-in/out)
 //   importance.ts  UnitEdges            → Importance  (PageRank, then percentile)
 //   cluster/       UnitTable, UnitEdges → ClusterResult (cities and districts)
@@ -15,27 +16,35 @@ import { assembleTables } from './assemble';
 import { cluster as defaultCluster, type Cluster } from './cluster';
 import { aggregateEdges } from './edges';
 import { computeImportance } from './importance';
+import { pairHeaders } from './link/pairs';
+import { linkSymbols } from './link/symbols';
 import { sortFiles } from './order';
 import { resolveImports } from './resolve';
 import { buildUnits, type UnitMapper } from './units';
 
 export type { RawEdge, ResolveResult } from './resolve';
 export type { UnitMapper, UnitTable } from './units';
-export type { UnitEdges } from './edges';
+export type { PairSymbols, UnitEdges } from './edges';
 export type { Importance } from './importance';
 export type { Cluster, ClusterResult } from './cluster';
+export type { LinkResult } from './link/symbols';
+export { LINK_CONFIDENCE } from './link/symbols';
+export { pairHeaders } from './link/pairs';
 
 /** Seams for tests and for the stages that later packages replace. */
 export interface AnalyzeOptions {
   /** Language plug-ins to resolve with. Default: the registry in src/lang. */
   plugins?: readonly LanguagePlugin[];
-  /** File → unit mapping. Default: one unit per file. */
+  /** File → unit mapping. Default: header + implementation pairs (link/pairs.ts), else one unit per file. */
   unitMapper?: UnitMapper;
   /** Community detection. Default: ./cluster. */
   cluster?: Cluster;
 }
 
-/** Facts in, structure out: resolve imports, form units, compute importance, cluster. Pure. */
+/**
+ * Facts in, structure out: resolve imports, form units, link symbols (when `input.syntax` is given,
+ * complete or not), compute importance, cluster. Pure, and independent of the order of its inputs.
+ */
 export function analyze(input: AnalysisInput, config: Config, options: AnalyzeOptions = {}): AnalysisResult {
   const ms: Record<string, number> = {};
   const t0 = now();
@@ -46,10 +55,13 @@ export function analyze(input: AnalysisInput, config: Config, options: AnalyzeOp
   const resolved = resolveImports(files, options.plugins);
   lap('resolve');
 
-  const units = buildUnits(files, resolved.edges, options.unitMapper);
+  const units = buildUnits(files, resolved.edges, options.unitMapper ?? pairHeaders);
   lap('units');
 
-  const edges = aggregateEdges(resolved.edges, units);
+  const linked = input.syntax ? linkSymbols(files, input.syntax, resolved, units, config.analysis.topSymbolsPerEdge) : null;
+  lap('link');
+
+  const edges = aggregateEdges(linked ? resolved.edges.concat(linked.edges) : resolved.edges, units, linked?.symbols);
   lap('edges');
 
   const importance = computeImportance(units.count, edges, config.importance);
@@ -71,8 +83,8 @@ export function analyze(input: AnalysisInput, config: Config, options: AnalyzeOp
     diagnostics: {
       importsTotal: resolved.importsTotal,
       importsResolved: resolved.importsResolved,
-      refsLinked: 0,
-      refsDropped: 0,
+      refsLinked: linked?.refsLinked ?? 0,
+      refsDropped: linked?.refsDropped ?? 0,
       bridges: 0,
       ms,
     },

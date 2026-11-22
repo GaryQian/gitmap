@@ -1,0 +1,93 @@
+/* The search pill and its results card (PLAN.md §17.6). Colours are the --gm-* tokens only. */
+
+.gm-search { position: relative; display: inline-flex; }
+
+/* At rest it reads as a pill labelled "Search files"; the label is the field's placeholder. */
+.gm-search-pill { gap: 7px; cursor: pointer; }
+.gm-search-pill.is-expanded { cursor: text; background: var(--gm-pill-bg-strong); }
+.gm-search-pill:hover { background: var(--gm-pill-bg-strong); border-color: color-mix(in srgb, var(--gm-text) 34%, transparent); }
+:root[data-theme='dark'] .gm-search-pill:hover:not(.is-expanded) { box-shadow: 0 0 16px color-mix(in srgb, var(--gm-halo) 16%, transparent); }
+
+/* The focus ring belongs to the whole pill, not to the bare field inside it. */
+.gm-search-pill:has(.gm-search-input:focus-visible) { outline: 2px solid var(--gm-halo); outline-offset: 2px; }
+.gm-search-input:focus-visible { outline: none; }
+
+.gm-search-icon { flex: 0 0 auto; }
+
+.gm-search-input {
+  box-sizing: content-box;
+  /* the width of the label; the field opens to its working width when it has focus or text */
+  width: 9ch;
+  min-width: 0;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  cursor: inherit;
+  transition: width 180ms var(--gm-ease);
+}
+.gm-search-pill.is-expanded .gm-search-input { width: min(232px, 40vw); }
+.gm-search-input::placeholder { color: var(--gm-text); opacity: 1; transition: color 140ms var(--gm-ease); }
+.gm-search-pill.is-expanded .gm-search-input::placeholder { color: var(--gm-text-dim); }
+
+.gm-search-clear { margin-right: -8px; }
+
+/* Under the pill, centred on it. */
+.gm-search-card {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  z-index: 5;
+  width: min(420px, calc(100vw - 32px));
+  padding: 6px;
+  transform: translateX(-50%);
+}
+
+.gm-search-list {
+  /* six rows and half of the next, which says there is more to scroll to */
+  max-height: 338px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--gm-hairline) transparent;
+}
+
+.gm-search-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 35px;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  /* the card's radius less its padding, so the corners run parallel */
+  border-radius: calc(var(--gm-card-radius) - 6px);
+  cursor: pointer;
+}
+.gm-search-row + .gm-search-row { margin-top: 1px; }
+.gm-search-row.is-active { background: var(--gm-text-faint); }
+
+.gm-search-dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  /* centred on the first line */
+  margin-top: 6px;
+  border-radius: 50%;
+}
+
+.gm-search-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.gm-search-name,
+.gm-search-dir { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gm-search-name { font-weight: 500; line-height: 20px; }
+.gm-search-dir { font-size: 12px; line-height: 16px; color: var(--gm-text-dim); }
+
+/* Matched characters: the halo colour, at the weight of the text around them. */
+.gm-search-hit { background: none; color: var(--gm-halo); font: inherit; }
+
+.gm-search-empty { margin: 0; padding: 7px 10px; color: var(--gm-text-dim); }

@@ -22,5 +22,8 @@ if (fake) void openSource({ kind: 'synthetic', files: fake.files ?? 1000, seed: 
 
 // A handle for the console, scripts/shot.mjs --eval and browser tests (development builds only).
 if (import.meta.env.DEV) {
+  // Reopen the map that was open before a hot-reload page refresh (devResume.ts). `?fresh` skips it once.
+  const reopen = !fake && !new URLSearchParams(location.search).has('fresh');
+  void import('./devResume').then((m) => m.startDevResume({ reopen }));
   (window as unknown as { __gitmapApp: unknown }).__gitmapApp = { store: useApp, open: openSource, close: closeSession };
 }

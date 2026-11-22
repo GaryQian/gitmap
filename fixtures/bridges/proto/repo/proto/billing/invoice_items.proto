@@ -1,0 +1,7 @@
+syntax = "proto3";
+
+package billing;
+
+option java_package = "com.example.billing";
+
+message InvoiceItems { repeated string sku = 1; }

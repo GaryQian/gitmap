@@ -1,4 +1,5 @@
 // Layout quality numbers that are reported, never asserted (IMPLEMENTATION.md §3).
+import { cellReach, type LocalCell } from './cells';
 import type { PNode } from './sim';
 
 const KEY_OFFSET = 32768;
@@ -46,4 +47,29 @@ export function overlapShare(districts: Iterable<readonly PNode[]>, tolerance: n
     for (let i = 0; i < n; i++) overlapping += hit[i];
   }
   return total ? overlapping / total : 0;
+}
+
+/**
+ * How evenly districts are filled from the middle to the edge. Each district's cell is cut into three
+ * zones of equal area around its centroid (inner, middle and outer third, scaled along each bearing to
+ * the cell's edge), and a zone's cover is the area of the unit discs centred in it over the zone's
+ * area. Returned as the area-weighted mean over all districts with a cell: equal numbers mean an even
+ * fill, a high inner and low outer number a pile at the centre and a sparse rim. Discs are counted
+ * whole where they are centred and overlaps are counted twice, so a cover above about 0.9 means overlap.
+ */
+export function coverByRadius(districts: Iterable<{ nodes: readonly PNode[]; cell: LocalCell | undefined }>): { innerCover: number; middleCover: number; outerCover: number } {
+  const disc = [0, 0, 0];
+  let zone = 0;
+  for (const { nodes, cell } of districts) {
+    if (!cell || nodes.length < 12) continue;
+    zone += cell.area / 3;
+    for (const n of nodes) {
+      const dx = n.x - cell.cx, dy = n.y - cell.cy;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      const reach = d > 1e-9 ? cellReach(cell, dx, dy) : Infinity;
+      const share = reach > 0 ? Math.min(1, d / reach) : 1;
+      disc[Math.min(2, Math.floor(share * share * 3))] += Math.PI * n.r * n.r;
+    }
+  }
+  return { innerCover: zone ? disc[0] / zone : 0, middleCover: zone ? disc[1] / zone : 0, outerCover: zone ? disc[2] / zone : 0 };
 }

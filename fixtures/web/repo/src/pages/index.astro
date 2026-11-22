@@ -1,0 +1,17 @@
+---
+import Base from '../layouts/Base.astro';
+import Counter from '../widgets/Counter.svelte';
+import '../styles/main.css';
+
+const heading = 'Fixture';
+---
+<Base title={heading}>
+  <h1>{heading}</h1>
+  <Counter client:load start={3} />
+</Base>
+
+<script>
+  import { formatName } from '../utils/format';
+
+  document.title = formatName({ first: 'Astro', last: 'Page' });
+</script>

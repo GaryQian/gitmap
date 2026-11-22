@@ -105,6 +105,12 @@ export interface SceneEvents {
   burst: { ref: NodeRef; kind: 'select' | 'open' };
   /** The camera started or stopped moving. */
   camera: { moving: boolean };
+  /**
+   * The hovered sphere changed (emitted by the interaction module): its unit slot and ref, or −1 and
+   * null when nothing is hovered. `ctx.service<InteractionApi>('interaction')?.hoveredSlot()` reads
+   * the current one.
+   */
+  hover: { slot: number; ref: NodeRef | null };
 }
 
 export interface SceneContext {

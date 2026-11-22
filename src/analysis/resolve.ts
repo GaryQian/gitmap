@@ -1,6 +1,6 @@
 // Stage 1 — resolve imports (PLAN.md §6.4): every ImportSpec of every file is handed to its
 // language's resolver; the answers become file-level raw edges.
-import type { FileFacts, LanguagePlugin, RepoIndex, Resolver } from '../contracts/lang';
+import type { FileFacts, ImportSpec, LanguagePlugin, RepoIndex, Resolver } from '../contracts/lang';
 import type { EdgeKind } from '../model/types';
 import { plugins as registeredPlugins } from '../lang';
 import { createRepoIndex } from '../shared/repoIndex';
@@ -21,6 +21,8 @@ export interface RawEdge {
   count?: number;
   /** For kind 'bridge': 'jni' | 'protobuf' | ... */
   mechanism?: string;
+  /** For kind 'import': the statement the edge came from (symbol linking reads its `names`). */
+  via?: ImportSpec;
 }
 
 export interface ResolveResult {
@@ -84,7 +86,7 @@ export function resolveImports(
         let dup = -1;
         for (let k = first; k < edges.length; k++) if (edges[k].dst === t.path) { dup = k; break; }
         if (dup >= 0) { if (confidence > edges[dup].confidence) edges[dup].confidence = confidence; continue; }
-        edges.push({ src: file.path, dst: t.path, kind: 'import', confidence });
+        edges.push({ src: file.path, dst: t.path, kind: 'import', confidence, via: imp });
       }
       if (edges.length > first) importsResolved++;
     }

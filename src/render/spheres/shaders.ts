@@ -3,9 +3,10 @@
 // vertex prelude: bodies (opaque, depth), glows (no depth write) and flat ground-light quads.
 // Tunables come from config.visual.star as uniforms; the remaining literals are the spike's.
 import { GLSL_HASH, GLSL_NOISE, GLSL_POSITIONS } from '../core/glsl';
+import { GLSL_OVERLAY_BODY, GLSL_OVERLAY_LIGHT, GLSL_OVERLAY_VERT } from '../overlay/glsl';
 
 const STAR_VARYINGS = /* glsl */ `
-varying vec2 vUv; varying vec3 vCol; varying vec3 vOvCol; varying float vGlow; varying float vSuper;
+varying vec2 vUv; varying vec3 vCol; varying vec3 vOvCol; varying float vOvKnown; varying float vGlow; varying float vSuper;
 varying float vScale; varying float vPhase; varying float vDim; varying float vBoost;
 `;
 
@@ -14,18 +15,19 @@ varying float vScale; varying float vPhase; varying float vDim; varying float vB
  *   aSlot  = unit slot, district slot, city slot         (model, written by applyBatch)
  *   aShape = radius, glow 0..1, lines of code, alive     (model)
  *   aColor = language colour rgb, language index / 255   (model)
- *   aState = flags (1 selected, 2 highlighted, 4 hovered), birth time (s), overlay t (−1 unknown)   (view)
+ *   aState = flags (1 selected, 2 highlighted, 4 hovered), birth time (s)   (view)
  *   aNudge = display-only offset in world units (jiggle)  (view)
+ *   aOverlay = overlay ramp position before and after the last change   (view; ../overlay/glsl.ts)
  */
 const STAR_PRELUDE = GLSL_POSITIONS + GLSL_HASH + /* glsl */ `
 uniform float uTime; uniform float uPixelWorld;
 uniform float uGrow; uniform float uMinLines; uniform float uSelScale; uniform float uBreathe; uniform float uSpikesFrom;
-uniform float uOverlayMix; uniform vec3 uUnknown; uniform float uMinPx;
+uniform float uOverlayMix; uniform float uMinPx;
 uniform vec4 uEmphasis;   // breathe scale, hover scale, selected glow, highlight glow
 uniform float uHoverGlow;
-uniform sampler2D uLangDim; uniform sampler2D uRamp;
-attribute vec3 aSlot; attribute vec4 aShape; attribute vec4 aColor; attribute vec3 aState; attribute vec3 aNudge;
-` + STAR_VARYINGS + /* glsl */ `
+uniform sampler2D uLangDim;
+attribute vec3 aSlot; attribute vec4 aShape; attribute vec4 aColor; attribute vec2 aState; attribute vec3 aNudge;
+` + STAR_VARYINGS + GLSL_OVERLAY_VERT + /* glsl */ `
 // Is this instance drawn, where is its centre, how large is it, how much light leaves it.
 bool gmStar(out vec3 center, out float r) {
   float g = aShape.y;
@@ -49,8 +51,7 @@ bool gmStar(out vec3 center, out float r) {
   // the top few percent flare like a supernova
   vSuper = smoothstep(uSpikesFrom, 1.0, g) * (1.0 - uOverlayMix) * (1.0 - dim);
   vCol = aColor.rgb;
-  float t = aState.z;
-  vOvCol = t < 0.0 ? uUnknown : texelFetch(uRamp, ivec2(int(clamp(t, 0.0, 1.0) * 255.0 + 0.5), 0), 0).rgb;
+  gmOverlay();
   vPhase = hash11(aSlot.x) * 6.2831;
   vDim = dim;
   vBoost = (1.0 - k) * 1.5 + breath * 0.6;   // a flash as it ignites; the core breathes when selected
@@ -79,9 +80,9 @@ void main() {
 }`;
 
 export const BODY_FRAG = /* glsl */ `
-uniform float uTime; uniform float uDark; uniform float uOverlayMix; uniform vec3 uDustCool;
+uniform float uTime; uniform float uDark; uniform float uOverlayMix; uniform vec3 uDustCool; uniform vec3 uVoid;
 uniform vec2 uCoreGain; uniform vec2 uCoreTight; uniform float uLimb; uniform float uFlicker;
-` + STAR_VARYINGS + GLSL_NOISE + /* glsl */ `
+` + STAR_VARYINGS + GLSL_NOISE + GLSL_OVERLAY_BODY + /* glsl */ `
 void main() {
   float d2 = dot(vUv, vUv); if (d2 > 1.0) discard;
   float d = sqrt(d2);
@@ -113,10 +114,9 @@ void main() {
   float burn = 1.0 - exp(-core * 0.30);
   col = mix(col, hot, burn);
 
-  // Under an overlay the body takes the overlay colour as it is (its lightness carries meaning,
-  // so no exposure curve) and the core stays neutral white.
-  vec3 ov = mix(vOvCol * limbDark * surface * 1.08, vec3(1.0), burn * 0.55);
-  col = mix(col, ov, uOverlayMix);
+  // Under an overlay the body takes the overlay colour and the core stays neutral white; a star
+  // whose value is not yet known is drawn unlit (../overlay/glsl.ts).
+  col = mix(col, gmOverlayBody(vOvCol, vOvKnown, d2, limbDark * surface, burn, uVoid), uOverlayMix);
 
   // A sphere dimmed by the legend loses its core light and drops to a pale grey body.
   col = mix(col, uDustCool * mix(1.12, 0.82, d2), vDim);
@@ -125,7 +125,7 @@ void main() {
 
 export const GLOW_FRAG = /* glsl */ `
 uniform float uTime; uniform float uDark; uniform float uOverlayMix; uniform vec3 uDustCool; uniform vec2 uGlowFalloff;
-` + STAR_VARYINGS + /* glsl */ `
+` + STAR_VARYINGS + GLSL_OVERLAY_LIGHT + /* glsl */ `
 void main() {
   float d = length(vUv);
   // The glow overlaps the body's cut edge so no gap can open between the two draws. The overlap
@@ -149,6 +149,7 @@ void main() {
   a *= 1.0 - smoothstep(vScale * 0.75, vScale, d);
   a *= smoothstep(inner, 0.93, d);
   a *= 1.0 - 0.6 * vDim;
+  a *= gmOverlayLight(vOvKnown, uOverlayMix);
   if (a < 0.004) discard;
   vec3 col = mix(mix(vCol, vOvCol, uOverlayMix), uDustCool, vDim);
   gl_FragColor = vec4(col, clamp(a, 0.0, 1.0) * (uDark > 0.5 ? 1.0 : 0.6));
@@ -167,11 +168,11 @@ void main() {
 
 export const POOL_FRAG = /* glsl */ `
 uniform float uDark; uniform float uOverlayMix;
-` + STAR_VARYINGS + /* glsl */ `
+` + STAR_VARYINGS + GLSL_OVERLAY_LIGHT + /* glsl */ `
 varying vec2 vQ;
 void main() {
   float d2 = dot(vQ, vQ); if (d2 > 1.0) discard;
-  float w = exp(-d2 * 4.0) * (1.0 - d2) * (1.0 - vDim) * (1.0 - 0.7 * uOverlayMix);
+  float w = exp(-d2 * 4.0) * (1.0 - d2) * (1.0 - vDim) * (1.0 - 0.7 * uOverlayMix) * gmOverlayLight(vOvKnown, uOverlayMix);
   vec3 col = mix(vCol, vOvCol, uOverlayMix);
   if (uDark > 0.5) gl_FragColor = vec4(col, w * (0.16 + 0.55 * vGlow));
   else gl_FragColor = vec4(mix(vec3(0.25, 0.27, 0.32), col, 0.35 + 0.65 * vGlow), w * (0.22 + 0.35 * vGlow));

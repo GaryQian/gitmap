@@ -1,0 +1,19 @@
+{
+  "edges": [
+    { "src": "app/src/main/java/com/example/media/Decoder.java", "dst": "native/decoder_jni.cpp", "mechanism": "jni", "key": "jni:com.example.media.Decoder#close" },
+    { "src": "app/src/main/java/com/example/media/Decoder.java", "dst": "native/decoder_jni.cpp", "mechanism": "jni", "key": "jni:com.example.media.Decoder#open" },
+    { "src": "app/src/main/java/com/example/media/Decoder.java", "dst": "native/decoder_jni.cpp", "mechanism": "jni", "key": "jni:com.example.media.Decoder#read" },
+    { "src": "app/src/main/java/com/example/media/Decoder.java", "dst": "native/decoder_jni.cpp", "mechanism": "jni", "key": "jni:com.example.media.Decoder$Stats#count" },
+    { "src": "app/src/main/java/com/example/media/Player.java", "dst": "native/register.cpp", "mechanism": "jni", "key": "jni:com.example.media.Player#nativeStart" },
+    { "src": "app/src/main/java/com/example/media/Player.java", "dst": "native/register.cpp", "mechanism": "jni", "key": "jni:com.example.media.Player#nativeStop" },
+    { "src": "app/src/main/kotlin/com/example/media/Codec.kt", "dst": "native/codec_jni.c", "mechanism": "jni", "key": "jni:com.example.media.Codec#configure" },
+    { "src": "app/src/main/kotlin/com/example/media/Codec.kt", "dst": "native/codec_jni.c", "mechanism": "jni", "key": "jni:com.example.media.Codec#init" },
+    { "src": "app/src/main/kotlin/com/example/media/Codec.kt", "dst": "native/codec_jni.c", "mechanism": "jni", "key": "jni:com.example.media.Codec#version" },
+    { "src": "app/src/main/kotlin/com/example/media/Codec.kt", "dst": "native/codec_jni.c", "mechanism": "jni", "key": "jni:com.example.media.Codec$Companion#probe" },
+    { "src": "app/src/main/kotlin/com/example/media/Codec.kt", "dst": "native/codec_jni.c", "mechanism": "jni", "key": "jni:com.example.media.Codec$Registry#size" },
+    { "src": "app/src/main/kotlin/com/example/media/Codec.kt", "dst": "native/register.cpp", "mechanism": "jni", "key": "jni:com.example.media.CodecKt#nativeLog" },
+    { "src": "native/callbacks.cpp", "dst": "app/src/main/java/com/example/media/Decoder.java", "mechanism": "jni", "key": "jvm:com.example.media.Decoder#onFrame" },
+    { "src": "native/callbacks.cpp", "dst": "app/src/main/java/com/example/media/Decoder.java", "mechanism": "jni", "key": "jvm:com.example.media.Decoder$Stats" },
+    { "src": "native/callbacks.cpp", "dst": "app/src/main/java/com/example/media/Listener.java", "mechanism": "jni", "key": "jvm:com.example.media.Listener#onEvent" }
+  ]
+}

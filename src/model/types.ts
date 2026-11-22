@@ -9,6 +9,8 @@
 
 export type LangId = string;
 export type NodeRef = `f:${string}` | `u:${string}` | `d:${string}` | `c:${string}`;
+/** The `u:` form of NodeRef: one sphere. Points of interest and tour steps always stand on one (PLAN.md §11.3). */
+export type UnitRef = `u:${string}`;
 export type EdgeKind = 'import' | 'call' | 'reference' | 'inherit' | 'bridge';
 export type EntityKind = 'file' | 'unit' | 'edge' | 'district' | 'city' | 'contributor';
 export const ENTITY_KINDS: readonly EntityKind[] = ['city', 'district', 'unit', 'file', 'edge', 'contributor'];
@@ -129,7 +131,8 @@ export interface PoiDetail { status: 'idle' | 'loading' | 'ready' | 'error'; mar
 export interface Poi {
   type: 'poi';
   id: string;
-  parent: NodeRef;
+  /** A file's sphere; never a district or city. */
+  parent: UnitRef;
   label: string;      // ≤ 3 words
   summary: string;    // ~30 words
   kind: PoiKind;
@@ -137,7 +140,15 @@ export interface Poi {
   refs?: NodeRef[];
   details: Record<string, PoiDetail>;
 }
-export interface TourStep { target: NodeRef; text: string; highlights: NodeRef[] }
+/** What the camera frames for a tour step: the file alone, or the district or city it belongs to when the step is shown. */
+export type TourFrame = 'file' | 'district' | 'city';
+export interface TourStep {
+  /** The file the step stands on. A step about a whole area stands on the file that best represents it. */
+  parent: UnitRef;
+  frame: TourFrame;
+  text: string;       // 10–30 words
+  highlights: UnitRef[];
+}
 export interface Tour { type: 'tour'; id: string; steps: TourStep[] }
 export interface Summary { type: 'summary'; id: string; parent: NodeRef; text: string; label?: string }
 export type Annotation = Poi | Tour | Summary;

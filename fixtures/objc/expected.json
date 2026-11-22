@@ -1,0 +1,55 @@
+{
+  "files": 16,
+  "imports": [
+    ["App/AppDelegate.m", "App/AppDelegate.h"],
+    ["App/AppDelegate.m", "App/PlayerViewController.h"],
+    ["App/AppDelegate.m", "Core/Store/TrackStore.h"],
+    ["App/AppDelegate.m", "Vendor/NetKit/NetKit.h"],
+    ["App/PlayerViewController.h", "Core/Store/TrackStore.h"],
+    ["App/PlayerViewController.m", "App/PlayerViewController.h"],
+    ["App/PlayerViewController.m", "Core/Models/Track.h"],
+    ["App/PlayerViewController.m", "Core/Models/Track+Formatting.h"],
+    ["App/PlayerViewController.m", "Core/Audio/WaveformRenderer.h"],
+    ["Core/Models/Track.m", "Core/Models/Track.h"],
+    ["Core/Models/Track+Formatting.h", "Core/Models/Track.h"],
+    ["Core/Models/Track+Formatting.m", "Core/Models/Track+Formatting.h"],
+    ["Core/Store/TrackStore.m", "Core/Store/TrackStore.h"],
+    ["Core/Store/TrackStore.m", "Core/Models/Track.h"],
+    ["Core/Store/TrackStore.m", "Vendor/NetKit/NKClient.h"],
+    ["Core/Audio/WaveformRenderer.mm", "Core/Audio/WaveformRenderer.h"],
+    ["Core/Audio/WaveformRenderer.mm", "Core/Models/Track.h"],
+    ["Core/Audio/WaveformRenderer.mm", "Core/Audio/PeakAnalyzer.hpp"],
+    ["Vendor/NetKit/NetKit.h", "Vendor/NetKit/NKClient.h"],
+    ["Vendor/NetKit/NKClient.m", "Vendor/NetKit/NKClient.h"]
+  ],
+  "notImports": [
+    ["Core/Models/Track.m", "Core/Store/TrackStore.h"],
+    ["App/PlayerViewController.h", "Core/Models/Track.h"],
+    ["Core/Store/TrackStore.h", "Core/Models/Track.h"],
+    ["Core/Audio/WaveformRenderer.h", "Core/Models/Track.h"],
+    ["App/AppDelegate.h", "Vendor/NetKit/NetKit.h"],
+    ["Core/Models/Track.h", "Vendor/NetKit/NetKit.h"]
+  ],
+  "calls": [
+    ["App/AppDelegate.m", "Core/Store/TrackStore.m", "sharedStore"],
+    ["App/AppDelegate.m", "Core/Store/TrackStore.m", "refresh"],
+    ["App/AppDelegate.m", "App/PlayerViewController.m", "initWithStore"],
+    ["App/PlayerViewController.m", "Core/Models/Track+Formatting.m", "displayTitle"],
+    ["App/PlayerViewController.m", "Core/Models/Track+Formatting.m", "formattedDuration"],
+    ["App/PlayerViewController.m", "Core/Audio/WaveformRenderer.mm", "initWithBucketCount"],
+    ["App/PlayerViewController.m", "Core/Audio/WaveformRenderer.mm", "peaksForTrack"],
+    ["Core/Store/TrackStore.m", "Core/Models/Track.m", "trackWithDictionary"],
+    ["Core/Store/TrackStore.m", "Vendor/NetKit/NKClient.m", "getPath"],
+    ["Core/Audio/WaveformRenderer.mm", "Core/Audio/PeakAnalyzer.hpp", "computePeaks"],
+    ["Core/Audio/WaveformRenderer.mm", "Core/Audio/PeakAnalyzer.hpp", "normalizePeaks"]
+  ],
+  "headerPairs": [
+    ["App/AppDelegate.h", "App/AppDelegate.m"],
+    ["App/PlayerViewController.h", "App/PlayerViewController.m"],
+    ["Core/Models/Track.h", "Core/Models/Track.m"],
+    ["Core/Models/Track+Formatting.h", "Core/Models/Track+Formatting.m"],
+    ["Core/Store/TrackStore.h", "Core/Store/TrackStore.m"],
+    ["Core/Audio/WaveformRenderer.h", "Core/Audio/WaveformRenderer.mm"],
+    ["Vendor/NetKit/NKClient.h", "Vendor/NetKit/NKClient.m"]
+  ]
+}

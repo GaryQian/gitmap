@@ -1,0 +1,5 @@
+*.draft.md
+!final.draft.md
+drafts/
+# no effect: a file cannot be re-included when its directory is excluded
+!drafts/kept.md

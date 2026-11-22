@@ -5,13 +5,20 @@ import type { Config } from '../../config';
 import { DETAIL_QUESTIONS } from '../../contracts/ai';
 import type { DetailQuestion, DetailRequest, PoisRequest, SummariesRequest, TourRequest } from '../../contracts/ai';
 import { isNodeRef } from '../../model/types';
-import type { NodeRef, PoiKind } from '../../model/types';
+import type { NodeRef, PoiKind, TourFrame, UnitRef } from '../../model/types';
 
 export const POI_KINDS = ['entry', 'core', 'boundary', 'data', 'risk'] as const satisfies readonly PoiKind[];
+export const TOUR_FRAMES = ['file', 'district', 'city'] as const satisfies readonly TourFrame[];
+
+/** A file's sphere: the only kind of reference a point of interest or a tour step may stand on (PLAN.md §11.3). */
+export function isUnitRef(ref: unknown): ref is UnitRef {
+  return isNodeRef(ref) && ref.startsWith('u:');
+}
 
 // ---- request bodies ----
 
 const nodeRef = z.custom<NodeRef>(isNodeRef, 'must be a node reference such as "u:src/main.ts"');
+const unitRef = z.custom<UnitRef>(isUnitRef, 'must be a file reference such as "u:src/main.ts"');
 const text = z.string().min(1);
 const base = { digestHash: z.string().min(1).max(256), refs: z.array(nodeRef) };
 const citySummary = z.object({ parent: nodeRef, label: z.string(), text: z.string() });
@@ -44,7 +51,7 @@ export function tourRequest(config: Config): z.ZodType<TourRequest> {
 export function detailRequest(_config: Config): z.ZodType<DetailRequest> {
   return z.object({
     ...base,
-    poi: z.object({ parent: nodeRef, label: z.string(), summary: z.string() }),
+    poi: z.object({ parent: unitRef, label: z.string(), summary: z.string() }),
     question: z.enum(Object.keys(DETAIL_QUESTIONS) as [DetailQuestion, ...DetailQuestion[]]),
     context: text,
   });
@@ -72,18 +79,23 @@ export const SUMMARY_SCHEMA = object({
 });
 
 const POI_ITEM = object({
-  parent: string('The allowed reference this point of interest is attached to.'),
+  parent: string('The one allowed file reference (u:) this point of interest stands on. Never a district or a city.'),
   label: string('A short name.'),
-  summary: string('Its role and how it connects to the rest.'),
+  summary: string('Its role and how it connects to the rest. If it speaks for a whole district or city, it says which.'),
   kind: { type: 'string', enum: [...POI_KINDS] },
   evidence: string('One structural fact from the provided material that supports this choice.'),
   refs: refList('Other allowed references this point of interest relates to. May be empty.'),
 });
 
 const TOUR_STEP = object({
-  target: string('The allowed reference this step shows.'),
-  text: string('What happens here and how it leads on, including one structural fact.'),
-  highlights: refList('Other allowed references to light up during this step. May be empty.'),
+  parent: string('The one allowed file reference (u:) this step stands on. Never a district or a city.'),
+  frame: {
+    type: 'string',
+    enum: [...TOUR_FRAMES],
+    description: 'What the camera shows: that file alone, or the district or city the file belongs to.',
+  },
+  text: string('What happens here and how it leads on, including one structural fact. If it speaks for a whole district or city, it says which.'),
+  highlights: refList('Other allowed file references (u:) to light up during this step. May be empty.'),
 });
 
 /**
@@ -102,8 +114,8 @@ export const DETAIL_SCHEMA = object({
 
 // ---- structured output: what came back ----
 //
-// Lenient on purpose: these only establish the shape. References, kinds, lengths and counts are
-// checked item by item in the handlers so one bad item does not sink the rest.
+// Lenient on purpose: these only establish the shape. References, kinds, frames, lengths and counts
+// are checked item by item in the handlers so one bad item does not sink the rest.
 
 export const summaryOutput = z.object({ label: z.string(), text: z.string() });
 
@@ -116,7 +128,8 @@ const poiOutput = z.object({
   refs: z.array(z.string()).default([]),
 });
 const stepOutput = z.object({
-  target: z.string(),
+  parent: z.string(),
+  frame: z.string().default(''),
   text: z.string(),
   highlights: z.array(z.string()).default([]),
 });

@@ -30,15 +30,16 @@ function SettingsPill() {
     };
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
+      e.stopPropagation(); // this Escape closes the card; it must not also clear the selection
       setOpen(false);
       button.current?.focus();
     };
-    // capture: the map canvas takes pointer events for itself
+    // capture: the map canvas takes pointer events for itself, and Escape is ours while the card is open
     window.addEventListener('pointerdown', onPointerDown, true);
-    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keydown', onKeyDown, true);
     return () => {
       window.removeEventListener('pointerdown', onPointerDown, true);
-      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keydown', onKeyDown, true);
     };
   }, [open]);
 

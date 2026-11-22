@@ -9,16 +9,19 @@ import type { FileFacts, SyntaxFacts } from '../contracts/lang';
 import type { SettleReport } from '../contracts/physics';
 import type { AnalysisInput, AnalysisResult, PipelineEvents, RepoSource, Stage } from '../contracts/pipeline';
 import type { ModelStore } from '../contracts/store';
-import { buildManifest, runFastPass } from '../ingest';
+import { buildManifest, runFastPass, runSlowPass } from '../ingest';
 import { pluginById } from '../lang';
 import { diffStructure } from '../model';
 import type { LayoutSnapshot, RepoMeta, RepoModel } from '../model/types';
 import { hash32, now as defaultNow } from '../shared';
 import { syntheticMeta, syntheticTables } from '../testing/synthetic';
+import { createRevealGate, type GateClock, type RevealGate } from './gate';
 
 /** The part of physics the pipeline drives. In the browser these are messages to the main thread. */
 export interface PipelinePhysics {
   settle(maxMs: number): Promise<SettleReport>;
+  /** Animated re-layout after Apply or Update: reheat what changed, resolve when asleep. Falls back to settle. */
+  relayout?(maxMs: number): Promise<SettleReport>;
   loadLayout(layout: LayoutSnapshot): Promise<void> | void;
   getLayout(): Promise<LayoutSnapshot>;
 }
@@ -35,6 +38,8 @@ export interface PipelineDeps {
   loadDemo?(baseUrl: string): Promise<RepoModel>;
   cache?: FactsCache;
   now?: () => number;
+  /** Clock for the reveal gate's escape hatch (tests inject a fake). */
+  gateClock?: GateClock;
 }
 
 /** What a finished run leaves behind for the steps that follow the reveal (slow pass, history, AI, update). */
@@ -43,7 +48,12 @@ export interface PipelineState {
   repo: RepoAccess | null;
   manifest: Manifest | null;
   facts: FileFacts[];
+  /** Slow-pass facts received so far; complete only when `syntaxComplete`. */
   syntax: SyntaxFacts[];
+  syntaxComplete: boolean;
+  /** Settles when the slow pass ends, which may be after the reveal. Never rejects. */
+  slowPass: Promise<void> | null;
+  gate: RevealGate | null;
   analysis: AnalysisResult | null;
   structure: 'full' | 'imports-only';
   settle: SettleReport | null;
@@ -73,7 +83,7 @@ export async function analyzeAndApply(deps: PipelineDeps, state: PipelineState, 
     repoName: state.manifest?.repoName ?? 'repo',
     files: state.facts,
     syntax: state.syntax.length ? state.syntax : undefined,
-    syntaxComplete: state.structure === 'full',
+    syntaxComplete: state.syntaxComplete,
     previous: opts.keepIds ? previousStructure(deps.store) : undefined,
   };
   const result = await deps.pool.run<AnalysisResult, AnalysisInput>({ type: 'analysis.analyze', lane: 'parse', input });
@@ -94,7 +104,10 @@ export async function analyzeAndApply(deps: PipelineDeps, state: PipelineState, 
 export async function runSource(source: RepoSource, deps: PipelineDeps): Promise<PipelineState> {
   const now = deps.now ?? defaultNow;
   const { config, store, pool, emit } = deps;
-  const state: PipelineState = { source, repo: null, manifest: null, facts: [], syntax: [], analysis: null, structure: 'imports-only', settle: null, timings: {} };
+  const state: PipelineState = {
+    source, repo: null, manifest: null, facts: [], syntax: [], syntaxComplete: false, slowPass: null, gate: null,
+    analysis: null, structure: 'imports-only', settle: null, timings: {},
+  };
   let t0 = now();
   const lap = (name: string) => { const t = now(); state.timings[name] = t - t0; t0 = t; };
   const stage = (s: Stage, label: string, done?: number, total?: number) => emit('stage', { stage: s, label, done, total });
@@ -151,6 +164,10 @@ export async function runSource(source: RepoSource, deps: PipelineDeps): Promise
   if (manifest.historyUnavailable) emit('notice', { kind: 'no-history', reason: manifest.historyUnavailable });
   lap('manifest');
 
+  const gate = (state.gate = createRevealGate({ maxWaitMs: config.reveal.maxWaitSeconds * 1000, clock: deps.gateClock }));
+  gate.onRefinedReady(() => emit('notice', { kind: 'refined-ready' }));
+  gate.begin();
+
   const total = manifest.entries.length;
   stage('reading', `Reading files 0 / ${fmt(total)}`, 0, total);
   let lastEmit = 0;
@@ -164,13 +181,36 @@ export async function runSource(source: RepoSource, deps: PipelineDeps): Promise
       stage('reading', `Reading files ${fmt(done)} / ${fmt(all)}`, done, all);
     },
   });
+  gate.fastPassDone();
   lap('fastPass');
 
+  // The slow pass is inside the gate, but only until reveal.maxWaitSeconds: past that the map is
+  // revealed from imports plus whatever call facts have arrived, and the pass carries on (§6.8).
+  stage('structure', 'Finding structure');
+  let lastSlow = 0;
+  state.slowPass = runSlowPass(manifest, pool, config, {
+    cache: deps.cache,
+    onBatch(batch) { if (!state.syntaxComplete) for (const f of batch) state.syntax.push(f); },
+    onProgress(done, all) {
+      const t = now();
+      if (t - lastSlow < 100 && done < all) return;
+      lastSlow = t;
+      emit('progress', { subsystem: 'slowPass', done, total: all });
+      if (gate.phase === 'parsing') stage('structure', `Finding structure ${fmt(done)} / ${fmt(all)}`, done, all);
+    },
+  }).then(
+    (all) => { state.syntax = all; state.syntaxComplete = true; },
+    (err) => { emit('notice', { kind: 'info', message: `Call analysis stopped early: ${String(err?.message ?? err)}` }); },
+  ).then(() => { state.timings.slowPass = now() - t0; gate.slowPassDone(); });
+
+  await gate.readyToStructure();
+  lap('slowPassWait');
   stage('structure', 'Finding structure');
   emit('progress', { subsystem: 'resolve', done: 0, total: 1 });
   const result = await analyzeAndApply(deps, state, { keepIds: false });
   state.structure = result.structure;
   emit('progress', { subsystem: 'resolve', done: 1, total: 1 });
+  gate.structureReady();
   lap('structure');
 
   stage('layout', 'Settling layout');
@@ -181,5 +221,6 @@ export async function runSource(source: RepoSource, deps: PipelineDeps): Promise
 
   stage('revealed', '');
   emit('reveal', { structure: state.structure });
+  gate.settled();
   return state;
 }

@@ -1,0 +1,24 @@
+# Root rules. Every tracked file of this fixture is one these rules do NOT ignore;
+# the test adds the ignored and untracked files to the built working tree.
+
+*.tmp
+!keep.tmp
+/build/
+logs/
+/docs/*.pdf
+**/cache/
+src/**/generated/
+tools/**
+!tools/**/
+!tools/**/*.sh
+\#notes.txt
+\!important.txt
+trail.txt   
+with\ space.txt
+vendor/*/dist
+*.[oa]
+temp?
+/TODO
+Makefile.local
+data/**/raw
+report[0-9][!0-9].txt

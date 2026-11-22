@@ -74,6 +74,7 @@ From [M0-RESULTS.md](M0-RESULTS.md). PLAN.md was updated to match these on 2026-
 | A "hot" sim must count `alphaTarget` | Scheduler treats a sim as hot while `alpha` or `alphaTarget` is above the minimum |
 | Reheating everything on an update is wasteful | On Apply or Update, pin unaffected cities and districts |
 | Re-simulation is not reproducible across engines | Always persist positions; never rely on re-simulating to restore a layout |
+| Browser working-tree reads cost ~2.2 ms per file, and 14 workers gave only 3.1× (react: 10.8 s on 1 worker, 3.5 s on 14) | Pack-first blob reading (1C); each file read once and shared by the fast and slow passes (2B) |
 | History defaults | `history.maxCommits` 50,000 with a ~20 s time budget and a "Load full history" action; 256 KB page cache |
 
 Three findings need a decision from you and have a working default meanwhile (§8).
@@ -141,6 +142,7 @@ Small on purpose. Nothing here is clever; it exists so sixteen agents can start 
 | 2H | Reveal gate | `src/pipeline/gate/` | 1I | Transitions with a fake clock, including the escape hatch |
 
 - **2B** also keeps each file's signatures and leading doc comments, which the AI digest needs in M5.
+- **2B reads each file once.** The slow pass takes the bytes the fast pass already obtained (pack blob or working-tree file) instead of fetching them again: either both passes run in the same pool task per batch, or the fast pass keeps the batch's bytes for the slow-pass task. A second read of every file would cost about 3.5 s more on react and 7–8 s at 10k files when it falls back to the working tree (`spikes/bench/RESULTS.md`).
 - **2D** adds district and file sims, Voronoi cells, containment, space propagation, drag and release, home positions and `resetLayout()`.
 - **2G** adds the in-scene pill pool, tooltip and detail card, selection pills, the legend with its slider, the controls key and the Reset view pill.
 - **2H** includes the "Refined structure ready · Apply" action and its animated re-layout.

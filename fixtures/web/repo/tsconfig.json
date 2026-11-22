@@ -1,0 +1,7 @@
+{
+  // The alias every Vue and Astro starter sets up.
+  "compilerOptions": {
+    "strict": true,
+    "paths": { "@/*": ["src/*"] }
+  }
+}

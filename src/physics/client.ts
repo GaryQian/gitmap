@@ -16,7 +16,12 @@ export interface ClientOptions {
 
 interface Waiter { resolve: (value: any) => void; reject: (err: Error) => void }
 
-export function createClient(init: PhysicsInit, worker: Worker, opts: ClientOptions = {}): PhysicsApi {
+/** PhysicsApi plus the animated re-layout (see PhysicsEngineInternal.relayout). */
+export interface PhysicsClient extends PhysicsApi {
+  relayout(maxMs: number): Promise<SettleReport>;
+}
+
+export function createClient(init: PhysicsInit, worker: Worker, opts: ClientOptions = {}): PhysicsClient {
   const shared = canShare() && !opts.forceCopy;
   const cap = { units: Math.max(1, init.capacity.units), districts: Math.max(1, init.capacity.districts), cities: Math.max(1, init.capacity.cities) };
   let positions = allocateBuffers(cap, shared);
@@ -101,6 +106,7 @@ export function createClient(init: PhysicsInit, worker: Worker, opts: ClientOpti
       send({ type: 'batch', batch });
     },
     settle: (maxMs) => request<SettleReport>((id) => ({ type: 'settle', id, maxMs })),
+    relayout: (maxMs) => request<SettleReport>((id) => ({ type: 'relayout', id, maxMs })),
     drag(ref, x, z) {
       if (ref[0] === 'c' || ref[0] === 'd') atHome = false; // the worker confirms; do not wait a frame to say so
       send({ type: 'drag', ref, x, z });

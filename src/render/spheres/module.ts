@@ -1,12 +1,11 @@
 // Spheres: one instance per unit slot, three draws over the same instances (PLAN.md §8.1, §8.6).
 // Model-derived buffers (aSlot, aShape, aColor) are written only by applyBatch, through
-// projectUnits. View state (selection, hover, birth time, overlay value, jiggle offset) lives in
-// separate buffers and refers to the model by permanent id.
+// projectUnits. View state (selection, hover, birth time, jiggle offset) lives in separate buffers
+// and refers to the model by permanent id; the overlay's per-instance values and its fades are
+// ../overlay/fade.ts.
 import * as THREE from 'three';
 import type { ThemeMode } from '../../config';
-import type { OverlayView } from '../../contracts/render';
 import type { NodeRef, PatchBatch } from '../../model/types';
-import { hexToRgb } from '../../shared';
 import { unitSlotOf } from '../core/anchor';
 import { RENDER_LOCAL } from '../core/tunables';
 import type { BatchInfo, FrameState, RevealInfo, SceneContext, SceneModule } from '../core/types';
@@ -14,7 +13,8 @@ import {
   COLOR_ITEMS, LangTable, SHAPE_ITEMS, SLOT_ITEMS, createInstanceBuffers, projectUnits, visibleCounts,
   type InstanceBuffers,
 } from './instances';
-import { OVERLAY_UNKNOWN, RAMP_WIDTH, buildRamp, overlayT } from './overlay';
+import { OVERLAY_ITEMS, OverlayFade, RAMP_ROWS } from '../overlay/fade';
+import { RAMP_WIDTH } from './overlay';
 import { BODY_FRAG, GLOW_FRAG, POOL_FRAG, POOL_VERT, STAR_VERT } from './shaders';
 
 /** What other modules get from `ctx.service<SpheresApi>('spheres')`. */
@@ -29,7 +29,7 @@ export interface SpheresApi {
   isShown(slot: number): boolean;
 }
 
-const STATE_ITEMS = 3; // flags, birth time, overlay t
+const STATE_ITEMS = 2; // flags, birth time
 const NUDGE_ITEMS = 3;
 const FLAG_SELECTED = 1, FLAG_HIGHLIGHTED = 2, FLAG_HOVERED = 4;
 /** Birth times that mean "not shown yet" and "shown since long ago". */
@@ -66,7 +66,8 @@ export function createSpheres(): SceneModule {
   /** 1 while the slot held a unit after the last projection: tells an add from an update. */
   let live!: Uint8Array;
   let geometry: THREE.InstancedBufferGeometry | null = null;
-  let tracked: { slot: Tracked; shape: Tracked; color: Tracked; state: Tracked; nudge: Tracked } | null = null;
+  let tracked: { slot: Tracked; shape: Tracked; color: Tracked; state: Tracked; nudge: Tracked; overlay: Tracked } | null = null;
+  let fade!: OverlayFade;
   let langs!: LangTable;
   const meshes: THREE.Mesh[] = [];
   const materials: THREE.ShaderMaterial[] = [];
@@ -76,9 +77,7 @@ export function createSpheres(): SceneModule {
   const pending = new Map<number, { rev: number; grow: boolean }>();
   const flagged = new Set<number>();
   let hovered = -1;
-  let overlayTarget = 0;
   let langDimData!: Uint8Array;
-  let rampData!: Uint8Array;
   let langDimTex!: THREE.DataTexture;
   let rampTex!: THREE.DataTexture;
   let knownLangs = 0;
@@ -86,7 +85,8 @@ export function createSpheres(): SceneModule {
 
   const own = {
     uGrow: { value: 1 }, uMinLines: { value: 0 }, uSelScale: { value: 1 }, uBreathe: { value: 1.5 }, uSpikesFrom: { value: 0.75 },
-    uOverlayMix: { value: 0 }, uUnknown: { value: new THREE.Vector3(0.5, 0.5, 0.5) }, uMinPx: { value: S.minPixelRadius },
+    uOverlayMix: { value: 0 }, uOverlayBlend: { value: 1 }, uMinPx: { value: S.minPixelRadius },
+    uUnknown: { value: new THREE.Vector3(0.5, 0.5, 0.5) }, uUnknownFrom: { value: new THREE.Vector3(0.5, 0.5, 0.5) },
     uEmphasis: { value: new THREE.Vector4(S.breatheScale, S.hoverScale, S.selectedGlow, S.highlightGlow) }, uHoverGlow: { value: S.hoverGlow },
     uLangDim: { value: null as THREE.DataTexture | null }, uRamp: { value: null as THREE.DataTexture | null },
     uCoreGain: { value: new THREE.Vector2() }, uCoreTight: { value: new THREE.Vector2() }, uLimb: { value: 0.62 }, uFlicker: { value: 0.07 },
@@ -105,12 +105,14 @@ export function createSpheres(): SceneModule {
       color: new Tracked(new THREE.InstancedBufferAttribute(buffers.color, COLOR_ITEMS, true)),
       state: new Tracked(new THREE.InstancedBufferAttribute(stateData, STATE_ITEMS)),
       nudge: new Tracked(new THREE.InstancedBufferAttribute(nudgeData, NUDGE_ITEMS)),
+      overlay: new Tracked(new THREE.InstancedBufferAttribute(fade.data, OVERLAY_ITEMS)),
     };
     g.setAttribute('aSlot', tracked.slot.attr);
     g.setAttribute('aShape', tracked.shape.attr);
     g.setAttribute('aColor', tracked.color.attr);
     g.setAttribute('aState', tracked.state.attr);
     g.setAttribute('aNudge', tracked.nudge.attr);
+    g.setAttribute('aOverlay', tracked.overlay.attr);
     g.instanceCount = 0;
     geometry = g;
     for (const m of meshes) m.geometry = g;
@@ -119,9 +121,10 @@ export function createSpheres(): SceneModule {
 
   function allocateViewState(capacity: number): void {
     const state = new Float32Array(capacity * STATE_ITEMS), nudge = new Float32Array(capacity * NUDGE_ITEMS), alive = new Uint8Array(capacity);
-    for (let s = 0; s < capacity; s++) { state[s * STATE_ITEMS + 1] = HIDDEN; state[s * STATE_ITEMS + 2] = OVERLAY_UNKNOWN; }
+    for (let s = 0; s < capacity; s++) state[s * STATE_ITEMS + 1] = HIDDEN;
     if (stateData) { state.set(stateData); nudge.set(nudgeData); alive.set(live); }
     stateData = state; nudgeData = nudge; live = alive;
+    fade.resize(capacity);
   }
 
   // ---- view state ----
@@ -155,26 +158,14 @@ export function createSpheres(): SceneModule {
     ctx.invalidate();
   }
 
-  function writeOverlay(view: OverlayView | null, slots: number[] | null): void {
-    const write = (s: number) => {
-      stateData[s * STATE_ITEMS + 2] = view && live[s] ? overlayT(s < view.values.length ? view.values[s] : undefined, view.domain) : OVERLAY_UNKNOWN;
-      tracked!.state.touch(s);
-    };
-    if (slots) for (const s of slots) write(s);
-    else for (let s = 0; s < buffers.capacity; s++) write(s);
-  }
-
-  function setOverlay(view: OverlayView | null): void {
-    overlayTarget = view ? 1 : 0;
-    if (view) {
-      // values and ramp are replaced; on `null` the old ones stay while the overlay fades out
-      rampData.set(buildRamp(view.stops, view.discrete, RAMP_WIDTH));
-      rampTex.needsUpdate = true;
-      own.uUnknown.value.set(...hexToRgb(view.unknown));
-      writeOverlay(view, null);
-    }
-    if (ctx.reducedMotion) own.uOverlayMix.value = overlayTarget;
-    ctx.animate(S.overlayFadeMs + 100);
+  /** Push the overlay state to the GPU: one attribute upload, the small ramp texture, uniforms. */
+  function syncOverlay(): void {
+    if (fade.dataDirty) { tracked!.overlay.touchAll(); fade.dataDirty = false; }
+    if (fade.rampDirty) { rampTex.needsUpdate = true; fade.rampDirty = false; }
+    own.uOverlayMix.value = fade.mix;
+    own.uOverlayBlend.value = fade.blend;
+    own.uUnknown.value.set(...fade.unknown);
+    own.uUnknownFrom.value.set(...fade.unknownFrom);
   }
 
   /** Show slots whose revision physics has now applied (PLAN.md §5.1: positions are not patches). */
@@ -197,6 +188,7 @@ export function createSpheres(): SceneModule {
     const { config } = ctx;
     const star = config.visual.star;
     langs = new LangTable(config.visual);
+    fade = new OverlayFade(S.overlayFadeMs, ctx.reducedMotion);
     buffers = createInstanceBuffers(Math.max(S.initialCapacity, ctx.replica.table('unit').capacity));
     allocateViewState(buffers.capacity);
 
@@ -212,8 +204,8 @@ export function createSpheres(): SceneModule {
     own.uFlicker.value = ctx.reducedMotion ? 0 : star.flicker;
     own.uGlowFalloff.value.set(star.glowFalloff[0], star.glowFalloff[1]);
 
-    const lookup = (data: Uint8Array) => {
-      const t = new THREE.DataTexture(data, RAMP_WIDTH, 1, THREE.RGBAFormat, THREE.UnsignedByteType);
+    const lookup = (data: Uint8Array, rows = 1) => {
+      const t = new THREE.DataTexture(data, RAMP_WIDTH, rows, THREE.RGBAFormat, THREE.UnsignedByteType);
       t.minFilter = t.magFilter = THREE.NearestFilter;
       t.generateMipmaps = false;
       t.needsUpdate = true;
@@ -221,9 +213,8 @@ export function createSpheres(): SceneModule {
       return t;
     };
     langDimData = new Uint8Array(RAMP_WIDTH * 4);
-    rampData = new Uint8Array(RAMP_WIDTH * 4);
     own.uLangDim.value = langDimTex = lookup(langDimData);
-    own.uRamp.value = rampTex = lookup(rampData);
+    own.uRamp.value = rampTex = lookup(fade.ramp, RAMP_ROWS);
 
     const uniforms = { ...ctx.uniforms, ...own };
     const dark = ctx.theme === 'dark';
@@ -253,7 +244,7 @@ export function createSpheres(): SceneModule {
       ctx.bus.on('highlights', syncFlags),
       ctx.bus.on('typeFilter', syncLangDim),
       ctx.bus.on('minLines', (n) => { own.uMinLines.value = n; }),
-      ctx.bus.on('overlay', setOverlay),
+      ctx.bus.on('overlay', (view) => { fade.set(view, live); ctx.animate(2 * S.overlayFadeMs + 100); }),
     );
 
     const api: SpheresApi = {
@@ -295,7 +286,6 @@ export function createSpheres(): SceneModule {
     const t = tracked!;
     const physRev = ctx.positions.rev();
     const settled = physRev >= batch.rev;
-    const overlay = ctx.state.overlay;
 
     if (result.touched === null) {
       // everything was rebuilt: no grow-in, the map simply is what the model says
@@ -308,7 +298,7 @@ export function createSpheres(): SceneModule {
         if (alive && !settled) pending.set(s, { rev: batch.rev, grow: false });
         if (!alive) nudgeData.fill(0, s * NUDGE_ITEMS, (s + 1) * NUDGE_ITEMS);
       }
-      writeOverlay(overlay, null);
+      fade.rewrite(live);
       t.slot.touchAll(); t.shape.touchAll(); t.color.touchAll(); t.state.touchAll(); t.nudge.touchAll();
     } else {
       const now = ctx.now();
@@ -320,12 +310,12 @@ export function createSpheres(): SceneModule {
           live[s] = 1;
           if (!settled) pending.set(s, { rev: batch.rev, grow: true });
           setBirth(s, settled && ctx.state.revealed ? (ctx.reducedMotion ? SHOWN : now) : HIDDEN);
-          writeOverlay(overlay, [s]);
+          fade.writeSlot(s, true);
         } else if (!alive && live[s]) {
           live[s] = 0;
           pending.delete(s);
           stateData[s * STATE_ITEMS] = 0;
-          stateData[s * STATE_ITEMS + 2] = OVERLAY_UNKNOWN;
+          fade.writeSlot(s, false);
           setBirth(s, HIDDEN);
           nudgeData.fill(0, s * NUDGE_ITEMS, (s + 1) * NUDGE_ITEMS);
           t.nudge.touch(s);
@@ -361,14 +351,10 @@ export function createSpheres(): SceneModule {
 
   function frame(f: FrameState): void {
     resolvePending();
-    const mix = own.uOverlayMix.value;
-    if (mix !== overlayTarget) {
-      const step = ctx.reducedMotion ? 1 : (f.dt * 1000) / S.overlayFadeMs;
-      own.uOverlayMix.value = overlayTarget > mix ? Math.min(overlayTarget, mix + step) : Math.max(overlayTarget, mix - step);
-      ctx.invalidate();
-    }
+    if (fade.step(f.dt * 1000, live)) ctx.animate(S.overlayFadeMs + 100);
+    syncOverlay();
     const t = tracked!;
-    t.slot.flush(); t.shape.flush(); t.color.flush(); t.state.flush(); t.nudge.flush();
+    t.slot.flush(); t.shape.flush(); t.color.flush(); t.state.flush(); t.nudge.flush(); t.overlay.flush();
   }
 
   function setTheme(mode: ThemeMode): void {

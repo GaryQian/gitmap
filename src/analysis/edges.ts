@@ -20,14 +20,22 @@ export interface UnitEdges {
   confidence: Float64Array;
   /** Mechanism of a 'bridge' edge, else ''. */
   mechanism: string[];
-  /** "name:count|name:count", '' when none. Filled by symbol linking (2C). */
+  /** Top referenced symbols, "name:count|name:count" with the most referenced first; '' when none. */
   symbols: string[];
   /** Per unit: distinct units that depend on it / that it depends on. */
   fanIn: Int32Array;
   fanOut: Int32Array;
 }
 
-export function aggregateEdges(raw: readonly RawEdge[], units: UnitTable): UnitEdges {
+/** Encoded top symbols ("name:count|name:count") per unit pair, as columns sorted by (src, dst). */
+export interface PairSymbols {
+  src: number[];
+  dst: number[];
+  text: string[];
+}
+
+/** `symbols` comes from symbol linking (LinkResult.symbols) and must be in (src, dst) order. */
+export function aggregateEdges(raw: readonly RawEdge[], units: UnitTable, symbols?: PairSymbols): UnitEdges {
   const n = units.count;
   // Raw edges as unit pairs; edges inside one unit and edges to unknown files drop out.
   let m = 0;
@@ -60,12 +68,20 @@ export function aggregateEdges(raw: readonly RawEdge[], units: UnitTable): UnitE
   };
   let a = -1;
   let statements = 0, references = 0, rank = 0, mechanism = '';
+  // Edges close in (src, dst) order, the order `symbols` is in: one cursor walks it alongside.
+  let p = 0;
+  const symbolsOf = (s: number, d: number): string => {
+    if (!symbols) return '';
+    const { src, dst, text } = symbols;
+    while (p < text.length && (src[p] < s || (src[p] === s && dst[p] < d))) p++;
+    return p < text.length && src[p] === s && dst[p] === d ? text[p] : '';
+  };
   const close = () => {
     if (a < 0) return;
     out.weight[a] = statements + Math.log(1 + references);
     out.kind[a] = KIND_STRENGTH[rank];
     out.mechanism[a] = rank === KIND_RANK.bridge ? mechanism : '';
-    out.symbols[a] = '';
+    out.symbols[a] = symbolsOf(out.src[a], out.dst[a]);
   };
   for (let k = 0; k < m; k++) {
     const e = order[k];

@@ -1,0 +1,58 @@
+/* In-scene pills (PLAN.md §17.6): the same pill shape as the chrome, with a flat translucent fill.
+   There can be 150 of them over a canvas that redraws every frame, so no backdrop blur here. */
+
+.gm-scene-pills { position: absolute; inset: 0; }
+
+.gm-scene-pill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 26px;
+  margin: 0;
+  padding: 0 11px;
+  border: 1px solid var(--gm-hairline);
+  border-radius: 999px;
+  background: var(--gm-pill-bg);
+  color: var(--gm-text);
+  font-family: var(--gm-font-ui);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0.025em;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  pointer-events: auto;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  will-change: transform;
+  transition: opacity 160ms var(--gm-ease), background-color 140ms var(--gm-ease), border-color 140ms var(--gm-ease);
+  /* an element leaving the pool starts from nothing; the fade out is the opacity transition above */
+  animation: gm-scene-pill-in 160ms var(--gm-ease);
+}
+@keyframes gm-scene-pill-in { from { opacity: 0; } }
+
+.gm-scene-pill-count { font-weight: 400; color: var(--gm-text-dim); }
+
+/* District pills are the quieter tier: smaller, Regular. */
+.gm-scene-pill-district {
+  gap: 6px;
+  height: 22px;
+  padding: 0 9px;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.gm-scene-pill:hover,
+.gm-scene-pill:focus-visible,
+.gm-scene-pill.is-dragging {
+  background: var(--gm-pill-bg-strong);
+  border-color: color-mix(in srgb, var(--gm-text) 34%, transparent);
+  z-index: 1;
+}
+.gm-scene-pill.is-dragging { cursor: grabbing; border-color: var(--gm-halo); }
+:root[data-theme='dark'] .gm-scene-pill.is-dragging { box-shadow: 0 0 16px color-mix(in srgb, var(--gm-halo) 16%, transparent); }

@@ -1,0 +1,34 @@
+{
+  "imports": [
+    ["index.html", "src/main.ts"],
+    ["index.html", "src/styles/main.css"],
+    ["index.html", "public/favicon.svg"],
+    ["src/main.ts", "src/App.vue"],
+    ["src/main.ts", "src/styles/main.css"],
+    ["src/App.vue", "src/components/UserCard.vue"],
+    ["src/App.vue", "src/utils/format.ts"],
+    ["src/App.vue", "src/styles/_theme.scss"],
+    ["src/components/UserCard.vue", "src/utils/format.ts"],
+    ["src/components/UserCard.vue", "src/assets/logo.svg"],
+    ["src/styles/main.css", "src/styles/reset.css"],
+    ["src/styles/main.css", "src/assets/logo.svg"],
+    ["src/styles/_theme.scss", "src/styles/_vars.scss"],
+    ["src/styles/_theme.scss", "src/styles/mixins/_index.scss"],
+    ["src/styles/mixins/_index.scss", "src/styles/mixins/_flex.scss"],
+    ["src/widgets/Counter.svelte", "src/widgets/Badge.svelte"],
+    ["src/widgets/Counter.svelte", "src/utils/format.ts"],
+    ["src/pages/index.astro", "src/layouts/Base.astro"],
+    ["src/pages/index.astro", "src/widgets/Counter.svelte"],
+    ["src/pages/index.astro", "src/styles/main.css"],
+    ["src/pages/index.astro", "src/utils/format.ts"],
+    ["src/layouts/Base.astro", "src/styles/_vars.scss"]
+  ],
+  "notImports": [
+    ["index.html", "src/utils/format.ts"],
+    ["src/App.vue", "src/styles/_vars.scss"],
+    ["src/components/UserCard.vue", "src/widgets/Counter.svelte"],
+    ["src/styles/main.css", "src/styles/mixins/_flex.scss"],
+    ["src/styles/_theme.scss", "src/styles/mixins/_flex.scss"]
+  ],
+  "external": ["vue", "svelte", "~bootstrap/scss/bootstrap"]
+}

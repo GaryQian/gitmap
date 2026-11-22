@@ -3,6 +3,7 @@
 // before it reaches a simulation: beside an already-placed linked neighbour, else near its parent's
 // centre with a small seeded jitter. The jitter depends only on (seed, id), never on arrival order.
 import { hash32, mulberry32 } from '../shared';
+import { cellReach, type LocalCell } from './cells';
 import type { CityTier } from './cityTier';
 import type { DistrictSim } from './districtTier';
 import type { FileSim } from './fileTier';
@@ -91,20 +92,25 @@ export function placeDistricts(ds: DistrictSim, adds: readonly PNode[], seed: nu
   for (const n of adds) n.placed = true;
 }
 
+/** A unit's own place in its territory on the bearing `a`: its share (n.target) of the way to the edge. */
+function toPlace(n: PNode, a: number, fs: FileSim, cell: LocalCell | undefined): void {
+  const ux = Math.cos(a), uy = Math.sin(a);
+  const ox = cell ? cell.cx : 0, oy = cell ? cell.cy : 0;
+  const reach = cell ? cellReach(cell, ux, uy) : fs.containR;
+  const d = n.target * Math.max(0, reach - n.r);
+  put(n, ox + ux * d, oy + uy * d);
+}
+
 /**
- * Units, local to their district. A first layout puts every unit on a golden-angle spiral at its own
- * size-rank radius: near-packed and near equilibrium, which settled fastest and cleanest in the
- * spike. A later arrival goes beside a linked unit, else onto its size-rank ring.
+ * Units, local to their district. A first layout puts every unit at its own place on a golden-angle
+ * spiral: near-packed and near equilibrium, which settled fastest and cleanest in the spike. A later
+ * arrival goes beside a linked unit, else to its own place on a seeded bearing.
  * `ranked` is the district's units in rank order (rankTargets), with targets already set.
  */
-export function placeUnits(fs: FileSim, adds: readonly PNode[], ranked: readonly PNode[], seed: number, t: Tuning): void {
+export function placeUnits(fs: FileSim, adds: readonly PNode[], ranked: readonly PNode[], seed: number, t: Tuning, cell?: LocalCell): void {
   if (!adds.length) return;
   if (!fs.nodes.some((n) => n.placed)) {
-    for (let k = 0; k < ranked.length; k++) {
-      const n = ranked[k];
-      const a = k * GOLDEN_ANGLE + rngFor(seed, 3, n.id)() * 0.01;
-      put(n, Math.cos(a) * n.target, Math.sin(a) * n.target);
-    }
+    spiralUnits(fs, ranked, seed, cell);
   } else {
     const neighbour = placedNeighbours(fs.links);
     for (const n of adds) {
@@ -114,11 +120,18 @@ export function placeUnits(fs: FileSim, adds: readonly PNode[], ranked: readonly
       if (m) {
         const dist = m.r + n.r + t.file.pad + rnd() * t.file.gap;
         put(n, m.x + Math.cos(a) * dist, m.y + Math.sin(a) * dist);
-        clampInto(n, Math.max(0, fs.containR - n.r));
-      } else {
-        put(n, Math.cos(a) * n.target, Math.sin(a) * n.target);
-      }
+        if (!cell) clampInto(n, Math.max(0, fs.containR - n.r));
+      } else toPlace(n, a, fs, cell);
     }
   }
   for (const n of adds) n.placed = true;
+}
+
+/** Every unit of a district at its own place on a golden-angle spiral over the territory. */
+export function spiralUnits(fs: FileSim, ranked: readonly PNode[], seed: number, cell?: LocalCell): void {
+  for (let k = 0; k < ranked.length; k++) {
+    const n = ranked[k];
+    toPlace(n, k * GOLDEN_ANGLE + rngFor(seed, 3, n.id)() * 0.01, fs, cell);
+    n.placed = true;
+  }
 }

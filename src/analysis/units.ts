@@ -1,6 +1,6 @@
 // Stage 2 — units (PLAN.md §5): a unit is the drawable sphere, one file or a header+implementation
-// pair. The stage is "a mapping file → unit" plus a generic fold over it, so header pairing
-// (package 2C) only supplies a different UnitMapper.
+// pair. The stage is "a mapping file → unit" plus a generic fold over it; header pairing
+// (link/pairs.ts, the default in analyze) is one such UnitMapper.
 import type { FileFacts } from '../contracts/lang';
 import type { RawEdge } from './resolve';
 
@@ -10,7 +10,7 @@ import type { RawEdge } from './resolve';
  */
 export type UnitMapper = (files: readonly FileFacts[], rawEdges: readonly RawEdge[]) => string[];
 
-/** The mapping for now: every file is its own unit. */
+/** The plain mapping: every file is its own unit. */
 export const oneUnitPerFile: UnitMapper = (files) => files.map((f) => f.path);
 
 /** Units as columns, in id (path) order. Unit index = position in these arrays. */

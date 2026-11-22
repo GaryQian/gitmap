@@ -1,0 +1,14 @@
+name: shop_core
+description: Models and pricing rules shared by the shop apps.
+version: 1.2.0
+publish_to: none
+
+environment:
+  sdk: ^3.4.0
+
+dependencies:
+  collection: ^1.18.0
+  meta: ^1.12.0
+
+dev_dependencies:
+  test: ^1.25.0

@@ -1,0 +1,6 @@
+@use 'sass:math';
+@use 'vars';
+@use 'mixins';
+
+$ink: vars.$ink;
+$gap: math.div(vars.$unit, 2);

@@ -1,0 +1,307 @@
+/* The sidebar reader (PLAN.md §9, §17.6): the one opaque surface in the chrome, because it holds
+   code. Neutral grays from the tokens; the only hues are the syntax colours, kept low in chroma. */
+
+.gm-sidebar {
+  /* Syntax colours: one lightness and chroma per mode, a hue per role (the way file-type colours are
+     defined, §17.3). No purple. Comments, punctuation and properties are tints of the text colour. */
+  --gm-syn-l: 0.8;
+  --gm-syn-c: 0.075;
+  --gm-syn-keyword: oklch(var(--gm-syn-l) var(--gm-syn-c) 245);
+  --gm-syn-string: oklch(var(--gm-syn-l) var(--gm-syn-c) 150);
+  --gm-syn-number: oklch(var(--gm-syn-l) var(--gm-syn-c) 55);
+  --gm-syn-type: oklch(var(--gm-syn-l) var(--gm-syn-c) 195);
+  --gm-syn-function: oklch(var(--gm-syn-l) var(--gm-syn-c) 100);
+  --gm-syn-escape: oklch(var(--gm-syn-l) var(--gm-syn-c) 25);
+  --gm-syn-comment: color-mix(in srgb, var(--gm-text) 56%, var(--gm-sidebar));
+  --gm-syn-punctuation: color-mix(in srgb, var(--gm-text) 74%, var(--gm-sidebar));
+  --gm-syn-property: color-mix(in oklab, var(--gm-text) 62%, var(--gm-syn-keyword));
+  --gm-reader-gutter: color-mix(in srgb, var(--gm-text) 34%, var(--gm-sidebar));
+  --gm-reader-selection: color-mix(in srgb, var(--gm-halo) 26%, var(--gm-sidebar));
+  --gm-reader-fill: color-mix(in srgb, var(--gm-text) 7%, var(--gm-sidebar));
+  --gm-reader-pad: 20px;
+
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-width: 100vw;
+  border-left: 1px solid var(--gm-hairline);
+  background: var(--gm-sidebar);
+  color: var(--gm-text);
+  font-family: var(--gm-font-ui);
+  animation: gm-sidebar-in 200ms var(--gm-ease) both;
+}
+:root[data-theme='light'] .gm-sidebar {
+  --gm-syn-l: 0.47;
+  --gm-syn-c: 0.115;
+}
+/* A short slide when it opens; the global reduced-motion rule in ui.css cuts it to nothing. */
+@keyframes gm-sidebar-in {
+  from { transform: translateX(20px); opacity: 0; }
+}
+/* The panel takes focus when it opens (so Escape closes it), but it is a region, not a control: a ring
+   around the whole reader would say nothing. Every control inside keeps the global ring. */
+.gm-sidebar:focus-visible { outline: none; }
+
+/* ---- resize handle: the left edge ---- */
+
+.gm-reader-resize {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -5px;
+  width: 9px;
+  z-index: 2;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+}
+.gm-reader-resize::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 3px;
+  background: var(--gm-halo);
+  opacity: 0;
+  transition: opacity 140ms var(--gm-ease);
+}
+.gm-reader-resize:hover::after,
+.gm-reader-resize:focus-visible::after { opacity: 0.55; }
+.gm-reader-resize.is-dragging::after { opacity: 1; }
+.gm-reader-resize:focus-visible { outline-offset: -2px; }
+
+/* ---- header ---- */
+
+.gm-reader-head {
+  flex: none;
+  display: grid;
+  gap: 10px;
+  padding: 14px 14px 12px var(--gm-reader-pad);
+  border-bottom: 1px solid var(--gm-hairline);
+}
+.gm-reader-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 26px;
+}
+.gm-reader-heading {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0;
+  font: inherit;
+  white-space: nowrap;
+}
+.gm-reader-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+/* The path is interface text, so it stays in Jost (§17.2). It gives way before the name does. */
+.gm-reader-dir {
+  flex: 0 100 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0.025em;
+  color: var(--gm-text-dim);
+}
+.gm-reader-close { flex: none; color: var(--gm-text); }
+
+.gm-reader-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  min-height: 20px;
+}
+.gm-reader-facts {
+  flex: 1 1 auto;
+  font-size: 12px;
+  letter-spacing: 0.035em;
+  color: var(--gm-text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.gm-reader-toggle { flex: none; }
+.gm-reader-toggle .gm-segment { flex: 0 0 auto; height: 22px; padding: 0 11px; font-size: 12px; }
+
+/* Tabs: one per file of a header + implementation pair. */
+.gm-reader-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-left: -9px;
+}
+.gm-reader-tab {
+  height: 26px;
+  max-width: 100%;
+  padding: 0 11px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--gm-text-dim);
+  font: inherit;
+  font-size: 13px;
+  letter-spacing: 0.025em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition: background-color 140ms var(--gm-ease), color 140ms var(--gm-ease), border-color 140ms var(--gm-ease);
+}
+.gm-reader-tab:hover { color: var(--gm-text); }
+.gm-reader-tab.is-active {
+  border-color: var(--gm-hairline);
+  background: var(--gm-reader-fill);
+  color: var(--gm-text);
+  font-weight: 500;
+}
+
+/* ---- body ---- */
+
+.gm-reader-body {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+/* Every state that is not content is one plain sentence. */
+.gm-reader-note {
+  margin: 0;
+  padding: 18px var(--gm-reader-pad);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--gm-text-dim);
+}
+/* A read from disk is usually done before anyone could read the word. */
+.gm-reader-wait { animation: gm-reader-wait 160ms 180ms var(--gm-ease) both; }
+@keyframes gm-reader-wait { from { opacity: 0; } }
+.gm-reader-strip {
+  flex: none;
+  margin: 0;
+  padding: 8px var(--gm-reader-pad);
+  border-bottom: 1px solid var(--gm-hairline);
+  font-size: 12px;
+  letter-spacing: 0.035em;
+  color: var(--gm-text-dim);
+}
+
+.gm-reader-code { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
+.gm-reader-cm { flex: 1 1 0; min-height: 0; }
+.gm-reader-cm[hidden], .gm-md[hidden] { display: none; }
+.gm-reader-cm .cm-content:focus-visible { outline-offset: -2px; }
+.gm-reader-plain {
+  flex: 1 1 0;
+  min-height: 0;
+  margin: 0;
+  padding: 14px var(--gm-reader-pad) 28px;
+  overflow: auto;
+  font-family: var(--gm-font-code);
+  font-size: 12px;
+  line-height: 1.65;
+  letter-spacing: 0;
+  tab-size: 4;
+}
+
+.gm-reader-cm .cm-scroller,
+.gm-reader-plain,
+.gm-md,
+.gm-md pre {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--gm-text) 24%, transparent) transparent;
+}
+
+/* ---- markdown preview ---- */
+
+.gm-md {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 22px 28px 48px var(--gm-reader-pad);
+  font-size: 14px;
+  line-height: 1.62;
+  letter-spacing: 0.012em;
+  overflow-wrap: break-word;
+}
+.gm-md:focus-visible { outline-offset: -2px; }
+.gm-md > * { max-width: 46rem; }
+.gm-md > :first-child { margin-top: 0; }
+.gm-md > :last-child { margin-bottom: 0; }
+
+.gm-md h1, .gm-md h2, .gm-md h3, .gm-md h4, .gm-md h5, .gm-md h6 {
+  margin: 1.7em 0 0.55em;
+  font-weight: 500;
+  line-height: 1.25;
+  letter-spacing: 0.02em;
+}
+/* Titles are Light and openly tracked, as on the landing page (§17.2). */
+.gm-md h1 { font-size: 26px; font-weight: 300; letter-spacing: 0.05em; margin-bottom: 0.7em; }
+.gm-md h2 { font-size: 19px; font-weight: 400; letter-spacing: 0.035em; padding-bottom: 0.4em; border-bottom: 1px solid var(--gm-hairline); }
+.gm-md h3 { font-size: 15px; }
+.gm-md h4, .gm-md h5, .gm-md h6 { font-size: 14px; }
+.gm-md h5, .gm-md h6 { color: var(--gm-text-dim); }
+
+.gm-md p, .gm-md ul, .gm-md ol, .gm-md blockquote, .gm-md pre, .gm-md table, .gm-md dl, .gm-md details { margin: 0 0 1em; }
+.gm-md ul, .gm-md ol { padding-left: 1.5em; }
+.gm-md li + li { margin-top: 0.25em; }
+.gm-md li > ul, .gm-md li > ol { margin: 0.25em 0 0; }
+.gm-md li:has(> input[type='checkbox']) { list-style: none; margin-left: -1.4em; }
+.gm-md input[type='checkbox'] { margin: 0 0.5em 0 0; vertical-align: -1px; accent-color: var(--gm-halo); }
+.gm-md strong, .gm-md b { font-weight: 500; }
+
+.gm-md a { color: var(--gm-halo); text-decoration: underline; text-decoration-color: var(--gm-halo-soft); text-underline-offset: 3px; }
+.gm-md a:hover { text-decoration-color: currentColor; }
+/* A link with nowhere to go from here (a relative path) reads as text. */
+.gm-md a:not([href]) { color: inherit; text-decoration: none; }
+
+.gm-md code, .gm-md kbd, .gm-md samp {
+  font-family: var(--gm-font-code);
+  font-size: 0.86em;
+  letter-spacing: 0;
+}
+.gm-md :not(pre) > code, .gm-md kbd {
+  padding: 0.12em 0.4em;
+  border-radius: 5px;
+  background: var(--gm-reader-fill);
+}
+.gm-md pre {
+  padding: 12px 14px;
+  border: 1px solid var(--gm-hairline);
+  border-radius: 10px;
+  background: var(--gm-reader-fill);
+  overflow-x: auto;
+  line-height: 1.6;
+  overflow-wrap: normal;
+}
+.gm-md pre code { font-size: 12px; }
+
+.gm-md blockquote {
+  margin-left: 0;
+  padding: 0 0 0 14px;
+  border-left: 2px solid var(--gm-hairline);
+  color: var(--gm-text-dim);
+}
+.gm-md blockquote > :last-child { margin-bottom: 0; }
+.gm-md hr { height: 1px; margin: 1.8em 0; border: 0; background: var(--gm-hairline); }
+
+.gm-md table { display: block; width: max-content; max-width: 100%; overflow-x: auto; border-collapse: collapse; font-size: 13px; }
+.gm-md th, .gm-md td { padding: 6px 12px; border-bottom: 1px solid var(--gm-hairline); text-align: left; vertical-align: top; }
+.gm-md th { font-weight: 500; }
+
+.gm-md img { max-width: 100%; height: auto; vertical-align: middle; }
+/* An image that is not loaded (a relative URL, or one that failed): its alt text, quietly. */
+.gm-md [data-gm-image] { color: var(--gm-text-dim); }
+.gm-md summary { cursor: pointer; }

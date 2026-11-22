@@ -1,1 +1,3 @@
 node_modules/
+bench-dist/
+.vite-bench-cache/

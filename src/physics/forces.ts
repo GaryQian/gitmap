@@ -1,9 +1,17 @@
 // Custom forces. Each follows the d3 contract: a function force(alpha) with initialize(nodes, random)
 // (PLAN.md §7.2). Ported from spikes/physics/layout.ts, where they were measured.
 import type { Force } from 'd3-force';
+import { cellReach, type LocalCell } from './cells';
 import type { PLink, PNode } from './sim';
 
 type PForce = Force<PNode, PLink>;
+
+/** A force that acts only while `on()` holds: how a simulation drops to its constraints (collide, contain). */
+export function gated(inner: PForce, on: () => boolean): PForce {
+  const force: PForce = (alpha) => { if (on()) inner(alpha); };
+  force.initialize = (nodes, random) => inner.initialize?.(nodes, random);
+  return force;
+}
 
 /** Keep each node's disc inside a circle of radius R() centred on the local origin. */
 export function forceContain(radius: () => number, strength: number): PForce {
@@ -19,6 +27,85 @@ export function forceContain(radius: () => number, strength: number): PForce {
         n.vx -= x * k;
         n.vy -= y * k;
       }
+    }
+  };
+  force.initialize = (ns) => { nodes = ns; };
+  return force;
+}
+
+/**
+ * Keep each node's disc inside a district's Voronoi cell (PLAN.md §7.1), in coordinates local to the
+ * district centre. The cell is convex, so each edge is handled on its own: a disc that crosses an
+ * edge is pushed back along that edge's inward normal. Without a cell (before the districts are laid
+ * out, or a degenerate cell) the district's disc of radius R() contains instead.
+ */
+export function forceContainCell(cell: () => LocalCell | undefined, radius: () => number, strength: number): PForce {
+  let nodes: PNode[] = [];
+  const disc = forceContain(radius, strength);
+  const force: PForce = (alpha) => {
+    const c = cell();
+    if (!c) { disc(alpha); return; }
+    const { nx, ny, off, cx, cy, inner } = c, edges = off.length;
+    for (const n of nodes) {
+      const x = n.x + n.vx, y = n.y + n.vy; // predicted position
+      // most units are well inside: within the cell's inner circle no edge can be crossed
+      const room = inner - n.r;
+      if (room > 0 && (x - cx) * (x - cx) + (y - cy) * (y - cy) <= room * room) continue;
+      for (let e = 0; e < edges; e++) {
+        const inside = nx[e] * x + ny[e] * y - off[e] - n.r;
+        if (inside < 0) {
+          n.vx -= nx[e] * inside * strength;
+          n.vy -= ny[e] * inside * strength;
+        }
+      }
+    }
+  };
+  force.initialize = (ns, random) => { nodes = ns; disc.initialize?.(ns, random); };
+  return force;
+}
+
+/**
+ * Size → place (PLAN.md §7.1), shaped to the district's territory. Each unit carries the share of the
+ * way from the middle of the territory to its edge at which it belongs (n.target, 0..1: the share of
+ * the district's content area that is larger than it, as a radius), and is pulled along its own bearing
+ * to that share of the distance to the edge in that direction. So the pull is toward a place, never
+ * toward the centre as such: the content is spread over the whole cell, corners included, at an even
+ * density, with the largest units tending to the middle. Without a cell the territory is the disc R().
+ */
+export function forceCellRadial(cell: () => LocalCell | undefined, radius: () => number, strength: number): PForce {
+  let nodes: PNode[] = [];
+  const force: PForce = (alpha) => {
+    const c = cell(), R = radius(), k = strength * alpha;
+    const ox = c ? c.cx : 0, oy = c ? c.cy : 0;
+    for (const n of nodes) {
+      const dx = n.x + n.vx - ox, dy = n.y + n.vy - oy;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      const ux = d > 1e-9 ? dx / d : 1, uy = d > 1e-9 ? dy / d : 0;
+      const reach = c ? cellReach(c, dx, dy) : R;
+      const f = (n.target * Math.max(0, reach - n.r) - d) * k;
+      n.vx += ux * f;
+      n.vy += uy * f;
+    }
+  };
+  force.initialize = (ns) => { nodes = ns; };
+  return force;
+}
+
+/**
+ * Lloyd relaxation: pull each district toward the centroid of its Voronoi cell, scaled by alpha.
+ * `centroids` returns [x, y] per node in node order (city-local), or null when there are no cells.
+ */
+export function forceLloyd(centroids: () => Float64Array | null, strength: number): PForce {
+  let nodes: PNode[] = [];
+  const force: PForce = (alpha) => {
+    const k = strength * alpha;
+    if (k === 0 || nodes.length < 2) return;
+    const c = centroids();
+    if (!c || c.length !== nodes.length * 2) return;
+    for (let i = 0; i < nodes.length; i++) {
+      const n = nodes[i];
+      n.vx += (c[2 * i] - n.x) * k;
+      n.vy += (c[2 * i + 1] - n.y) * k;
     }
   };
   force.initialize = (ns) => { nodes = ns; };
@@ -51,9 +138,46 @@ export function forceExternalPull(bearing: (n: PNode) => readonly [number, numbe
   return force;
 }
 
-export interface GridCollide extends PForce {
+export interface Collide extends PForce {
   /** Re-read every node's radius (after radii changed without a topology change). */
   refresh(): void;
+}
+export type GridCollide = Collide;
+
+/**
+ * All-pairs collide for the small tiers, where the distance two bodies keep depends on the pair
+ * (districts: see districtSpacing). d3 forceCollide's semantics otherwise: one pass, predicted
+ * positions, overlap resolved in proportion to radius² so the bigger body moves less.
+ */
+export function forcePairCollide(spacing: (a: PNode, b: PNode) => number, strength = 1): Collide {
+  let nodes: PNode[] = [];
+  const force = ((_alpha: number) => {
+    const n = nodes.length;
+    for (let i = 0; i < n; i++) {
+      const a = nodes[i];
+      for (let j = i + 1; j < n; j++) {
+        const b = nodes[j];
+        const r = spacing(a, b);
+        let x = a.x + a.vx - b.x - b.vx, y = a.y + a.vy - b.y - b.vy;
+        let l = x * x + y * y;
+        if (l >= r * r) continue;
+        if (x === 0) { x = (i - j) * 1e-6; l += x * x; }
+        if (y === 0) { y = (i - j) * 1e-6; l += y * y; }
+        l = Math.sqrt(l);
+        l = ((r - l) / l) * strength;
+        x *= l;
+        y *= l;
+        const a2 = a.r * a.r, b2 = b.r * b.r, w = a2 + b2 > 0 ? b2 / (a2 + b2) : 0.5;
+        a.vx += x * w;
+        a.vy += y * w;
+        b.vx -= x * (1 - w);
+        b.vy -= y * (1 - w);
+      }
+    }
+  }) as Collide;
+  force.refresh = () => {};
+  force.initialize = (ns) => { nodes = ns; };
+  return force;
 }
 
 const KEY_OFFSET = 32768;
@@ -143,4 +267,36 @@ export function forceGridCollide(radius: (n: PNode) => number, strength = 1): Gr
   };
   force.initialize = (ns) => { nodes = ns; force.refresh(); };
   return force;
+}
+
+/**
+ * Move bodies apart, directly, until no pair is closer than its spacing: the hard form of collide, run
+ * once a tier has settled so that a minimum distance holds exactly and not just to within a force's
+ * tolerance. The larger body of a pair moves less (radius²). Returns false if it did not converge.
+ */
+export function separate(nodes: readonly PNode[], spacing: (a: PNode, b: PNode) => number, rounds = 200): boolean {
+  for (let round = 0; round < rounds; round++) {
+    let moved = false;
+    for (let i = 0; i < nodes.length; i++) {
+      const a = nodes[i];
+      for (let j = i + 1; j < nodes.length; j++) {
+        const b = nodes[j];
+        const want = spacing(a, b);
+        let x = a.x - b.x, y = a.y - b.y;
+        let l = Math.sqrt(x * x + y * y);
+        if (l >= want) continue;
+        if (l < 1e-9) { x = 1; y = 0; l = 1; }
+        // a hair more than needed, so the next round does not find the same pair short by rounding
+        const push = (want - l) * (1 + 1e-9) + 1e-9;
+        const a2 = a.r * a.r, b2 = b.r * b.r, share = a2 + b2 > 0 ? b2 / (a2 + b2) : 0.5;
+        a.x += (x / l) * push * share;
+        a.y += (y / l) * push * share;
+        b.x -= (x / l) * push * (1 - share);
+        b.y -= (y / l) * push * (1 - share);
+        moved = true;
+      }
+    }
+    if (!moved) return true;
+  }
+  return false;
 }

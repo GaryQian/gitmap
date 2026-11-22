@@ -1,0 +1,13 @@
+{
+  "edges": [
+    { "src": "android/src/main/java/com/example/shop/Sync.java", "dst": "proto/billing/invoice_items.proto", "mechanism": "protobuf", "key": "proto:com/example/billing/invoice_items" },
+    { "src": "client/app.py", "dst": "proto/billing/invoice_items.proto", "mechanism": "protobuf", "key": "proto:invoice_items", "loose": true },
+    { "src": "client/app.py", "dst": "proto/common/types.proto", "mechanism": "protobuf", "key": "proto:common/types" },
+    { "src": "client/app.py", "dst": "proto/inventory/v1/stock.proto", "mechanism": "protobuf", "key": "proto:inventory/v1/stock" },
+    { "src": "native/report.cc", "dst": "proto/billing/invoice_items.proto", "mechanism": "protobuf", "key": "proto:billing/invoice_items" },
+    { "src": "native/report.cc", "dst": "proto/inventory/v1/stock.proto", "mechanism": "protobuf", "key": "proto:inventory/v1/stock" },
+    { "src": "server/go/main.go", "dst": "proto/inventory/v1/stock.proto", "mechanism": "protobuf", "key": "proto:example.com/shop/gen/stock", "loose": true },
+    { "src": "server/src/service.ts", "dst": "proto/inventory/v1/stock.proto", "mechanism": "protobuf", "key": "proto:server/src/gen/inventory/v1/stock" },
+    { "src": "server/src/service.ts", "dst": "proto/legacy/types.proto", "mechanism": "protobuf", "key": "proto:server/src/gen/legacy/types" }
+  ]
+}

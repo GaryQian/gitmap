@@ -11,6 +11,8 @@ export type ToWorker =
   | { type: 'release'; ref: NodeRef }
   | { type: 'focus'; x: number; z: number; radius: number }
   | { type: 'settle'; id: number; maxMs: number }
+  /** The animated settle for Apply and Update; answered with 'settled' like 'settle'. */
+  | { type: 'relayout'; id: number; maxMs: number }
   | { type: 'reset'; id: number }
   | { type: 'getLayout'; id: number }
   | { type: 'loadLayout'; layout: LayoutSnapshot }

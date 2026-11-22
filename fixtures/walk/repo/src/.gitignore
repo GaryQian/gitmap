@@ -1,0 +1,11 @@
+# Nested rules: these win over the root file inside src/.
+!*.tmp
+/local.ts
+secret/
+!secret/
+deep/**/skip.ts
+*.bak
+!important.bak
+app/**
+!app/*.ts
+!app/logs

@@ -1,0 +1,108 @@
+/* The legend card: file-type rows over the minimum-lines slider (PLAN.md §17.6). */
+
+.gm-legend { width: 212px; padding: 8px 8px 12px; }
+
+/* ---- file-type rows ---- */
+
+.gm-legend-rows {
+  /* about eight rows, then the list scrolls inside the card */
+  max-height: 216px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--gm-hairline) transparent;
+}
+.gm-legend-row {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  height: 27px;
+  margin: 0;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--gm-text);
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 140ms var(--gm-ease), opacity 140ms var(--gm-ease);
+}
+.gm-legend-row:hover { background: var(--gm-text-faint); }
+.gm-legend-row:focus-visible { outline-offset: -2px; }
+.gm-legend-row.is-active { background: color-mix(in srgb, var(--gm-text) 14%, transparent); }
+/* types outside the filter recede, as their spheres do */
+.gm-legend-row.is-dimmed { opacity: 0.5; }
+.gm-legend-row.is-dimmed:hover { opacity: 0.85; }
+.gm-legend-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gm-legend-count { flex: 0 0 auto; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--gm-text-dim); }
+
+/* ---- minimum-lines slider ---- */
+
+.gm-minlines {
+  margin: 8px 0 0;
+  padding: 11px 9px 0;
+  border-top: 1px solid var(--gm-hairline);
+}
+.gm-minlines-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.gm-minlines-head label { color: var(--gm-text-dim); font-size: 12px; letter-spacing: 0.035em; }
+.gm-minlines-summary { margin-top: 2px; font-size: 12px; color: var(--gm-text-dim); font-variant-numeric: tabular-nums; }
+
+/* A thin track with the chosen part in the halo colour, and a round thumb in the text colour. */
+.gm-slider {
+  --gm-slider-fill: 0%;
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 22px;
+  margin: 3px 0 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.gm-slider:disabled { cursor: default; opacity: 0.5; }
+.gm-slider:focus-visible { outline: none; }
+.gm-slider::-webkit-slider-runnable-track {
+  height: 2px;
+  border-radius: 1px;
+  background: linear-gradient(to right, var(--gm-halo) var(--gm-slider-fill), color-mix(in srgb, var(--gm-text) 22%, transparent) var(--gm-slider-fill));
+}
+.gm-slider::-moz-range-track {
+  height: 2px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--gm-text) 22%, transparent);
+}
+.gm-slider::-moz-range-progress { height: 2px; border-radius: 1px; background: var(--gm-halo); }
+.gm-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  box-sizing: border-box;
+  width: 14px;
+  height: 14px;
+  margin-top: -6px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--gm-text);
+}
+.gm-slider::-moz-range-thumb {
+  box-sizing: border-box;
+  width: 14px;
+  height: 14px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--gm-text);
+}
+/* the focus ring goes on the thumb, the part that moves */
+.gm-slider:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--gm-halo); outline-offset: 2px; }
+.gm-slider:focus-visible::-moz-range-thumb { outline: 2px solid var(--gm-halo); outline-offset: 2px; }

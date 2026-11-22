@@ -1,0 +1,40 @@
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>gitmap GPU runner</title>
+<style>body{font:14px system-ui;margin:24px;background:#fff;color:#222}table{border-collapse:collapse;margin:12px 0}td,th{border:1px solid #ddd;padding:4px 10px;text-align:right}th{background:#f6f6f8}iframe{width:960px;height:540px;border:1px solid #ccc;display:block}textarea{width:960px;height:120px}</style>
+<h3>GPU runner</h3>
+<p>Open in a normal Chrome or Edge window (embedded browser panes throttle frames), keep this tab in front, laptop on power. <button id=run>Run</button> <button id=copy disabled>Copy results</button> <span id=status></span></p>
+<table id=t><tr><th>Files</th><th>Edges drawn</th><th>Real fps (rAF, 5 s)</th><th>Frame ms p95</th><th>GPU ms avg (1080p)</th><th>GPU ms p95</th><th>CPU+sync ms avg (1080p)</th></tr></table>
+<iframe id=f></iframe>
+<textarea id=json readonly></textarea>
+<script type=module>
+const CONFIGS = [[1000, 1500], [10000, 1500], [10000, 50000], [100000, 1500], [100000, 50000], [100000, 150000]];
+const $ = id => document.getElementById(id);
+const results = [];
+const f = $('f'), status = s => $('status').textContent = s;
+const fmt = (o, k) => o && o[k] != null ? (+o[k]).toFixed(2) : '–';
+async function load(n, edges) {
+  f.src = `../render/index.html?n=${n}&edges=${edges}&orbit=1`;
+  await new Promise(r => f.onload = r);
+  for (let i = 0; i < 300 && !f.contentWindow.__benchSync; i++) await new Promise(r => setTimeout(r, 100));
+  await new Promise(r => setTimeout(r, 1500));
+  return f.contentWindow;
+}
+$('run').onclick = async () => {
+  $('run').disabled = true;
+  for (const [n, edges] of CONFIGS) {
+    status(`running ${n} files / ${edges} edges…`);
+    const w = await load(n, edges);
+    await w.__bench(1); // warm-up: the first frames after load can be missing
+    const live = await w.__bench(5);
+    const sync = await w.__benchSync(120, 1920, 1080, 1);
+    results.push({ n, edges, live, sync });
+    const row = $('t').insertRow();
+    for (const v of [n, edges, live.fps, fmt(live.frame, 'p95'), fmt(sync.gpu, 'avg'), fmt(sync.gpu, 'p95'), fmt(sync.frameMs, 'avg')]) row.insertCell().textContent = v;
+  }
+  const out = { when: new Date().toISOString(), ua: navigator.userAgent, dpr: devicePixelRatio, screen: `${screen.width}x${screen.height}`, cores: navigator.hardwareConcurrency, memGB: navigator.deviceMemory, gpu: results[0]?.sync?.info, results };
+  $('json').value = JSON.stringify(out);
+  window.__gpuRunner = out;
+  $('copy').disabled = false; status('done');
+};
+$('copy').onclick = () => { navigator.clipboard.writeText($('json').value); status('copied'); };
+</script>

@@ -1,6 +1,6 @@
 // The four /api/ai/* handlers (PLAN.md §11.1): thin and stateless. The browser builds the context;
 // a handler checks the request and its size, calls the provider, validates the structured result,
-// drops anything that cites unknown references, and returns it.
+// drops anything that cites unknown references or stands on something other than a file, and returns it.
 //
 // Handlers are pure functions of (Request, Deps) so the same code runs as a Vercel Function, in the
 // Vite dev server and in tests.
@@ -10,7 +10,7 @@ import type {
   AiProvider, DetailRequest, DetailResponse, GenerateRequest, GenerateResult, PoiItem, PoisRequest,
   PoisResponse, SummariesRequest, SummariesResponse, TourRequest, TourResponse,
 } from '../../contracts/ai';
-import type { NodeRef, PoiKind } from '../../model/types';
+import type { NodeRef, PoiKind, TourFrame, UnitRef } from '../../model/types';
 import { AiError, errorResponse, jsonResponse } from './errors';
 import { clientIp } from './limiter';
 import type { Limiter } from './limiter';
@@ -19,8 +19,8 @@ import {
 } from './prompts';
 import { estimateTokens } from './provider';
 import {
-  DETAIL_SCHEMA, POI_KINDS, REDUCE_SCHEMA, SUMMARY_SCHEMA, detailOutput, detailRequest, poisRequest,
-  reduceOutput, summariesRequest, summaryOutput, tourRequest,
+  DETAIL_SCHEMA, POI_KINDS, REDUCE_SCHEMA, SUMMARY_SCHEMA, TOUR_FRAMES, detailOutput, detailRequest, isUnitRef,
+  poisRequest, reduceOutput, summariesRequest, summaryOutput, tourRequest,
 } from './schemas';
 
 export type RouteName = 'summaries' | 'pois' | 'tour' | 'detail';
@@ -188,6 +188,18 @@ const shapeProblem = <T>(value: T): Checked<T> => ({
   value, score: -1, problems: ['The reply did not have the requested fields.'], notes: [],
 });
 
+/**
+ * Points of interest and tour steps always stand on a file (PLAN.md §11.3): the parent must be a
+ * `u:` reference and one of the request's. A district or city is refused even when it is in the list.
+ */
+function standsOnFile(parent: string, allowed: ReadonlySet<string>): parent is UnitRef {
+  return isUnitRef(parent) && allowed.has(parent);
+}
+
+function parentNote(where: string, parent: string, what: string): string {
+  return `${where}.parent "${parent}" is not a file reference (u:) from the allowed list, so the ${what} was discarded.`;
+}
+
 // ---- summaries ----
 
 type CityLabel = { label: string; text: string };
@@ -224,8 +236,9 @@ function checkPois(raw: unknown, allowed: ReadonlySet<string>, count: number): C
   const notes: string[] = [];
   parsed.data.pois.forEach((p, i) => {
     const where = `pois[${i}]`;
-    if (!allowed.has(p.parent)) {
-      notes.push(`${where}.parent "${p.parent}" is not an allowed reference, so the item was discarded.`);
+    const parent = p.parent;
+    if (!standsOnFile(parent, allowed)) {
+      notes.push(parentNote(where, parent, 'item'));
       return;
     }
     const kind = p.kind.trim().toLowerCase(); // enum casing is not guaranteed by structured outputs
@@ -244,7 +257,7 @@ function checkPois(raw: unknown, allowed: ReadonlySet<string>, count: number): C
     }
     const refs = p.refs.filter((r) => allowed.has(r));
     if (refs.length < p.refs.length) notes.push(`${where}.refs had references that are not allowed; they were removed.`);
-    valid.push({ parent: p.parent as NodeRef, label, summary, kind: kind as PoiKind, evidence, refs: refs as NodeRef[] });
+    valid.push({ parent, label, summary, kind: kind as PoiKind, evidence, refs: refs as NodeRef[] });
   });
   if (valid.length !== count) {
     problems.push(`${valid.length} usable points of interest were returned; return exactly ${count}.`);
@@ -276,8 +289,9 @@ function checkTour(raw: unknown, allowed: ReadonlySet<string>, minSteps: number,
   const notes: string[] = [];
   parsed.data.steps.forEach((s, i) => {
     const where = `steps[${i}]`;
-    if (!allowed.has(s.target)) {
-      notes.push(`${where}.target "${s.target}" is not an allowed reference, so the step was discarded.`);
+    const parent = s.parent;
+    if (!standsOnFile(parent, allowed)) {
+      notes.push(parentNote(where, parent, 'step'));
       return;
     }
     const text = s.text.trim();
@@ -286,9 +300,17 @@ function checkTour(raw: unknown, allowed: ReadonlySet<string>, minSteps: number,
       problems.push(problem);
       return;
     }
-    const highlights = s.highlights.filter((r) => allowed.has(r));
-    if (highlights.length < s.highlights.length) notes.push(`${where}.highlights had references that are not allowed; they were removed.`);
-    valid.push({ target: s.target as NodeRef, text, highlights: highlights as NodeRef[] });
+    // The frame only says how wide the camera looks, and the file itself is always a valid thing to
+    // show, so a frame that is not one of the three falls back to 'file' instead of costing the step.
+    const asked = s.frame.trim().toLowerCase(); // enum casing is not guaranteed by structured outputs
+    const known = (TOUR_FRAMES as readonly string[]).includes(asked);
+    const frame: TourFrame = known ? (asked as TourFrame) : 'file';
+    if (!known) notes.push(`${where}.frame must be one of ${TOUR_FRAMES.join(', ')}; file was used.`);
+    const highlights = s.highlights.filter((r): r is UnitRef => standsOnFile(r, allowed));
+    if (highlights.length < s.highlights.length) {
+      notes.push(`${where}.highlights had references that are not allowed file references (u:); they were removed.`);
+    }
+    valid.push({ parent, frame, text, highlights });
   });
   if (valid.length < minSteps || valid.length > maxSteps) {
     problems.push(`${valid.length} usable steps were returned; write ${minSteps} to ${maxSteps}.`);

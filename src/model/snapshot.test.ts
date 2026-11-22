@@ -32,7 +32,7 @@ describe('snapshot format', () => {
         unitIds: units.slice(0, 20), values: units.slice(0, 20).map((_, k) => (k % 5 ? k / 20 : NaN)), status: 'partial', coverage: 0.2, extra: { authors: { [units[0]]: 3 } } },
       { op: 'annotation', value: { type: 'poi', id: 'p1', parent: `u:${units[1]}`, label: 'Entry', summary: 'Where it starts', kind: 'entry', evidence: 'main()', details: {} } },
       { op: 'annotation', value: { type: 'summary', id: 's1', parent: `u:${units[2]}`, text: 'A summary' } },
-      { op: 'annotation', value: { type: 'tour', id: 't1', steps: [{ target: `u:${units[1]}`, text: 'Start here', highlights: [] }] } },
+      { op: 'annotation', value: { type: 'tour', id: 't1', steps: [{ parent: `u:${units[1]}`, frame: 'file', text: 'Start here', highlights: [] }] } },
     ];
     if (victimEdges.length) ops.push({ op: 'remove', kind: 'edge', rows: { ids: victimEdges, cols: {} } });
     ops.push({ op: 'remove', kind: 'file', rows: { ids: [victim], cols: {} } }, { op: 'remove', kind: 'unit', rows: { ids: [victim], cols: {} } });

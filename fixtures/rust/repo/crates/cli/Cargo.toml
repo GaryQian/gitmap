@@ -1,0 +1,13 @@
+[package]
+name = "orbit-cli"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "orbit"
+path = "src/main.rs"
+
+[dependencies]
+orbit-engine = { path = "../engine" }
+clap = { version = "4", features = ["derive"] }
+serde_json = "1"

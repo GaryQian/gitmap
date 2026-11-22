@@ -1,0 +1,42 @@
+{
+  "files": 16,
+  "imports": [
+    ["packages/shop_core/lib/shop_core.dart", "packages/shop_core/lib/src/models/cart.dart"],
+    ["packages/shop_core/lib/shop_core.dart", "packages/shop_core/lib/src/models/product.dart"],
+    ["packages/shop_core/lib/shop_core.dart", "packages/shop_core/lib/src/pricing.dart"],
+    ["packages/shop_core/lib/shop_core.dart", "packages/shop_core/lib/src/storage/storage.dart"],
+    ["packages/shop_core/lib/src/models/cart.dart", "packages/shop_core/lib/src/pricing.dart"],
+    ["packages/shop_core/lib/src/models/cart.dart", "packages/shop_core/lib/src/models/product.dart"],
+    ["packages/shop_core/lib/src/models/cart.dart", "packages/shop_core/lib/src/models/cart_line.dart"],
+    ["packages/shop_core/lib/src/models/cart_line.dart", "packages/shop_core/lib/src/models/cart.dart"],
+    ["packages/shop_core/lib/src/pricing.dart", "packages/shop_core/lib/src/models/product.dart"],
+    ["packages/shop_core/lib/src/pricing.dart", "packages/shop_core/lib/src/discounts.dart"],
+    ["packages/shop_core/lib/src/discounts.dart", "packages/shop_core/lib/src/pricing.dart"],
+    ["packages/shop_core/lib/src/storage/storage.dart", "packages/shop_core/lib/src/models/cart.dart"],
+    ["packages/shop_core/lib/src/storage/storage.dart", "packages/shop_core/lib/src/storage/storage_stub.dart"],
+    ["packages/shop_core/lib/src/storage/storage.dart", "packages/shop_core/lib/src/storage/storage_io.dart"],
+    ["packages/shop_core/lib/src/storage/storage_stub.dart", "packages/shop_core/lib/src/models/cart.dart"],
+    ["packages/shop_core/lib/src/storage/storage_stub.dart", "packages/shop_core/lib/src/storage/storage.dart"],
+    ["packages/shop_core/lib/src/storage/storage_io.dart", "packages/shop_core/lib/src/models/cart.dart"],
+    ["packages/shop_core/lib/src/storage/storage_io.dart", "packages/shop_core/lib/src/storage/storage.dart"],
+    ["packages/shop_core/test/cart_test.dart", "packages/shop_core/lib/shop_core.dart"],
+    ["app/lib/main.dart", "app/lib/src/cart_page.dart"],
+    ["app/lib/main.dart", "packages/shop_core/lib/shop_core.dart"],
+    ["app/lib/src/cart_page.dart", "packages/shop_core/lib/shop_core.dart"],
+    ["app/lib/src/cart_page.dart", "app/lib/src/widgets/price_tag.dart"],
+    ["app/lib/src/widgets/price_tag.dart", "packages/shop_core/lib/src/pricing.dart"]
+  ],
+  "notImports": [
+    ["packages/shop_core/lib/src/storage/storage_stub.dart", "packages/shop_core/lib/src/storage/storage_io.dart"],
+    ["packages/shop_core/lib/src/pricing.dart", "packages/shop_core/lib/src/models/cart.dart"],
+    ["app/lib/src/widgets/price_tag.dart", "packages/shop_core/lib/shop_core.dart"]
+  ],
+  "calls": [
+    ["packages/shop_core/lib/src/models/cart.dart", "packages/shop_core/lib/src/pricing.dart", "lineTotal"],
+    ["packages/shop_core/lib/src/models/cart.dart", "packages/shop_core/lib/src/models/cart_line.dart", "CartLine"],
+    ["packages/shop_core/lib/src/discounts.dart", "packages/shop_core/lib/src/pricing.dart", "roundToCents"],
+    ["app/lib/main.dart", "app/lib/src/cart_page.dart", "CartPage"],
+    ["app/lib/src/cart_page.dart", "app/lib/src/widgets/price_tag.dart", "PriceTag"],
+    ["app/lib/src/widgets/price_tag.dart", "packages/shop_core/lib/src/pricing.dart", "formatPrice"]
+  ]
+}

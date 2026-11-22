@@ -22,13 +22,16 @@ export interface HeadlessResult {
 }
 
 export interface HeadlessOptions {
+  /** Keep the 30-second escape hatch. Default false: a headless run always waits for the full structure. */
+  escapeHatch?: boolean;
   /** Simulated worker count for the in-process pool. */
   workers?: number;
   onEvent?<E extends keyof PipelineEvents>(evt: E, payload: PipelineEvents[E]): void;
 }
 
 /** Run the whole pipeline in this process and return the model. */
-export async function runHeadless(source: RepoSource, config: Config, opts: HeadlessOptions = {}): Promise<HeadlessResult> {
+export async function runHeadless(source: RepoSource, baseConfig: Config, opts: HeadlessOptions = {}): Promise<HeadlessResult> {
+  const config: Config = opts.escapeHatch ? baseConfig : { ...baseConfig, reveal: { ...baseConfig.reveal, maxWaitSeconds: 0 } };
   const store = createModelStore();
   const openRepo = async (locator: import('../contracts/git').RepoLocator) => {
     if (locator.kind !== 'node') throw new Error(`headless pipeline cannot open a '${locator.kind}' locator`);

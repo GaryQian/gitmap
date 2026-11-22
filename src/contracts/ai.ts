@@ -1,5 +1,5 @@
 // AI layer contracts (PLAN.md §11). The browser builds context; the server is a thin, stateless proxy.
-import type { NodeRef, PoiKind } from '../model/types';
+import type { NodeRef, PoiKind, TourFrame, UnitRef } from '../model/types';
 
 export type ModelRole = 'synthesis' | 'bulk';
 
@@ -53,7 +53,8 @@ export interface PoisRequest extends AiRequestBase {
   summaries: CitySummary[];
   count: number;
 }
-export interface PoiItem { parent: NodeRef; label: string; summary: string; kind: PoiKind; evidence: string; refs: NodeRef[] }
+/** `parent` is always a file (`u:`); the server drops items whose parent is anything else (PLAN.md §11.3). */
+export interface PoiItem { parent: UnitRef; label: string; summary: string; kind: PoiKind; evidence: string; refs: NodeRef[] }
 export interface PoisResponse { pois: PoiItem[] }
 
 /** POST /api/ai/tour */
@@ -63,7 +64,8 @@ export interface TourRequest extends AiRequestBase {
   minSteps: number;
   maxSteps: number;
 }
-export interface TourResponse { steps: { target: NodeRef; text: string; highlights: NodeRef[] }[] }
+/** Steps stand on a file and say what to frame around it; the server drops steps whose parent is not a file. */
+export interface TourResponse { steps: { parent: UnitRef; frame: TourFrame; text: string; highlights: UnitRef[] }[] }
 
 export const DETAIL_QUESTIONS = {
   role: 'Role in the system',
@@ -75,7 +77,7 @@ export type DetailQuestion = keyof typeof DETAIL_QUESTIONS;
 
 /** POST /api/ai/detail */
 export interface DetailRequest extends AiRequestBase {
-  poi: { parent: NodeRef; label: string; summary: string };
+  poi: { parent: UnitRef; label: string; summary: string };
   question: DetailQuestion;
   /** The file's skeleton or content plus its neighbours' signatures. */
   context: string;

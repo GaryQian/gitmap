@@ -1,0 +1,137 @@
+/* The tour: a pill at rest, a card while it plays (PLAN.md §17.6). The tour is one of the three
+   things that may be warm (§17.1), so the accents here use --gm-warm; everything else is the
+   neutral chrome material. No colour is written out. */
+
+/* The warm point that marks the tour, on the pill and beside the step count. */
+.gm-tour-spark {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--gm-warm);
+}
+
+/* ---- the pill ---- */
+
+.gm-pill.gm-tour-pill {
+  gap: 9px;
+  border-color: color-mix(in srgb, var(--gm-warm) 46%, var(--gm-hairline));
+}
+.gm-pill.gm-tour-pill:hover { border-color: var(--gm-warm); }
+/* the hover halo of a pill is blue; this one glows warm */
+:root[data-theme='dark'] .gm-pill.gm-tour-pill:hover:not(:disabled) {
+  box-shadow: 0 0 16px color-mix(in srgb, var(--gm-warm) 18%, transparent);
+}
+
+/* ---- the step card ---- */
+
+@keyframes gm-tour-arrive {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes gm-tour-text-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.gm-tour-card {
+  display: grid;
+  gap: 8px;
+  width: min(440px, calc(100vw - 32px));
+  padding: 12px 14px 14px 18px;
+  /* starting the tour is the action this answers */
+  animation: gm-tour-arrive 180ms var(--gm-ease) both;
+}
+/* The card takes the focus when a tour starts from the keyboard. It is a container, not a control,
+   so its ring is the same halo colour drawn as a hairline on the border instead of a band around it. */
+.gm-tour-card:focus-visible { outline-width: 1px; outline-offset: -1px; }
+
+.gm-tour-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 26px;
+}
+.gm-tour-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px;
+  letter-spacing: 0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.gm-tour-close {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--gm-text-dim);
+  cursor: pointer;
+  transition: background-color 140ms var(--gm-ease), color 140ms var(--gm-ease);
+}
+.gm-tour-close:hover { background: var(--gm-text-faint); color: var(--gm-text); }
+
+/* The one sentence of prose on screen: larger and looser than pill text. Room for three lines is
+   kept, so most steps leave the card the same height. */
+.gm-tour-text {
+  min-height: calc(3 * 1.5em);
+  margin: 0;
+  padding-right: 4px;
+  font-size: 15px;
+  line-height: 1.5;
+  letter-spacing: 0.012em;
+  text-wrap: pretty;
+}
+.gm-tour-text > span { animation: gm-tour-text-in 220ms var(--gm-ease) both; }
+
+.gm-tour-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 2px;
+}
+
+/* Step dots are buttons: the dot is small, the target around it is not. */
+.gm-tour-dots { display: flex; align-items: center; margin-left: -7px; }
+.gm-tour-dot {
+  display: grid;
+  place-items: center;
+  width: 21px;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+  transition: width 160ms var(--gm-ease);
+}
+.gm-tour-dot::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--gm-text) 32%, transparent);
+  transition: width 160ms var(--gm-ease), background-color 160ms var(--gm-ease);
+}
+.gm-tour-dot:hover::before { background: color-mix(in srgb, var(--gm-text) 62%, transparent); }
+/* the current step is warm, and longer, so it does not rest on colour alone */
+.gm-tour-dot.is-current { width: 32px; }
+.gm-tour-dot.is-current::before,
+.gm-tour-dot.is-current:hover::before { width: 18px; background: var(--gm-warm); }
+.gm-tour-dot:focus-visible { outline-offset: -2px; }
+
+.gm-tour-nav { display: flex; gap: 6px; }
+.gm-tour-nav .gm-pill { min-width: 68px; justify-content: center; }
+.gm-pill.gm-tour-next { border-color: color-mix(in srgb, var(--gm-warm) 60%, var(--gm-hairline)); font-weight: 500; }
+.gm-pill.gm-tour-next:hover { border-color: var(--gm-warm); }
+:root[data-theme='dark'] .gm-pill.gm-tour-next:hover:not(:disabled) {
+  box-shadow: 0 0 14px color-mix(in srgb, var(--gm-warm) 18%, transparent);
+}

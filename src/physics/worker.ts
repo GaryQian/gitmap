@@ -2,7 +2,8 @@
 // spikes/physics/worker.ts.
 //
 // The loop runs one scheduler slice of config.physics.sliceMs per frame interval and stops when
-// nothing is hot; any command wakes it. Positions reach the page through SharedArrayBuffers when the
+// nothing is hot; any command wakes it. Before the first settle or loaded layout the engine runs
+// nothing (PLAN.md §6.8), so batches only build the simulations however they are spread over time. Positions reach the page through SharedArrayBuffers when the
 // page could allocate them (cross-origin isolated); otherwise changed rows are posted at about 30 Hz.
 //
 // d3-timer needs no shim here: it finds no `window`, falls back to setTimeout, and each simulation is
@@ -120,6 +121,10 @@ function handle(m: ToWorker): void {
     case 'focus': e.setFocus({ x: m.x, z: m.z }, m.radius); break;
     case 'settle':
       reply(m.id, e.settle(m.maxMs), (report) => { publish(); post({ type: 'settled', id: m.id, report }); });
+      break;
+    case 'relayout':
+      // resolves from inside the loop, when everything it woke is asleep again
+      reply(m.id, e.relayout(m.maxMs), (report) => { publish(); post({ type: 'settled', id: m.id, report }); });
       break;
     case 'reset':
       reply(m.id, e.resetLayout(), () => { publish(); post({ type: 'resetDone', id: m.id }); });

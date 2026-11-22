@@ -9,7 +9,8 @@ import { AiError, createCannedProvider, createMemoryLimiter, handlers } from './
 import type { CannedProvider, CannedScript, Deps, RouteName } from './index';
 import { LENGTHS } from './prompts';
 
-const REFS: NodeRef[] = ['c:1', 'c:2', 'u:src/main.ts', 'u:src/store.ts', 'u:src/http/server.ts'];
+const REFS: NodeRef[] = ['c:1', 'c:2', 'd:1', 'u:src/main.ts', 'u:src/store.ts', 'u:src/http/server.ts'];
+const FILES = REFS.filter((r) => r.startsWith('u:'));
 
 const words = (n: number) => Array.from({ length: n }, (_, i) => `word${i}`).join(' ');
 const summaryText = words(LENGTHS.summary.target);
@@ -45,7 +46,9 @@ const tourBody = (): TourRequest => {
 const poi = (parent: string, refs: string[] = []) => ({
   parent, label: 'Entry point', summary: summaryText, kind: 'entry', evidence: 'Twelve units import it.', refs,
 });
-const step = (target: string, text = stepText) => ({ target, text, highlights: [] as string[] });
+const step = (parent: string, frame = 'file', highlights: string[] = []) => ({ parent, frame, text: stepText, highlights });
+/** The fewest steps a tour may have, each standing on a file from the list. */
+const enoughSteps = () => Array.from({ length: config.ai.tour.minSteps }, (_, i) => step(FILES[i % FILES.length]));
 
 describe('ai server handlers', () => {
   it('returns validated points of interest for a valid request', async () => {
@@ -72,6 +75,45 @@ describe('ai server handlers', () => {
     expect(res.body.pois.map((p) => p.parent)).toEqual(['u:src/main.ts', 'u:src/store.ts']);
     expect(res.body.pois[0].refs).toEqual(['c:1']);
     expect(provider.requests).toHaveLength(1); // two usable items were asked for and two remain: no retry
+  });
+
+  it('drops a point of interest or tour step that stands on a district or city, even one in the request', async () => {
+    const points = setup([{
+      value: { pois: [poi('c:1'), poi('u:src/main.ts', ['c:1', 'd:1']), poi('d:1'), poi('u:src/store.ts')], steps: [] },
+    }]);
+    const pois = await call<PoisResponse>('pois', points.deps, poisBody());
+
+    expect(pois.status).toBe(200);
+    expect(pois.body.pois.map((p) => p.parent)).toEqual(['u:src/main.ts', 'u:src/store.ts']);
+    expect(pois.body.pois[0].refs).toEqual(['c:1', 'd:1']); // refs, unlike the parent, may be any known reference
+
+    const steps = enoughSteps();
+    const walk = setup([{ value: { pois: [], steps: [step('c:1', 'city'), ...steps, step('d:1', 'district')] } }]);
+    const tour = await call<TourResponse>('tour', walk.deps, tourBody());
+
+    expect(tour.status).toBe(200);
+    expect(tour.body.steps.map((s) => s.parent)).toEqual(steps.map((s) => s.parent));
+    expect(walk.provider.requests).toHaveLength(1);
+  });
+
+  it('keeps a tour step whose highlights or frame are off: non-file highlights go, an unknown frame becomes file', async () => {
+    const [first, second, ...rest] = enoughSteps();
+    const { deps } = setup([{
+      value: {
+        pois: [],
+        steps: [
+          { ...first, frame: 'city', highlights: ['u:src/store.ts', 'c:1', 'u:invented.ts'] },
+          { ...second, frame: 'galaxy' },
+          ...rest,
+        ],
+      },
+    }]);
+    const res = await call<TourResponse>('tour', deps, tourBody());
+
+    expect(res.status).toBe(200);
+    expect(res.body.steps).toHaveLength(config.ai.tour.minSteps);
+    expect(res.body.steps[0]).toMatchObject({ parent: first.parent, frame: 'city', highlights: ['u:src/store.ts'] });
+    expect(res.body.steps[1]).toMatchObject({ parent: second.parent, frame: 'file' });
   });
 
   it('retries exactly once when a reply breaks the length rules, saying what was wrong', async () => {
@@ -133,7 +175,7 @@ describe('ai server handlers', () => {
   });
 
   it('gives the tour the same cacheable prefix, system prompt and output format as the points of interest', async () => {
-    const steps = REFS.slice(0, config.ai.tour.minSteps).map((r) => step(r));
+    const steps = enoughSteps();
     const { provider, deps } = setup([
       { value: { pois: [poi('u:src/main.ts'), poi('u:src/store.ts')], steps: [] } },
       { value: { pois: [], steps: [...steps, step('u:invented.ts')] } },
@@ -142,7 +184,7 @@ describe('ai server handlers', () => {
     const res = await call<TourResponse>('tour', deps, tourBody());
 
     expect(res.status).toBe(200);
-    expect(res.body.steps.map((s) => s.target)).toEqual(steps.map((s) => s.target));
+    expect(res.body.steps.map((s) => s.parent)).toEqual(steps.map((s) => s.parent));
     const [a, b] = provider.requests;
     expect(a.cachedPrefix).toContain(poisBody().digest);
     expect(b.cachedPrefix).toBe(a.cachedPrefix);
@@ -158,6 +200,8 @@ describe('ai server handlers', () => {
     expect(await code('pois', { ...deps, provider: new AiError('no_key', 'no key') }, poisBody())).toBe('no_key');
     expect(await code('pois', deps, { ...poisBody(), refs: ['not-a-ref'] })).toBe('invalid');
     expect(await code('pois', deps, poisBody({ count: config.ai.pois.max + 1 }))).toBe('invalid');
+    const onCity = { digestHash: 'digest-1', refs: REFS, question: 'role', context: 'x', poi: { parent: 'c:1', label: 'Core', summary: summaryText } };
+    expect(await code('detail', deps, onCity)).toBe('invalid');
     const get = await handlers.pois(new Request('http://test.local/api/ai/pois'), deps);
     expect(get.status).toBe(405);
     expect(provider.requests).toHaveLength(0);

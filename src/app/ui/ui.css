@@ -182,3 +182,31 @@ body {
     animation-iteration-count: 1 !important;
   }
 }
+
+/* ---- small shared pieces ---- */
+
+/* The colour of a file type, as a dot beside its name (legend, tooltip, detail card). */
+.gm-lang-dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+/* A bare icon button inside a pill or a card. Give it an aria-label. */
+.gm-icon-button {
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--gm-text-dim);
+  cursor: pointer;
+  transition: background-color 140ms var(--gm-ease), color 140ms var(--gm-ease);
+}
+.gm-icon-button:hover { background: var(--gm-text-faint); color: var(--gm-text); }

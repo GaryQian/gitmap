@@ -1,0 +1,63 @@
+{
+  "files": 13,
+  "imports": [
+    ["app/src/main/java/com/example/shop/model/Order.java", "app/src/main/java/com/example/shop/money/Money.java"],
+    ["app/src/main/java/com/example/shop/model/LineItem.java", "app/src/main/java/com/example/shop/money/Money.java"],
+    ["app/src/main/java/com/example/shop/service/Pricer.java", "app/src/main/java/com/example/shop/model/Order.java"],
+    ["app/src/main/java/com/example/shop/service/Pricer.java", "app/src/main/java/com/example/shop/money/Money.java"],
+    ["app/src/main/java/com/example/shop/service/PricingService.java", "app/src/main/java/com/example/shop/money/Currencies.java"],
+    ["app/src/main/java/com/example/shop/service/PricingService.java", "app/src/main/java/com/example/shop/model/Order.java"],
+    ["app/src/main/java/com/example/shop/service/PricingService.java", "app/src/main/java/com/example/shop/model/LineItem.java"],
+    ["app/src/main/java/com/example/shop/service/PricingService.java", "app/src/main/java/com/example/shop/model/OrderStatus.java"],
+    ["app/src/main/java/com/example/shop/service/PricingService.java", "app/src/main/java/com/example/shop/money/Money.java"],
+    ["app/src/main/kotlin/com/example/shop/service/CheckoutService.kt", "app/src/main/java/com/example/shop/model/Order.java"],
+    ["app/src/main/kotlin/com/example/shop/service/CheckoutService.kt", "app/src/main/java/com/example/shop/money/Money.java"],
+    ["app/src/main/kotlin/com/example/shop/service/CheckoutService.kt", "app/src/main/kotlin/com/example/shop/util/Strings.kt"],
+    ["app/src/main/kotlin/com/example/shop/service/Receipt.kt", "app/src/main/java/com/example/shop/money/Money.java"],
+    ["app/src/main/kotlin/com/example/shop/App.kt", "analytics/src/main/scala/com/example/shop/analytics/Report.scala"],
+    ["app/src/main/kotlin/com/example/shop/App.kt", "app/src/main/java/com/example/shop/model/LineItem.java"],
+    ["app/src/main/kotlin/com/example/shop/App.kt", "app/src/main/java/com/example/shop/model/Order.java"],
+    ["app/src/main/kotlin/com/example/shop/App.kt", "app/src/main/java/com/example/shop/model/OrderStatus.java"],
+    ["app/src/main/kotlin/com/example/shop/App.kt", "app/src/main/java/com/example/shop/money/Money.java"],
+    ["app/src/main/kotlin/com/example/shop/App.kt", "app/src/main/kotlin/com/example/shop/service/CheckoutService.kt"],
+    ["app/src/main/kotlin/com/example/shop/App.kt", "app/src/main/kotlin/com/example/shop/service/Receipt.kt"],
+    ["analytics/src/main/scala/com/example/shop/analytics/Report.scala", "app/src/main/java/com/example/shop/model/Order.java"],
+    ["analytics/src/main/scala/com/example/shop/analytics/Report.scala", "app/src/main/java/com/example/shop/model/LineItem.java"],
+    ["analytics/src/main/scala/com/example/shop/analytics/Report.scala", "app/src/main/java/com/example/shop/money/Money.java"],
+    ["analytics/src/main/scala/com/example/shop/analytics/Report.scala", "app/src/main/java/com/example/shop/money/Currencies.java"]
+  ],
+  "notImports": [
+    ["app/src/main/kotlin/com/example/shop/App.kt", "app/src/main/kotlin/com/example/shop/util/Strings.kt"],
+    ["app/src/main/kotlin/com/example/shop/service/CheckoutService.kt", "analytics/src/main/scala/com/example/shop/analytics/Formatter.scala"],
+    ["app/src/main/kotlin/com/example/shop/service/Receipt.kt", "analytics/src/main/scala/com/example/shop/analytics/Formatter.scala"],
+    ["app/src/main/java/com/example/shop/model/Order.java", "app/src/main/java/com/example/shop/money/Currencies.java"],
+    ["app/src/main/java/com/example/shop/service/PricingService.java", "app/src/main/java/com/example/shop/service/Pricer.java"],
+    ["analytics/src/main/scala/com/example/shop/analytics/Report.scala", "app/src/main/java/com/example/shop/model/OrderStatus.java"]
+  ],
+  "calls": [
+    ["app/src/main/java/com/example/shop/model/Order.java", "app/src/main/java/com/example/shop/money/Money.java", "zero"],
+    ["app/src/main/java/com/example/shop/model/Order.java", "app/src/main/java/com/example/shop/money/Money.java", "plus"],
+    ["app/src/main/java/com/example/shop/model/Order.java", "app/src/main/java/com/example/shop/model/LineItem.java", "total"],
+    ["app/src/main/java/com/example/shop/money/Money.java", "app/src/main/java/com/example/shop/money/Currencies.java", "round"],
+    ["app/src/main/java/com/example/shop/service/PricingService.java", "app/src/main/java/com/example/shop/money/Currencies.java", "percent"],
+    ["app/src/main/java/com/example/shop/service/PricingService.java", "app/src/main/java/com/example/shop/model/Order.java", "subtotal"],
+    ["app/src/main/kotlin/com/example/shop/service/CheckoutService.kt", "app/src/main/java/com/example/shop/service/PricingService.java", "PricingService"],
+    ["app/src/main/kotlin/com/example/shop/service/CheckoutService.kt", "app/src/main/kotlin/com/example/shop/util/Strings.kt", "slugify"],
+    ["app/src/main/kotlin/com/example/shop/service/CheckoutService.kt", "app/src/main/kotlin/com/example/shop/service/Receipt.kt", "Receipt"],
+    ["app/src/main/kotlin/com/example/shop/service/CheckoutService.kt", "app/src/main/java/com/example/shop/model/Order.java", "markPaid"],
+    ["app/src/main/kotlin/com/example/shop/App.kt", "app/src/main/kotlin/com/example/shop/service/CheckoutService.kt", "checkout"],
+    ["app/src/main/kotlin/com/example/shop/App.kt", "analytics/src/main/scala/com/example/shop/analytics/Report.scala", "SalesReport"],
+    ["app/src/main/kotlin/com/example/shop/App.kt", "analytics/src/main/scala/com/example/shop/analytics/Report.scala", "summary"],
+    ["app/src/main/kotlin/com/example/shop/App.kt", "app/src/main/java/com/example/shop/money/Money.java", "of"],
+    ["analytics/src/main/scala/com/example/shop/analytics/Report.scala", "analytics/src/main/scala/com/example/shop/analytics/Formatter.scala", "line"],
+    ["analytics/src/main/scala/com/example/shop/analytics/Report.scala", "app/src/main/java/com/example/shop/money/Currencies.java", "round"],
+    ["analytics/src/main/scala/com/example/shop/analytics/Report.scala", "app/src/main/java/com/example/shop/model/Order.java", "subtotal"]
+  ],
+  "samePackage": [
+    ["app/src/main/java/com/example/shop/model/Order.java", "app/src/main/java/com/example/shop/model/LineItem.java"],
+    ["app/src/main/java/com/example/shop/money/Money.java", "app/src/main/java/com/example/shop/money/Currencies.java"],
+    ["app/src/main/java/com/example/shop/service/PricingService.java", "app/src/main/kotlin/com/example/shop/service/CheckoutService.kt"],
+    ["app/src/main/kotlin/com/example/shop/service/CheckoutService.kt", "app/src/main/kotlin/com/example/shop/service/Receipt.kt"],
+    ["analytics/src/main/scala/com/example/shop/analytics/Report.scala", "analytics/src/main/scala/com/example/shop/analytics/Formatter.scala"]
+  ]
+}

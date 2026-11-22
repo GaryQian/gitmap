@@ -43,16 +43,21 @@ export interface FactsCache {
   putSyntax(facts: SyntaxFacts[]): Promise<void>;
 }
 
-export interface PassOptions {
+export interface PassOptions<T = unknown> {
   lane?: Lane;
   cache?: FactsCache;
   onProgress?(done: number, total: number): void;
+  /**
+   * Called with each batch of results as it finishes (in completion order), so a caller can use
+   * what has arrived so far without waiting for the pass to end (the reveal escape hatch, PLAN.md §6.8).
+   */
+  onBatch?(results: T[]): void;
   signal?: AbortSignal;
 }
 
 /** src/ingest exports these. */
 export type BuildManifest = (repo: RepoAccess, config: Config) => Promise<Manifest>;
 /** Fast pass over every entry: one FileFacts per manifest entry, in manifest order. */
-export type RunFastPass = (manifest: Manifest, pool: ComputePool, config: Config, opts?: PassOptions) => Promise<FileFacts[]>;
+export type RunFastPass = (manifest: Manifest, pool: ComputePool, config: Config, opts?: PassOptions<FileFacts>) => Promise<FileFacts[]>;
 /** Slow pass over entries whose language has one. Resolves with whatever finished if the signal aborts. */
-export type RunSlowPass = (manifest: Manifest, pool: ComputePool, config: Config, opts?: PassOptions) => Promise<SyntaxFacts[]>;
+export type RunSlowPass = (manifest: Manifest, pool: ComputePool, config: Config, opts?: PassOptions<SyntaxFacts>) => Promise<SyntaxFacts[]>;

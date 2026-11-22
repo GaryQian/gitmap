@@ -59,12 +59,12 @@ A hook that throws is logged and skipped, except `applyBatch`: a throw there mak
 - `rig` — camera state and maths: `view`, `groundAt(x, y)`, `project(x, y, z)`, `worldPerPixel(depth)`, `panStart/panMove`, `orbitStart/orbitMove`, `zoomAt`, `flyTo`, `bounds`.
 - `pointer` — pointer routing (below).
 - `state` — view state set through `RenderApi`: `revealed`, `selection`, `highlights`, `typeFilter`, `minLines`, `overlay`, `particles`. Refs are permanent ids, never slots.
-- `bus` — internal events, fired after the matching `state` field changed: `selection`, `highlights`, `typeFilter`, `minLines`, `overlay`, `particles`, `theme`, `reveal`, `camera`, and `burst` (`RenderApi.burst()`; a particles module draws it).
+- `bus` — internal events, fired after the matching `state` field changed: `selection`, `highlights`, `typeFilter`, `minLines`, `overlay`, `particles`, `theme`, `reveal`, `camera`, and `burst` (`RenderApi.burst()`; a particles module draws it). The interaction module adds `hover` (`{ slot, ref }`; slot −1 when nothing is hovered) and emits `burst` itself on a click (`select`) and a double-click (`open`).
 - `emit(evt, payload)` — emit a public `RenderEvents` event (`hover`, `click`, `dblclick`, `marquee`).
 - `anchor(ref)` — world anchor of a node. `now()` — scene time in seconds.
 - `invalidate()` / `animate(ms)` — the loop idles at a reduced rate when nothing moves (not at all under reduced motion). Call `invalidate()` after changing something visible; call `animate(ms)` to keep the full rate for a while.
 - `counters` — `edgesDrawn` and `quality`, reported by `RenderApi.stats()`.
-- `provide(name, api)` / `service<T>(name)` — share an API between modules. The spheres module provides `'spheres'` (`SpheresApi` in `spheres/module.ts`): `setHover(slot)`, `setNudge(slot, x, y, z)` for jiggle, `isShown(slot)`, `visibleCounts()`.
+- `provide(name, api)` / `service<T>(name)` — share an API between modules. The spheres module provides `'spheres'` (`SpheresApi` in `spheres/module.ts`): `setHover(slot)`, `setNudge(slot, x, y, z)` for jiggle, `isShown(slot)`, `visibleCounts()`. The interaction module provides `'interaction'` (`InteractionApi` in `interaction/module.ts`): `hoveredSlot()`, `pick(x, y)`.
 
 ## Positions in shaders
 

@@ -1,9 +1,9 @@
 // TypeScript and JavaScript plug-ins. They share the scanner and one resolver: a .js file can import
-// a .ts file and the other way round. The slow pass (tree-sitter queries) is added by package 2B in
-// ./queries.ts.
+// a .ts file and the other way round. The slow-pass queries (tree-sitter) are in ./queries.ts.
 import { config } from '../../config';
 import type { LanguagePlugin } from '../../contracts/lang';
 import { languageColor } from '../../shared';
+import { jsSyntax, tsSyntax } from './queries';
 import { tsResolver } from './resolve';
 import { scanImports } from './scan';
 
@@ -21,6 +21,7 @@ const ts: LanguagePlugin = {
   color: languageColor('ts', config.visual),
   manifests: MANIFESTS,
   scan: (text) => scanImports(text),
+  syntax: tsSyntax,
   createResolver: tsResolver,
 };
 
@@ -31,6 +32,7 @@ const js: LanguagePlugin = {
   color: languageColor('js', config.visual),
   manifests: MANIFESTS,
   scan: (text) => scanImports(text),
+  syntax: jsSyntax,
   createResolver: tsResolver,
 };
 

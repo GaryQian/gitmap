@@ -6,6 +6,10 @@ import type { Notice, Session, StageInfo } from '../contracts/pipeline';
 import type { RenderApi } from '../contracts/render';
 import type { ModelReplica } from '../contracts/store';
 import type { NodeRef, Subsystem } from '../model/types';
+import {
+  clearSelection as cleared, clickSelect, focusSelected, marqueeSelect, removeSelected, replaceSelection, shiftClickSelect,
+  type SelectionState,
+} from './selectionState';
 import { APPEARANCES, applyTheme, resolveMode, type Appearance } from './theme';
 
 export type Phase = 'landing' | 'waiting' | 'map';
@@ -38,6 +42,8 @@ export interface AppState {
   backgroundEmphasis: number;
   // ---- view state ----
   selection: NodeRef[];
+  /** The selected node the detail card describes; a member of `selection`, or null. */
+  focus: NodeRef | null;
   hover: NodeRef | null;
   activeOverlay: string | null;
   /** Languages shown at full strength; empty = all. */
@@ -86,8 +92,8 @@ function saveSettings(settings: Settings): void {
 }
 
 /** View state a new map starts with. */
-export function freshView(): Pick<AppState, 'selection' | 'hover' | 'activeOverlay' | 'typeFilter' | 'minLines' | 'openFile'> {
-  return { selection: [], hover: null, activeOverlay: null, typeFilter: [], minLines: config.legend.minLinesDefault, openFile: null };
+export function freshView(): Pick<AppState, 'selection' | 'focus' | 'hover' | 'activeOverlay' | 'typeFilter' | 'minLines' | 'openFile'> {
+  return { selection: [], focus: null, hover: null, activeOverlay: null, typeFilter: [], minLines: config.legend.minLinesDefault, openFile: null };
 }
 
 const initialSettings = loadSettings();
@@ -132,11 +138,25 @@ function setSettings(patch: Partial<Settings>): void {
 export function setAppearance(appearance: Appearance): void { setSettings({ appearance }); }
 export function setParticles(particles: boolean): void { setSettings({ particles }); }
 
-export function setSelection(selection: NodeRef[]): void { useApp.setState({ selection }); }
-/** Add the ref to the selection, or remove it if it is already there (Shift+click). */
-export function toggleSelection(ref: NodeRef): void {
-  useApp.setState((s) => ({ selection: s.selection.includes(ref) ? s.selection.filter((r) => r !== ref) : [...s.selection, ref] }));
+/** Selection changes go through the pure transitions in selectionState.ts. */
+function select(change: (state: SelectionState) => SelectionState): void {
+  useApp.setState((s) => {
+    const next = change(s);
+    return next.selection === s.selection && next.focus === s.focus ? s : { selection: next.selection, focus: next.focus };
+  });
 }
+/** Replace the selection. A single node is also focused (its detail card opens). */
+export function setSelection(selection: NodeRef[]): void { select((s) => replaceSelection(s, selection)); }
+/** Click: select this node alone and focus it; null (empty space) clears. */
+export function selectOnly(ref: NodeRef | null): void { select((s) => clickSelect(s, ref)); }
+/** Add the ref to the selection and focus it, or remove it if it is already there (Shift+click). */
+export function toggleSelection(ref: NodeRef): void { select((s) => shiftClickSelect(s, ref)); }
+/** Add refs to the selection (marquee). */
+export function addToSelection(refs: readonly NodeRef[]): void { select((s) => marqueeSelect(s, refs)); }
+export function removeFromSelection(ref: NodeRef): void { select((s) => removeSelected(s, ref)); }
+export function clearSelection(): void { select(cleared); }
+/** Open the detail card on a selected node, or close it with null. */
+export function setFocus(ref: NodeRef | null): void { select((s) => focusSelected(s, ref)); }
 export function setHover(hover: NodeRef | null): void {
   if (useApp.getState().hover !== hover) useApp.setState({ hover });
 }
@@ -174,6 +194,7 @@ export const useSettings = (): Settings => useApp((s) => s.settings);
 export const useThemeMode = (): ThemeMode => useApp((s) => s.mode);
 export const useReducedMotion = (): boolean => useApp((s) => s.reducedMotion);
 export const useSelection = (): NodeRef[] => useApp((s) => s.selection);
+export const useFocus = (): NodeRef | null => useApp((s) => s.focus);
 export const useHover = (): NodeRef | null => useApp((s) => s.hover);
 
 /**

@@ -1,0 +1,8 @@
+@import "./reset.css";
+@import url("https://fonts.example.com/css2?family=Inter");
+/* @import "./mixins/_flex.scss"; */
+
+.logo {
+  background: url("../assets/logo.svg") center / contain no-repeat;
+  mask: url(data:image/svg+xml;base64,AAAA);
+}

@@ -1,0 +1,7 @@
+<!doctype html><meta charset="utf-8"><title>Git history walk (browser)</title>
+<style>body{font:14px system-ui;margin:24px;background:#fff}pre{background:#f4f4f6;padding:12px;white-space:pre-wrap}</style>
+<h3>Git history walk from a picked folder</h3>
+<p>Pick the root of a git repo (the folder that contains <code>.git</code>). Max commits:
+<input id=max type=number value=50000> (0 = all) <button id=go>Pick folder &amp; run</button></p>
+<pre id=out>idle</pre>
+<script type=module src="./walk-main.ts"></script>

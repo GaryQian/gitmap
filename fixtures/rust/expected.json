@@ -1,0 +1,49 @@
+{
+  "imports": [
+    ["crates/engine/src/lib.rs", "crates/engine/src/body.rs"],
+    ["crates/engine/src/lib.rs", "crates/engine/src/physics/mod.rs"],
+    ["crates/engine/src/lib.rs", "crates/engine/src/units.rs"],
+    ["crates/engine/src/body.rs", "crates/engine/src/units.rs"],
+    ["crates/engine/src/physics/mod.rs", "crates/engine/src/physics/gravity.rs"],
+    ["crates/engine/src/physics/mod.rs", "crates/engine/src/physics/integrator.rs"],
+    ["crates/engine/src/physics/mod.rs", "crates/engine/src/body.rs"],
+    ["crates/engine/src/physics/mod.rs", "crates/engine/src/lib.rs"],
+    ["crates/engine/src/physics/gravity.rs", "crates/engine/src/body.rs"],
+    ["crates/engine/src/physics/gravity.rs", "crates/engine/src/units.rs"],
+    ["crates/engine/src/physics/integrator.rs", "crates/engine/src/physics/integrator/step.rs"],
+    ["crates/engine/src/physics/integrator.rs", "crates/engine/src/physics/gravity.rs"],
+    ["crates/engine/src/physics/integrator.rs", "crates/engine/src/physics/mod.rs"],
+    ["crates/engine/src/physics/integrator.rs", "crates/engine/src/body.rs"],
+    ["crates/engine/src/physics/integrator.rs", "crates/engine/src/lib.rs"],
+    ["crates/engine/src/physics/integrator/step.rs", "crates/engine/src/body.rs"],
+    ["crates/engine/src/physics/integrator/step.rs", "crates/engine/src/units.rs"],
+    ["crates/cli/src/main.rs", "crates/cli/src/args.rs"],
+    ["crates/cli/src/main.rs", "crates/cli/src/report.rs"],
+    ["crates/cli/src/main.rs", "crates/engine/src/physics/integrator.rs"],
+    ["crates/cli/src/main.rs", "crates/engine/src/units.rs"],
+    ["crates/cli/src/main.rs", "crates/engine/src/lib.rs"],
+    ["crates/cli/src/main.rs", "crates/engine/src/body.rs"],
+    ["crates/cli/src/report.rs", "crates/engine/src/physics/integrator/step.rs"],
+    ["crates/cli/src/report.rs", "crates/engine/src/body.rs"]
+  ],
+  "notImports": [
+    ["crates/engine/src/body.rs", "crates/engine/src/lib.rs"],
+    ["crates/engine/src/physics/gravity.rs", "crates/engine/src/physics/mod.rs"],
+    ["crates/engine/src/physics/integrator/step.rs", "crates/engine/src/physics/mod.rs"],
+    ["crates/engine/src/physics/integrator/step.rs", "crates/engine/src/physics/integrator.rs"],
+    ["crates/cli/src/main.rs", "crates/engine/src/physics/mod.rs"],
+    ["crates/cli/src/main.rs", "crates/engine/src/physics/gravity.rs"],
+    ["crates/cli/src/report.rs", "crates/engine/src/lib.rs"],
+    ["crates/cli/src/report.rs", "crates/cli/src/args.rs"],
+    ["crates/cli/src/args.rs", "crates/cli/src/main.rs"],
+    ["crates/cli/src/args.rs", "crates/engine/src/lib.rs"]
+  ],
+  "calls": [
+    ["crates/cli/src/main.rs", "crates/engine/src/physics/integrator.rs", "simulate"],
+    ["crates/cli/src/main.rs", "crates/engine/src/lib.rs", "version"],
+    ["crates/cli/src/main.rs", "crates/cli/src/report.rs", "print_report"],
+    ["crates/engine/src/physics/integrator.rs", "crates/engine/src/physics/gravity.rs", "attraction"],
+    ["crates/engine/src/physics/integrator.rs", "crates/engine/src/physics/integrator/step.rs", "advance"],
+    ["crates/engine/src/physics/integrator.rs", "crates/engine/src/physics/mod.rs", "validate"]
+  ]
+}
