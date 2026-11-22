@@ -62,9 +62,11 @@ export function App() {
     return () => clearTimeout(timer);
   }, [phase, reducedMotion]);
 
+  // a demo says so in the tab as well (plan/DEMO-MODE.md §5)
+  const isDemo = useApp((s) => s.session?.source.kind === 'demo');
   useEffect(() => {
-    document.title = phase === 'map' && repoName ? `${repoName} · ${config.app.title}` : config.app.title;
-  }, [phase, repoName]);
+    document.title = phase === 'map' && repoName ? `${repoName}${isDemo ? ' (demo)' : ''} · ${config.app.title}` : config.app.title;
+  }, [phase, repoName, isDemo]);
 
   useEffect(() => {
     // a file dropped anywhere must never navigate the page away from the map

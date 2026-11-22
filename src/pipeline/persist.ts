@@ -10,7 +10,7 @@ import type { ModelStore } from '../contracts/store';
 import { historyFromJson, historyToJson, type HistoryJson, type HistoryResult } from '../history';
 import type { LayoutSnapshot, RepoModel } from '../model/types';
 import {
-  createSnapshotWriter, recordFromModel, snapshotFileName,
+  createSnapshotWriter, forgetHistory, historyBlobName, HISTORY_DIR, recordFromModel,
   type BlobStore, type RepoRegistry, type SnapshotStore, type SnapshotWriter,
 } from '../persist';
 import { settleDetails } from './ai';
@@ -99,13 +99,9 @@ export function startSaving(opts: SavingOptions): SnapshotWriter {
 
 // ---- the history walk's facts, beside the snapshot ----
 
-const SNAPSHOT_SUFFIX = '.starmap.json.gz';
-const HISTORY_SUFFIX = '.history.json.gz';
-
-async function historyBlobName(id: string): Promise<string> {
-  const name = await snapshotFileName(id);
-  return (name.endsWith(SNAPSHOT_SUFFIX) ? name.slice(0, -SNAPSHOT_SUFFIX.length) : name) + HISTORY_SUFFIX;
-}
+// The history file's name and `forgetHistory` live in src/persist, so the app can drop a saved
+// repo without importing the pipeline; they are re-exported here for the coordinator.
+export { forgetHistory, HISTORY_DIR };
 
 async function pipeThrough(bytes: Uint8Array, transform: CompressionStream | DecompressionStream): Promise<Uint8Array> {
   const stream = new Blob([bytes as Uint8Array<ArrayBuffer>]).stream().pipeThrough(transform);
@@ -123,15 +119,6 @@ export async function loadSavedHistory(persist: PipelinePersistence | undefined,
   } catch {
     return null;
   }
-}
-
-/** The OPFS directory beside `snapshots/` that holds each repo's history facts. */
-export const HISTORY_DIR = 'history';
-
-/** Drop the walk saved for a repo, so the next open walks from the start. Never rejects. */
-export async function forgetHistory(persist: Pick<PipelinePersistence, 'aux'> | undefined, id: string): Promise<void> {
-  if (!persist?.aux) return;
-  try { await persist.aux.delete(await historyBlobName(id)); } catch { /* nothing saved, or storage gone */ }
 }
 
 /** Keep a finished walk for the next visit. Never rejects: losing it only costs a longer walk. */

@@ -24,6 +24,7 @@ export {
   type PersistentFactsCache, type FactsCacheOptions, type FactsBackend, type FactsEntry, type FactsTable,
 } from './factsCache';
 export { indexedDbAvailable } from './idb';
+export { HISTORY_DIR, forgetHistory, historyBlobName } from './history';
 
 export interface PersistenceOptions {
   /** Use the in-memory backends even where durable storage exists (tests, a "do not remember" mode). */

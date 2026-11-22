@@ -125,7 +125,7 @@ async function fromPersistence(): Promise<SavedRepos> {
       await registry.remove(id);
       await snapshots.remove(id).catch(() => { /* nothing was stored, or it is already gone */ });
       // and the history walk kept beside the snapshot (never rejects)
-      const { forgetHistory, HISTORY_DIR } = await import('../../pipeline/persist');
+      const { forgetHistory, HISTORY_DIR } = await import('../../persist');
       await forgetHistory({ aux: opfsBlobStore(HISTORY_DIR) }, id);
     },
     async rememberFolder(id, root) {

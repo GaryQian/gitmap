@@ -38,9 +38,6 @@ bool gmStar(out vec3 center, out float r) {
   if (aShape.w < 0.5 || age <= 0.0 || aSlot.y < 0.0 || aSlot.z < 0.0) return false;
   // the size slider: small files go, glowing and selected ones stay
   if (aShape.z < uMinBytes && g <= 0.0 && sel < 0.5) return false;
-  // very large maps only: a far-away district is drawn as one aggregate and its stars give way
-  // (core/glsl.ts; src/render/quality). Selected, highlighted and hovered stars are always drawn.
-  if (sel + hi + hov < 0.5 && gmAggregated(aSlot, g)) return false;
   float k = clamp(age, 0.0, 1.0);
   float grow = 1.0 - (1.0 - k) * (1.0 - k) * (1.0 - k);
   // selected stars breathe; under reduced motion they hold the middle of the breath instead

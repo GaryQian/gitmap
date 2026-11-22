@@ -4,14 +4,18 @@
 //      (ctx.quality.maxPixelRatio, applied by the core); and back up, slowly, when frames allow;
 //   2. on a large map (QUALITY_LOCAL.large.units files or more) starts below full quality, and draws
 //      each far-away district as one soft aggregate while its stars give way (gmAggregated in
-//      core/glsl.ts, called by the star shaders). Small and medium maps never aggregate.
+//      core/glsl.ts, to be called by the star shaders). Small and medium maps never aggregate.
 // Sphere colour and core light are never reduced; particles, glow and territory resolution are left alone.
+//
+// STATE (6A was stopped before any of this ran in a browser, and before its unit tests were written):
+// both parts are switched off in ./tunables.ts (`adaptive: false`, `large.units: Infinity`), so this
+// module currently publishes step 0 and draws nothing. The star shaders do not call gmAggregated yet.
 import * as THREE from 'three';
 import type { ThemeMode } from '../../config';
 import type { PatchBatch } from '../../model/types';
 import { unitSlotOf } from '../core/anchor';
 import { dominantColors } from '../core/dominant';
-import { GLSL_NOISE, GLSL_POSITIONS } from '../core/glsl';
+import { GLSL_AGGREGATE, GLSL_NOISE, GLSL_POSITIONS } from '../core/glsl';
 import type { BatchInfo, FrameState, RevealInfo, SceneContext, SceneModule } from '../core/types';
 import { aggregateAmount, aggregatesEnabled, districtSums, isCollapsed, starPixels, typicalRadius } from './aggregate';
 import { QualityController, pixelRatioLadder } from './controller';
@@ -30,7 +34,7 @@ const INFO = 4;
 const A = Q.aggregate;
 
 // One quad per district, flat on the ground, sized to the district's territory.
-const AGGREGATE_VERT = GLSL_POSITIONS + /* glsl */ `
+const AGGREGATE_VERT = GLSL_POSITIONS + GLSL_AGGREGATE + /* glsl */ `
 uniform vec3 uDisc;   // radius as a share of the territory radius, height over the ground, reveal 0..1
 attribute vec2 aSlots; attribute vec4 aLook; attribute float aGrain;
 varying vec2 vQ; varying vec4 vLook; varying float vAmount; varying float vGrain;

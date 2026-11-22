@@ -26,10 +26,7 @@ export function resetTarget(session: Session | null): ResetTarget | null {
 export async function resetRepo(target: ResetTarget): Promise<void> {
   // closed first, so the old map cannot write its snapshot back after it was deleted
   closeSession();
-  const [{ openPersistence, opfsBlobStore }, { forgetHistory, HISTORY_DIR }] = await Promise.all([
-    import('../../persist'),
-    import('../../pipeline/persist'),
-  ]);
+  const { openPersistence, opfsBlobStore, forgetHistory, HISTORY_DIR } = await import('../../persist');
   const p = await openPersistence();
   const results = await Promise.allSettled([
     p.snapshots.remove(target.id),

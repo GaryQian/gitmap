@@ -32,7 +32,16 @@ vec3 gmUnitCenter(int slot, out vec4 info) {
 }
 /** Language colour (sRGB) of a unit by slot; a = 1 when the slot is in use. */
 vec4 gmUnitColor(int slot) { return texelFetch(uUnitColor, gmTexel(slot), 0); }
+`;
 
+/**
+ * District aggregates on very large maps. Include after GLSL_POSITIONS, in a vertex shader. NOT YET
+ * COMPILED IN A BROWSER (6A stopped first): only the quality module's own aggregate shader includes
+ * it, and that mesh is never drawn while QUALITY_LOCAL.large.units is switched off. To finish the
+ * feature, the star vertex shaders (spheres/shaders.ts, gmStar) include this and return false when
+ * `sel + hi + hov < 0.5 && gmAggregated(aSlot, g)`.
+ */
+export const GLSL_AGGREGATE = /* glsl */ `
 // District aggregates on very large maps (PLAN.md §8.1; src/render/quality). uAggregate = [strength
 // 0..1 (0: off, as on every small and medium map), radius of a typical star in device pixels at
 // distance 1, pixel radius below which a district is one aggregate, pixel radius above which every

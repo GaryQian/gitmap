@@ -125,7 +125,7 @@ function aiState(model: RepoModel): 'complete' | 'partial' | 'none' {
   const some = summaries.length > 0 || pois.length > 0 || tour !== null;
   if (!some) return 'none';
   const details = pois.every((p) => QUESTIONS.every((q) => p.details?.[q]?.status === 'ready'));
-  return summaries.length > 0 && pois.length > 0 && tour !== null && details ? 'complete' : 'partial';
+  return summaries.length > 0 && pois.length > 0 && tour !== null && tour.steps.length > 0 && details ? 'complete' : 'partial';
 }
 
 /** Summaries, points of interest and the tour, then every detail card, three at a time; one more pass for what failed. */
